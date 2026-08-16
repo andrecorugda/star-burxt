@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% if page.title == "star-burxt" %}star-burxt — a front-end framework in Burxt{% else %}{{ page.title }} · star-burxt{% endif %}</title>
+<meta name="description" content="{{ page.description | default: site.description }}">
+<meta name="theme-color" content="#ffffff">
+
+<!-- The stylesheet is burxt-lang.org's, copied rather than reimplemented, so the two sites are the
+     same site. Unused rules (the version picker, the search panel, the mascot) cost nothing and
+     keep the diff against upstream readable when it is updated. -->
+<link rel="stylesheet" href="{{ site.baseurl }}/assets/site.css">
+{%- if site.has_branding %}
+<link rel="icon" href="{{ site.baseurl }}/assets/favicon.ico">
+{%- endif %}
+
+<meta property="og:title" content="{{ page.title | default: 'star-burxt' }}">
+<meta property="og:description" content="{{ page.description | default: site.description }}">
+<meta property="og:type" content="article">
+</head>
+<body>
+
+<a class="skip" href="#top">Skip to content</a>
+
+<nav class="bar">
+  <!-- The mark. A wordmark until the lockup exists: a missing <img> is worse than no <img>, so the
+       image only appears once `has_branding` is set in _config.yml. -->
+  <a class="mark" href="{{ site.baseurl }}/">
+    {%- if site.has_branding %}
+    <img src="{{ site.baseurl }}/assets/star-burxt-lockup.png" alt="star-burxt">
+    {%- else %}
+    <strong class="wordmark">star-burxt</strong>
+    {%- endif %}
+  </a>
+
+  <button class="burger" type="button" data-drawer aria-label="Open the menu" aria-expanded="false">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M3 5.5h14M3 10h14M3 14.5h14"/>
+    </svg>
+  </button>
+
+  <span class="links">
+    <a href="{{ site.baseurl }}/guide/01-your-first-component.html" class="{% if page.section == 'guide' %}here{% endif %}">Guide</a>
+    <a href="{{ site.baseurl }}/components.html" class="{% if page.title == 'Writing a component' %}here{% endif %}">Components</a>
+    <a href="{{ site.baseurl }}/events.html"     class="{% if page.title == 'Events and state' %}here{% endif %}">Events</a>
+    <a href="{{ site.baseurl }}/refusals.html"   class="{% if page.title == 'When it refuses' %}here{% endif %}">Refusals</a>
+    <a href="https://github.com/andrecorugda/burxt">GitHub</a>
+    <a class="burxt" href="https://burxt-lang.org">Burxt</a>
+  </span>
+</nav>
+
+<main>
+<div class="docs">
+
+  <!-- The sidebar is page-level only. burxt-lang.org builds a second level from the headings in
+       each page via scripts/site-nav.py; here the client-side "On this page" does that job, so a
+       renamed heading cannot leave a dead anchor behind in a hand-written list. -->
+  <nav class="side" aria-label="Documentation contents">
+    <div class="group site">
+      <h2>star-burxt</h2>
+      <ul>
+        <li class="topic"><a href="{{ site.baseurl }}/"{% if page.title == "star-burxt" %} class="here" aria-current="page"{% endif %}><span>Overview</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/install.html"{% if page.title == "Getting star-burxt" %} class="here" aria-current="page"{% endif %}><span>Getting star-burxt</span></a></li>
+      </ul>
+    </div>
+
+    <div class="group">
+      <h2>Learn</h2>
+      <ul>
+        <li class="topic"><a href="{{ site.baseurl }}/guide/01-your-first-component.html"{% if page.title == "Your first component" %} class="here" aria-current="page"{% endif %}><span>1. Your first component</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/guide/02-events-and-state.html"{% if page.title == "Events and state" and page.section == "guide" %} class="here" aria-current="page"{% endif %}><span>2. Events and state</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/guide/03-when-it-says-no.html"{% if page.title == "When star-burxt says no" %} class="here" aria-current="page"{% endif %}><span>3. When it says no</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/guide/04-putting-it-in-a-browser.html"{% if page.title == "Putting it in a browser" %} class="here" aria-current="page"{% endif %}><span>4. Putting it in a browser</span></a></li>
+      </ul>
+    </div>
+
+    <div class="group">
+      <h2>Reference</h2>
+      <ul>
+        <li class="topic"><a href="{{ site.baseurl }}/components.html"{% if page.title == "Writing a component" %} class="here" aria-current="page"{% endif %}><span>Writing a component</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/events.html"{% if page.title == "Events and state" and page.section != "guide" %} class="here" aria-current="page"{% endif %}><span>Events and state</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/refusals.html"{% if page.title == "When it refuses" %} class="here" aria-current="page"{% endif %}><span>When it refuses</span></a></li>
+      </ul>
+    </div>
+
+    <div class="group">
+      <h2>Implementing</h2>
+      <ul>
+        <li class="topic"><a href="{{ site.baseurl }}/rendering.html"{% if page.title == "How it reaches the page" %} class="here" aria-current="page"{% endif %}><span>How it reaches the page</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/not-done.html"{% if page.title == "What is not done" %} class="here" aria-current="page"{% endif %}><span>What is not done</span></a></li>
+      </ul>
+    </div>
+
+    <div class="group">
+      <h2>Source</h2>
+      <ul>
+        <li class="topic"><a href="https://github.com/andrecorugda/burxt/blob/main/lib/star.bx"><span>lib/star.bx</span></a></li>
+        <li class="topic"><a href="https://github.com/andrecorugda/burxt/tree/main/examples/star"><span>examples/star/</span></a></li>
+      </ul>
+    </div>
+
+    <div class="group">
+      <h2>Underneath</h2>
+      <ul>
+        <li class="topic"><a class="burxt" href="https://burxt-lang.org"><span>Burxt — the language</span></a></li>
+        <li class="topic"><a class="burxt" href="https://bmx.burxt-lang.org"><span>BMX — the format</span></a></li>
+        <li class="topic"><a class="burxt" href="https://burxt-lang.org/reference/star.html"><span>lib/star.bx reference</span></a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="doc-body" id="top">
+    {{ content }}
+  </div>
+
+  <nav class="toc" aria-label="On this page" data-toc hidden>
+    <h2>On this page</h2>
+    <ul></ul>
+  </nav>
+
+</div>
+</main>
+
+<footer>
+  <p>
+    star-burxt — a front-end framework of the <a href="https://burxt-lang.org">Burxt</a> project,
+    built on <a href="https://bmx.burxt-lang.org">BMX</a>.
+    <a href="https://github.com/andrecorugda/burxt">Open source</a>, MIT or Apache-2.0.
+  </p>
+</footer>
+
+<div class="scrim" data-close hidden></div>
+
+<script src="{{ site.baseurl }}/assets/site.js" defer></script>
+</body>
+</html>

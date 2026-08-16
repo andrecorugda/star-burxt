@@ -1,0 +1,18 @@
+# The guard this repository would otherwise not have.
+#
+# There is no Ruby on the machines this site is written on, so Jekyll only runs after a push and the
+# first symptom of a bad page is a site that silently stops updating. `burxt-lang.org` went down for
+# exactly one cause -- a page containing `{{` read as a Liquid variable -- and star-burxt's docs show
+# slot syntax on nearly every page, so this is the most likely way to break this site.
+name: site
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every page is Liquid-safe, has front matter, and the CNAME is right
+        run: python3 check.py

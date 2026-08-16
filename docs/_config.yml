@@ -1,0 +1,18 @@
+# star-burxt's documentation site, served from /docs on main at star.burxt-lang.org.
+#
+# No theme. The stylesheet is burxt-lang.org's, copied rather than reimplemented, so the three
+# sites are one site: `assets/site.css` and `assets/site.js` are byte copies of the upstream files
+# and should be re-copied rather than edited when they change there. BMX's site does the same, for
+# the same reason and from the same source.
+title: star-burxt
+description: "A front-end framework written in Burxt. A .bmx file is a component, and the compiler judges its handlers."
+url: https://star.burxt-lang.org
+baseurl: ""
+
+has_branding: true
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+exclude: [_site]
