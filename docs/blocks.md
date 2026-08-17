@@ -204,15 +204,27 @@ Any condition that answers true or false. No `else` — write a second `if`.
 ## A body written in the head — `child=`
 
 ```sbmx
-::: span class=total child={{ to_string(amount) }}
+::: span class=total child={to_string(amount)}
 :::
 ```
 
 The same element with its text between the fences, in one fewer line. Use it for a leaf — a label, a
 badge, a cell — where a three-line block is all closer and no content.
 
-- it is an ordinary attribute, so a quoted value keeps its spaces: `child="two words"`
-- it takes a slot, so the text can come from state
+**Braces mean an expression**, so the compiler judges what is inside them: `child={task.labl}` is an
+error naming the field. Spaces need no quotes, because the braces say where the value ends.
+
+| you write | you get |
+|---|---|
+| `child={task.label}` | the value of that expression |
+| `child={to_string(n) + " left"}` | any Burxt expression, spaces and all |
+| `child={}` | an element with nothing in it, said out loud |
+| `child=hello` | the literal text |
+| `child="two words"` | the literal text, spaces kept |
+
+`child={{ x }}` means the same as `child={x}` — the interpolation you already write everywhere else
+in a head works here too.
+
 - **a `child=` and a body between the fences is refused**, not silently merged
 - a bare word is still a boolean attribute, exactly as in HTML: `::: input disabled`
 

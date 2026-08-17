@@ -537,9 +537,22 @@ def main():
     quoted = generate('::: props label: String\n:::\n\n::: span child="two words"\n:::\n')
     check("a quoted `child=` keeps its spaces and loses its quotes",
           'html_text("two words")' in quoted.stdout, quoted.stdout[-200:])
+    # **Braces mean an EXPRESSION, and `child={}` is an empty body said out loud.** Andre's form: the
+    # braces say where the value ends, so a body with spaces needs no quotes, and there is a spelling
+    # for "deliberately empty" that is different from "content went missing".
+    braced = generate("::: props label: String\n:::\n\n::: span child={label}\n:::\n")
+    check("`child={expr}` is Burxt the compiler judges",
+          "html_text(label)" in braced.stdout, braced.stdout[-200:])
+    spaced = generate("::: props n: Int\n:::\n\n::: span child={to_string(n + 1)}\n:::\n")
+    check("a braced body may hold spaces without quotes",
+          "html_text(to_string(n + 1))" in spaced.stdout, spaced.stdout[-200:])
+    empty = generate("::: props n: Int\n:::\n\n::: span class=box child={}\n:::\n")
+    check("`child={}` is an element with NO children, not one holding \"\"",
+          'html_attr("class", "box")], []' in empty.stdout, empty.stdout[-200:])
+    # `{{ … }}` is the interpolation everywhere else in a head, so it has to mean the same here.
     slot = generate("::: props label: String\n:::\n\n::: span child={{ label }}\n:::\n")
-    check("`child=` takes a slot, so a body can come from state",
-          "html_text((label))" in slot.stdout, slot.stdout[-200:])
+    check("`child={{ x }}` means the same as `child={x}`",
+          "html_text(label)" in slot.stdout, slot.stdout[-200:])
     both = generate("::: props label: String\n:::\n\n::: div child=one\ntwo\n:::\n")
     check("a `child=` AND a body is refused rather than one being picked",
           "STAR-E021" in (both.stderr + both.stdout), (both.stderr or both.stdout)[:160])

@@ -818,12 +818,24 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                                 + " so it cannot take `child=`");
                         }
                         if attrs == "[]" { attrs = star_attr_list(key_attr, star_two(written, mark_attr)); }
-                        // The quotes come off before the value is read, exactly as `star_attrs_of`
-                        // does it — `child="two words"` would otherwise reach `html_text` still
-                        // wearing them and print them on the page.
+                        // **Braces mean an EXPRESSION; bare or quoted means text.** `child={…}` is
+                        // Burxt between the braces, so the compiler judges it — `child={task.labl}`
+                        // is an error naming the field. `child=hello` and `child="two words"` are the
+                        // literal forms, read exactly as any other attribute value is, quotes off.
+                        //
+                        // `child={}` is an empty body, said out loud: there is a difference between an
+                        // element an author left empty on purpose and one whose content went missing,
+                        // and only one of them should be writeable.
+                        let mutable content: String = "";
+                        if star_is_braced(raw) {
+                            let expression: String = star_unbraced(raw);
+                            if len(expression) > 0 { content = "html_text(" + expression + ")"; }
+                        } else {
+                            content = "html_text(" + star_attr_value(star_unquoted(raw)) + ")";
+                        }
                         out = out + indent + "let " + label + ": Int = push(" + target
                             + ", html_element(\"" + fenced.name + "\", " + attrs
-                            + ", [html_text(" + star_attr_value(star_unquoted(raw)) + ")]));\n";
+                            + ", [" + content + "]));\n";
                         i += 1;
                         continue;
                     }
@@ -1683,6 +1695,22 @@ pure function star_head_without_child(head: String) -> String {
 pure function star_value_end(head: String, from: Int) -> Int {
     let width: Int = len(head);
     let mutable i: Int = from;
+    // **A brace-delimited value, `child={…}`, ends at its MATCHING brace.** Andre's form, and it earns
+    // its place by removing a rule rather than adding one: the braces say where the value ends, so a
+    // body with spaces in it needs no quotes, and `child={}` is an empty body said out loud. Matched
+    // rather than "up to the next `}`", so a body holding a record literal survives.
+    if i < width && byte_at(head, i) == 123 {
+        let mutable depth: Int = 0;
+        while i < width {
+            if byte_at(head, i) == 123 { depth += 1; }
+            if byte_at(head, i) == 125 {
+                depth -= 1;
+                if depth == 0 { return i + 1; }
+            }
+            i += 1;
+        }
+        return i;
+    }
     if i < width && byte_at(head, i) == 34 {
         i += 1;
         while i < width && byte_at(head, i) != 34 { i += 1; }
@@ -1745,6 +1773,28 @@ pure function star_trailing_attribute(expr: String) -> Option<String> {
 pure function star_unquoted(raw: String) -> String {
     if len(raw) >= 2 && byte_at(raw, 0) == 34 && byte_at(raw, len(raw) - 1) == 34 {
         return substring(raw, 1, len(raw) - 2);
+    }
+    return raw;
+}
+
+// Is this value written in braces — `child={…}` — rather than as bare or quoted text?
+pure function star_is_braced(raw: String) -> Bool {
+    return len(raw) >= 2 && byte_at(raw, 0) == 123 && byte_at(raw, len(raw) - 1) == 125;
+}
+
+// What is between the braces, trimmed. `{}` gives the empty String, which is an empty body.
+//
+// **A doubled brace is unwrapped twice, so `child={{ label }}` means the same as `child={label}`.**
+// Everywhere else in a head `{{ … }}` is the interpolation — `class={{ mark(x) }}` — so a reader
+// arriving at `child=` will write the spelling they already know. Refusing it would be technically
+// defensible and practically hostile; accepting it costs two lines.
+pure function star_unbraced(raw: String) -> String {
+    if star_is_braced(raw) {
+        let once: String = star_trim(substring(raw, 1, len(raw) - 2));
+        if star_is_braced(once) {
+            return star_trim(substring(once, 1, len(once) - 2));
+        }
+        return once;
     }
     return raw;
 }
