@@ -76,12 +76,30 @@ Plus `props`, `for` and `if`, which are not elements.
 
 ## "`on:hover` is not an event this host can wire"
 
-You asked for an event that is not supported.
+**There is no `hover` event.** Hovering is CSS, not something that happens once:
 
-**Fix:** use `click`, `input`, `change` or `submit`.
+```
+===style.local
+.card:hover { border-color: #333; }
+===
+```
 
-The alternative would be to accept `on:hover` and do nothing with it, which would leave you staring
-at a page wondering why nothing happens.
+If a hover has to change your *state* rather than its appearance, the events are `mouseenter` and
+`mouseleave`.
+
+Two others get the same treatment, because they are the ones people reach for:
+
+| you wrote | the message says |
+|---|---|
+| `on:keypress` | use `on:keydown` — `keypress` is deprecated and misses keys |
+| `on:mousemove` | use `on:pointermove` — it covers a mouse, a pen and a finger |
+
+For anything else the message lists what is wired, which is most DOM events —
+see [Events](blocks.html#on--events).
+
+**star refuses an event it cannot deliver rather than accepting it and doing nothing.** A handler
+that never runs is the worst failure a page can have: nothing breaks, nothing is logged, and you
+stare at the screen wondering what you got wrong.
 
 ---
 

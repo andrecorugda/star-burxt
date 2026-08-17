@@ -727,7 +727,7 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                             // delegated listener per wired event and no others.
                             return Result.Error("STAR-E002 at " + star_at(source, fenced.offset)
                                 + ": `on:" + event + "` is not an event this host can wire."
-                                + " Wired events are click, input, change, submit");
+                                + star_event_hint(event));
                         }
                         // **A handler inside a `for` is refused, and refusing is the
                         // honest answer rather than a gap.** `dispatch` is a function of
@@ -979,6 +979,36 @@ pure function star_is_use_line(line: String) -> Bool {
     }
     return byte_at(line, i) == 117 && byte_at(line, i + 1) == 115
         && byte_at(line, i + 2) == 101 && byte_at(line, i + 3) == 32;
+}
+
+// What to write instead of an event this host cannot wire.
+//
+// **This used to name four events and there are thirty-nine.** The list was written when there were
+// four and never revisited, so the message told an author their options were `click`, `input`,
+// `change` and `submit` long after `keydown` and `mouseenter` worked. **A stale list inside an error
+// is worse than no list**: a reader believes it, stops looking, and builds around a limit that was
+// lifted.
+//
+// It names groups rather than all thirty-nine, because a message a person scrolls is a message they
+// do not read — and it names the nearest thing for the cases somebody actually reaches for.
+pure function star_event_hint(asked: String) -> String {
+    // `hover` is the one worth answering specially, because it is not a DOM event at all — it is a
+    // CSS pseudo-class, and the reason somebody asks for it is usually styling rather than state.
+    if asked == "hover" {
+        return " There is no `hover` event — hovering is CSS. Use `:hover` in a"
+            + " `===style.local` section, or `on:mouseenter` and `on:mouseleave` if the hover has"
+            + " to change your state.";
+    }
+    if asked == "keypress" {
+        return " Use `on:keydown` — `keypress` is deprecated and does not fire for every key.";
+    }
+    if asked == "mousemove" {
+        return " Use `on:pointermove`, which covers a mouse, a pen and a finger.";
+    }
+    return " Wired: click, dblclick, contextmenu; keydown, keyup; input, change, submit, reset,"
+        + " focus, blur, focusin, focusout; the pointer and mouse events (down, up, move, enter,"
+        + " leave, over, out); dragstart, dragover, dragleave, drop, dragend; touchstart, touchmove,"
+        + " touchend; wheel, scroll; and the animation and transition events.";
 }
 
 // A byte offset as `line:column`, which is what every other tool in this project prints and what an

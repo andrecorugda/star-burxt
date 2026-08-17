@@ -77,17 +77,35 @@ you see handlers as "the next value", the reset button stops needing a special c
 
 ## The events you can use
 
-`click` · `input` · `change` · `submit`
+Most of them.
 
-Ask for one that is not on the list and you are told, with the list:
+**Pointer and mouse** — `click` `dblclick` `contextmenu` `pointerdown` `pointerup` `pointermove`
+`pointerenter` `pointerleave` `mousedown` `mouseup` `mouseenter` `mouseleave` `mouseover` `mouseout`
+
+**Keyboard** — `keydown` `keyup`
+
+**Forms** — `input` `change` `submit` `reset` `focus` `blur` `focusin` `focusout`
+
+**Dragging** — `dragstart` `dragover` `dragleave` `drop` `dragend`
+
+**Touch** — `touchstart` `touchmove` `touchend`
+
+**Scrolling** — `wheel` `scroll`
+
+**Animation** — `animationstart` `animationend` `animationiteration` `transitionstart`
+`transitionend`
+
+Ask for one that is not there and you are told, with what to write instead:
 
 ```
-`on:hover` is not an event this host can wire.
-Wired events are click, input, change, submit
+`on:hover` is not an event this host can wire. There is no `hover` event —
+hovering is CSS. Use `:hover` in a `===style.local` section, or
+`on:mouseenter` and `on:mouseleave` if the hover has to change your state.
 ```
 
-**This is deliberate and it matters.** A framework that quietly did nothing with `on:hover` would
-leave you staring at a page wondering why nothing happens. This tells you in the terminal.
+**star refuses an event it cannot deliver, rather than accepting it and doing nothing.** A handler
+that never runs is the worst failure a page can have — nothing is broken, nothing is logged, and you
+stare at the screen wondering what you got wrong.
 
 ## Your handlers are checked
 
@@ -134,7 +152,7 @@ and give the component that — chapter 6 shows the shape.
 ## What you have
 
 - `on:click=` and `on:input=` take an **expression for the next value**
-- four events: click, input, change, submit
+- most DOM events, including the keyboard, the pointer, dragging and animation
 - the expression is checked like the rest of your code
 - state is the first prop
 

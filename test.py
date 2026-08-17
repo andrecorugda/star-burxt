@@ -104,6 +104,27 @@ def main():
     check("an event this host cannot wire is refused (SPEC.md 4a.5)",
           "STAR-E002" in unwired and "on:hover" in unwired, unwired)
 
+    # **THE LIST INSIDE THE MESSAGE WENT STALE AND NOBODY NOTICED.** It named four events for as long
+    # as there were four, and kept naming them after thirty-five more were wired — telling an author
+    # their options were `click`, `input`, `change` and `submit` while `keydown` worked. A stale list
+    # in an error is worse than no list: a reader believes it and stops looking.
+    check("the refusal does not name a four-event list that has not been true for hours",
+          "Wired events are click, input, change, submit" not in unwired, unwired)
+    check("`hover` is answered with what it actually is — CSS, not an event",
+          "hovering is CSS" in unwired and "mouseenter" in unwired, unwired)
+
+    for asked, wanted in [("keypress", "keydown"), ("mousemove", "pointermove")]:
+        said = generate("::: props n: Int\n:::\n\n::: div on:%s=n + 1\nx\n:::\n" % asked).stderr
+        check("`%s` is answered with `%s`" % (asked, wanted), wanted in said, said)
+
+    # Every event the driver installs a listener for must be one star accepts, and the reverse. The
+    # driver's side is asserted in `drive-feed.mjs`; this is star's.
+    for wired in ["click", "dblclick", "keydown", "keyup", "focus", "blur", "mouseenter",
+                  "mouseleave", "mouseover", "mouseout", "pointerenter", "wheel", "scroll",
+                  "drop", "touchstart", "animationend", "transitionend", "submit", "reset"]:
+        got = generate("::: props n: Int\n:::\n\n::: div on:%s=n + 1\nx\n:::\n" % wired)
+        check("`on:%s` is wired" % wired, got.returncode == 0, got.stderr)
+
     voided = generate("::: props n: Int\n:::\n\n::: input on:input=n\noops\n:::\n").stderr
     check("a void element with a body is refused before it trips a contract",
           "STAR-E004" in voided, voided)

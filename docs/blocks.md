@@ -113,10 +113,16 @@ increment
 :::
 ```
 
-`click` · `input` · `change` · `submit`
+Most DOM events: the pointer and mouse, `keydown`/`keyup`, the form events including `focus` and
+`blur`, dragging, touch, `wheel`, `scroll`, and the animation and transition events. Ask for one
+that is not wired and the message says what to write instead.
 
-After `=` goes **an expression for the next value**, and it runs to the end of the line — so write
-the event last if the block has anything else on it.
+Every event carries a **value**: the typed text for `input`, the key for `keydown`, the coordinates
+for a pointer, the animation's name for `animationend`. It reaches a handler as `value`.
+
+After `=` goes **an expression for the next value** — or a message, in a component with a `===bx`
+section — and it runs to the end of the line, so write the event last if the block has anything
+else on it.
 
 ---
 
