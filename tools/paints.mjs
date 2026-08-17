@@ -115,6 +115,27 @@ check('what a reader copies has no leading whitespace',
 check('and it is the document, line for line',
       asText === nested.replace(/&/g, '&amp;'), asText);
 
+// ---- a self-indented line hangs its own wrap --------------------------------------------------
+//
+// BMX 0.6 made leading whitespace insignificant, so an author can write the nesting out. Then a long
+// line wraps and the continuation has nothing holding it: on the landing page it restarted at column
+// zero, which made a nested `:!p:` read as a top-level closer — the opposite of what the indentation
+// is for. Andre saw it on the deployed page.
+
+const own = paint('bmx', [
+  ':section: class=card',
+  '    :p: a very long head that will wrap at any sensible panel width whatsoever',
+  '    :!p:',
+  ':!section:',
+].join('\n'));
+
+check('a line with its own indentation gets a hanging-indent span',
+      /class="w1"/.test(own), own);
+check('and a line at column zero does not', !/class="w\d"[^>]*>:section:/.test(own), own);
+check('the text still has the author\'s spaces, exactly',
+      own.replace(/<[^>]*>/g, '').split('\n')[1].startsWith('    :p:'),
+      own.replace(/<[^>]*>/g, '').split('\n')[1]);
+
 // ---- the other two languages still work ------------------------------------------------------
 check('`burxt` still paints', /t-keyword">function/.test(paint('burxt', 'function f() { }')));
 check('`bmx` still paints', paint('bmx', ':p:\nhi\n:!p:').includes('t-fence'));
