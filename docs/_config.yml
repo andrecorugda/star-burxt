@@ -34,8 +34,8 @@ star_requires: "1.2 (from source — see the set-up page)"
 # To freeze 0.1 when 0.2 ships: copy the pages to `docs/0.1/`, add `- number: "0.1"` below, and
 # change `star_series` above. The picker follows.
 versions:
-  - number: "0.1"
-    label:  "0.1 (latest)"
+  - number: "0.2"
+    label:  "0.2 (latest)"
     path:   ""
 
 markdown: kramdown

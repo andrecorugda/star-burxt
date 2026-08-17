@@ -28,12 +28,6 @@ increment
 
 You get this:
 
-<figure class="shot">
-  <img src="assets/examples/counter-running.png"
-       alt="The counter document on the left, and on the right the same document running in a browser, reading 'The count is 3.' with increment and reset buttons">
-  <figcaption>The right-hand side is that document, running. It has been clicked three times.</figcaption>
-</figure>
-
 No build config. No component library. No JavaScript to write. **The document *is* the component.**
 
 {% endraw %}
