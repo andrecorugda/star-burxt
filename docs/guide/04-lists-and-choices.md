@@ -14,22 +14,22 @@ Real screens repeat things and hide things. Two blocks do both.
 ## A row per item
 
 ```sbmx
-::: props lines: [Line]
-:::
+:props: lines: [Line]
+:!props:
 
 # Order
 
-::: ul
+:ul:
 
-::: for line in lines key line.id
+:for: line in lines key line.id
 
-::: li
+:li:
 {{ line.label }} — {{ to_string(line.quantity) }}
-:::
+:!li:
 
-:::
+:!for:
 
-:::
+:!ul:
 ```
 
 **`::: for line in lines`** repeats its body once per item, with `line` naming the current one.
@@ -56,16 +56,16 @@ unknown field: idd
 ## A section that appears when it should
 
 ```sbmx
-::: props ready: Bool
-:::
+:props: ready: Bool
+:!props:
 
-::: if ready
+:if: ready
 
-::: p
+:p:
 Everything is set.
-:::
+:!p:
 
-:::
+:!if:
 ```
 
 The body appears when the condition is true and is absent when it is not — not hidden with CSS,
@@ -74,21 +74,21 @@ absent. There is no `else`; write a second `if` for the other case.
 ## The other branch
 
 ```sbmx
-::: if ready
+:if: ready
 
-::: p
+:p:
 Everything is set.
-:::
+:!p:
 
-:::
+:!if:
 
-::: else
+:else:
 
-::: p
+:p:
 Still waiting.
-:::
+:!p:
 
-:::
+:!else:
 ```
 
 An `else` must come **directly after** its `if`, with nothing between them. It takes no condition —
@@ -100,27 +100,27 @@ When there are more than two answers, `match` is the one to reach for — and it
 build a screen this way rather than any other:
 
 ```sbmx
-::: match model.route
+:match: model.route
 
-::: case Home
+:case: Home
 
 # Welcome
 
-:::
+:!case:
 
-::: case Post(id)
+:case: Post(id)
 
 # Post {{ to_string(id) }}
 
-:::
+:!case:
 
-::: case Search(q)
+:case: Search(q)
 
 # Results for {{ q }}
 
-:::
+:!case:
 
-:::
+:!match:
 ```
 
 `case Post(id)` binds `id` inside its branch, exactly as `for row in rows` binds `row`.
@@ -146,13 +146,13 @@ thing on this site that no other front-end framework can do.
 ## Conditions can be expressions
 
 ```sbmx
-::: if len(lines) > 0
+:if: len(lines) > 0
 
-::: p
+:p:
 There is something to show.
-:::
+:!p:
 
-:::
+:!if:
 ```
 
 Anything that answers true or false — `total > 0.00`, `ready`, `len(lines) > 0`. And as everywhere else, a mistake in the condition is a message
@@ -163,11 +163,11 @@ rather than a section that never shows up.
 **You cannot put a button inside a `for` yet.**
 
 ```sbmx
-::: for line in lines key line.id
-::: button on:click=line.id
+:for: line in lines key line.id
+:button: on:click=line.id
 remove
-:::
-:::
+:!button:
+:!for:
 ```
 
 ```

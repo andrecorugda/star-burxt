@@ -14,8 +14,8 @@ If your screen shows a price, this chapter is the reason to use star-burxt.
 ## Money is its own kind of value
 
 ```sbmx
-::: props total: Decimal<2>
-:::
+:props: total: Decimal<2>
+:!props:
 
 # Receipt
 
@@ -33,8 +33,8 @@ If you have written a checkout screen before, you know why that sentence needed 
 ## Adding up is fine
 
 ```sbmx
-::: props subtotal: Decimal<2>, shipping: Decimal<2>
-:::
+:props: subtotal: Decimal<2>, shipping: Decimal<2>
+:!props:
 
 Total: {{ to_string(subtotal + shipping) }}
 ```
@@ -44,12 +44,12 @@ Two-decimal money plus two-decimal money is two-decimal money. Nothing to think 
 ## Multiplying is where it gets interesting
 
 ```sbmx
-::: props total: Decimal<2>
-:::
+:props: total: Decimal<2>
+:!props:
 
-::: button on:click=total * 1.5
+:button: on:click=total * 1.5
 apply surcharge
-:::
+:!button:
 ```
 
 <figure class="shot">
@@ -74,12 +74,12 @@ Both answers are defensible. Both are wrong for somebody. So you are asked, once
 **Round it, and say which way:**
 
 ```sbmx
-::: props total: Decimal<2, RoundHalfEven>
-:::
+:props: total: Decimal<2, RoundHalfEven>
+:!props:
 
-::: button on:click=total * 1.5
+:button: on:click=total * 1.5
 apply surcharge
-:::
+:!button:
 ```
 
 `RoundHalfEven` is banker's rounding — the one accountants expect. `RoundHalfUp` is the one you
@@ -89,8 +89,8 @@ who reads the file.
 **Or keep the exact answer:**
 
 ```sbmx
-::: props total: Decimal<4>
-:::
+:props: total: Decimal<4>
+:!props:
 ```
 
 Four decimal places, nothing lost. Round when you present it, not while you are calculating.

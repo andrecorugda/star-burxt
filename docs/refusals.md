@@ -32,9 +32,9 @@ Hello {{ nmae }}
 You mixed a number and text.
 
 ```sbmx
-::: button on:click=count + "one"
+:button: on:click=count + "one"
 increment
-:::
+:!button:
 ```
 
 **Fix:** `count + 1`. If you want text, convert first: `to_string(count) + "one"`.
@@ -46,9 +46,9 @@ increment
 You multiplied money and did not say how to round.
 
 ```sbmx
-::: button on:click=total * 1.5
+:button: on:click=total * 1.5
 apply surcharge
-:::
+:!button:
 ```
 
 **Fix:** say how — `::: props total: Decimal<2, RoundHalfEven>` — or keep the exact answer with
@@ -61,8 +61,8 @@ apply surcharge
 You used a block name that is not an element.
 
 ```sbmx
-::: mystery
-:::
+:mystery:
+:!mystery:
 ```
 
 **Fix:** use one of these, or check the spelling.
@@ -74,9 +74,43 @@ Plus `props`, `for` and `if`, which are not elements.
 
 ---
 
+## "this document declares no `props` block"
+
+A component has to say what it is given, and the `props` block is that declaration. Without one there
+is nothing to render *from*:
+
+```sbmx
+# A component with nothing declared
+
+:p: child={to_string(count)}
+:!p:
+```
+
+**Fix:** put a `props` block first, naming what comes in:
+
+```sbmx
+:props: count: Int
+:!props:
+
+# Today
+
+:p: child={to_string(count)}
+:!p:
+```
+
+---
+
 ## "`on:hover` is not an event this host can wire"
 
-**There is no `hover` event.** Hovering is CSS, not something that happens once:
+**There is no `hover` event.** Hovering is CSS, not something that happens once. So this is refused:
+
+```sbmx
+:button: on:hover=Msg.Peek
+peek
+:!button:
+```
+
+and this is the answer:
 
 ```sbmx
 ===style.local
@@ -108,9 +142,9 @@ stare at the screen wondering what you got wrong.
 Some elements hold nothing.
 
 ```sbmx
-::: input on:input=name
+:input: on:input=name
 type here
-:::
+:!input:
 ```
 
 **Fix:** leave the body empty. Put the text in a `label` beside it. This applies to `input`, `img`,
@@ -123,9 +157,9 @@ type here
 You put a block-level thing inside a text-level element.
 
 ```sbmx
-::: button on:click=go
+:button: on:click=go
 # Click me
-:::
+:!button:
 ```
 
 **Fix:** use text. `button`, `label`, `span`, `strong`, `em` and the headings hold text; everything
@@ -139,13 +173,13 @@ unpredictably.
 ## "`key` belongs on a `for`, not on an `if`"
 
 ```sbmx
-::: if ready key thing.id
+:if: ready key thing.id
 
-::: p
+:p:
 Everything is set.
-:::
+:!p:
 
-:::
+:!if:
 ```
 
 **Fix:** drop the `key`. A key tells rows apart, and an `if` has one branch with nothing to tell
@@ -156,11 +190,11 @@ apart.
 ## "an `on:` handler inside a `for` is not supported yet"
 
 ```sbmx
-::: for line in lines key line.id
-::: button on:click=line.id
+:for: line in lines key line.id
+:button: on:click=line.id
 remove
-:::
-:::
+:!button:
+:!for:
 ```
 
 This one is a limit rather than a mistake, and it is the only refusal on this page that will

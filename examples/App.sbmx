@@ -31,51 +31,51 @@ pure function update(msg: Msg, m: Model) -> Model {
 .miss { color: #b3261e; }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
-::: nav class=nav
+:nav: class=nav
 
-::: a href=/
+:a: href=/
 home
-:::
+:!a:
 
-::: a href=/posts/42
+:a: href=/posts/42
 a post
-:::
+:!a:
 
-::: a href=/search/burxt
+:a: href=/search/burxt
 a search
-:::
+:!a:
 
-:::
+:!nav:
 
-::: match model.route
+:match: model.route
 
-::: case Home
+:case: Home
 
 # Welcome
 
-:::
+:!case:
 
-::: case Post(id)
+:case: Post(id)
 
 # Post {{ to_string(id) }}
 
-:::
+:!case:
 
-::: case Search(q)
+:case: Search(q)
 
 # Results for {{ q }}
 
-:::
+:!case:
 
-::: case Missing
+:case: Missing
 
-::: p class=miss
+:p: class=miss
 Nothing at {{ model.path }}
-:::
+:!p:
 
-:::
+:!case:
 
-:::
+:!match:

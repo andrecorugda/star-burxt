@@ -14,16 +14,16 @@ holds state, fetches, and routes.
 A component is markup, and the logic that goes with it, in one file:
 
 ```sbmx
-::: props count: Int
-:::
+:props: count: Int
+:!props:
 
 # Counter
 
 The count is {{ to_string(count) }}.
 
-::: button on:click=count + 1
+:button: on:click=count + 1
 increment
-:::
+:!button:
 ```
 
 You get this:
@@ -51,16 +51,16 @@ pure function update(msg: Msg, m: Model) -> Model {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
 # Counter
 
 The count is {{ to_string(model.count) }}.
 
-::: button on:click=Msg.Increment
+:button: on:click=Msg.Increment
 increment
-:::
+:!button:
 ```
 
 `on:click=Msg.Increment` names a **message**, and your `update` decides what it does. That's one
@@ -111,9 +111,9 @@ unknown variable: toatl
 Try to add a word to a number:
 
 ```sbmx
-::: button on:click=count + "one"
+:button: on:click=count + "one"
 increment
-:::
+:!button:
 ```
 
 ```
@@ -123,9 +123,9 @@ cannot apply `+` to Int and String
 Round money without saying how:
 
 ```sbmx
-::: button on:click=total * 1.5
+:button: on:click=total * 1.5
 apply surcharge
-:::
+:!button:
 ```
 
 <figure class="shot">

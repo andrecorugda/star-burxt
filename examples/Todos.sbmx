@@ -101,27 +101,27 @@ function from_text(text: String) -> Model allocates {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
 # Todos
 
-::: ul
+:ul:
 
-::: for todo in model.todos key to_string(todo.id)
+:for: todo in model.todos key to_string(todo.id)
 
-::: li
+:li:
 
-::: button on:click=Msg.Toggle(string_to_int(key, 0))
+:button: on:click=Msg.Toggle(string_to_int(key, 0))
 {{ todo.label }}
-:::
+:!button:
 
-:::
+:!li:
 
-:::
+:!for:
 
-:::
+:!ul:
 
-::: button on:click=Msg.Add
+:button: on:click=Msg.Add
 add one
-:::
+:!button:

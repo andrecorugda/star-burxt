@@ -25,8 +25,8 @@ Slots put text in the page, so anything that is not already text gets converted.
 ## …show a price?
 
 ```sbmx
-::: props total: Decimal<2>
-:::
+:props: total: Decimal<2>
+:!props:
 
 Total: {{ to_string(total) }}
 ```
@@ -37,9 +37,9 @@ happens when you multiply one.
 ## …make a button do something?
 
 ```sbmx
-::: button on:click=count + 1
+:button: on:click=count + 1
 increment
-:::
+:!button:
 ```
 
 The part after `=` is **the new value**, not code that changes something. `on:click=0` sets it to
@@ -48,35 +48,35 @@ zero.
 ## …read what someone typed?
 
 ```sbmx
-::: input on:input=name
-:::
+:input: on:input=name
+:!input:
 ```
 
 ## …submit a form?
 
 ```sbmx
-::: form on:submit=draft
+:form: on:submit=draft
 
-::: input on:input=draft
-:::
+:input: on:input=draft
+:!input:
 
-::: button on:click=draft
+:button: on:click=draft
 save
-:::
+:!button:
 
-:::
+:!form:
 ```
 
 ## …show a list?
 
 ```sbmx
-::: for line in lines key line.id
+:for: line in lines key line.id
 
-::: li
+:li:
 {{ line.label }}
-:::
+:!li:
 
-:::
+:!for:
 ```
 
 Always give `key` something that identifies the item. See
@@ -85,13 +85,13 @@ Always give `key` something that identifies the item. See
 ## …hide something until it is ready?
 
 ```sbmx
-::: if ready
+:if: ready
 
-::: p
+:p:
 Everything is set.
-:::
+:!p:
 
-:::
+:!if:
 ```
 
 There is no `else`. Write a second `::: if` for the other case.
@@ -127,12 +127,12 @@ uses. One `<link>` loads the tree.
 Put it in the head, before any `on:`:
 
 ```sbmx
-::: div class=card
-:::
+:div: class=card
+:!div:
 
-::: span class="tag muted"
+:span: class="tag muted"
 draft
-:::
+:!span:
 ```
 
 A value with spaces is quoted. A bare name is a boolean attribute — `::: input disabled`.
@@ -142,9 +142,9 @@ A value with spaces is quoted. A bare name is a boolean attribute — `::: input
 Interpolate the value:
 
 ```sbmx
-::: a href=/posts/{{ to_string(post.id) }}
+:a: href=/posts/{{ to_string(post.id) }}
 read more
-:::
+:!a:
 ```
 
 The expression inside `{{ }}` is checked like everything else, so a typo is a compile error rather
@@ -169,12 +169,12 @@ pure function update(msg: Msg, m: Model) -> Model {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
-::: button on:click=Msg.Increment
+:button: on:click=Msg.Increment
 more
-:::
+:!button:
 ```
 
 ## …put a button on each row?
@@ -182,17 +182,17 @@ more
 Key the loop, and let the handler use `key`:
 
 ```sbmx
-::: for todo in model.todos key to_string(todo.id)
+:for: todo in model.todos key to_string(todo.id)
 
-::: li
+:li:
 
-::: button on:click=Msg.Toggle(string_to_int(key, 0))
+:button: on:click=Msg.Toggle(string_to_int(key, 0))
 {{ todo.label }}
-:::
+:!button:
 
-:::
+:!li:
 
-:::
+:!for:
 ```
 
 **`key` is the row's identity, as text.** A DOM attribute is text, so it arrives as a `String` and
@@ -201,13 +201,13 @@ you convert — `string_to_int(key, 0)` for a number.
 **What you cannot do is name the loop variable in the handler:**
 
 ```sbmx
-::: for todo in model.todos key to_string(todo.id)
+:for: todo in model.todos key to_string(todo.id)
 
-::: button on:click=Msg.Toggle(todo.id)
+:button: on:click=Msg.Toggle(todo.id)
 {{ todo.label }}
-:::
+:!button:
 
-:::
+:!for:
 ```
 
 ```
@@ -226,12 +226,12 @@ Put the component in its own file, import it, and call it as a block.
 `Badge.sbmx`:
 
 ```sbmx
-::: props amount: Int, tone: String
-:::
+:props: amount: Int, tone: String
+:!props:
 
-::: span class=badge
+:span: class=badge
 {{ tone }}: {{ to_string(amount) }}
-:::
+:!span:
 ```
 
 `Page.sbmx`:
@@ -250,11 +250,11 @@ pure function update(msg: Msg, m: Model) -> Model {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
-::: Badge amount={{ model.unread }} tone=unread
-:::
+:Badge: amount={{ model.unread }} tone=unread
+:!Badge:
 ```
 
 Generating `Page.sbmx` generates `Badge.sbmx` too, beside its own source. One command.
@@ -462,26 +462,26 @@ pure function update(msg: Msg, m: Model) -> Model {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
-::: match model.route
+:match: model.route
 
-::: case Home
+:case: Home
 # Welcome
-:::
+:!case:
 
-::: case Post(id)
+:case: Post(id)
 # Post {{ to_string(id) }}
-:::
+:!case:
 
-::: case Missing
-::: p
+:case: Missing
+:p:
 Nothing at {{ model.path }}
-:::
-:::
+:!p:
+:!case:
 
-:::
+:!match:
 ```
 
 Copy `examples/router.js` beside your page. It intercepts in-page links, handles the back button,

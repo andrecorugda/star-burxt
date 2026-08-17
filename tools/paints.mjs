@@ -55,9 +55,9 @@ const component = [
   '.card { color: red; }',
   '===',
   '',
-  '::: button on:click=Msg.Add',
+  ':button: on:click=Msg.Add',
   '{{ to_string(model.count) }}',
-  ':::',
+  ':!button:',
 ].join('\n');
 
 const painted = paint('sbmx', component);
@@ -83,14 +83,14 @@ check('painting preserves the line count',
 // and nothing says what any of them closes. The painter indents the DISPLAY.
 
 const nested = [
-  '::: section class=card',
-  '::: for task in items key task.id',
-  '::: button on:click=Msg.Go',
-  '::: span class=box',
-  ':::',
-  ':::',
-  ':::',
-  ':::',
+  ':section: class=card',
+  ':for: task in items key task.id',
+  ':button: on:click=Msg.Go',
+  ':span: class=box',
+  ':!span:',
+  ':!button:',
+  ':!for:',
+  ':!section:',
 ].join('\n');
 
 const deep = paint('bmx', nested);
@@ -117,7 +117,7 @@ check('and it is the document, line for line',
 
 // ---- the other two languages still work ------------------------------------------------------
 check('`burxt` still paints', /t-keyword">function/.test(paint('burxt', 'function f() { }')));
-check('`bmx` still paints', paint('bmx', '::: p\nhi\n:::').includes('t-fence'));
+check('`bmx` still paints', paint('bmx', ':p:\nhi\n:!p:').includes('t-fence'));
 
 // ---- and prose in a snippet cannot be turned into markup -------------------------------------
 //

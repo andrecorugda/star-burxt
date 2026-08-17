@@ -14,16 +14,16 @@ Now make it do something.
 ## A button that changes the page
 
 ```sbmx
-::: props count: Int
-:::
+:props: count: Int
+:!props:
 
 # Counter
 
 The count is {{ to_string(count) }}.
 
-::: button on:click=count + 1
+:button: on:click=count + 1
 increment
-:::
+:!button:
 ```
 
 <figure class="shot">
@@ -45,17 +45,17 @@ value comes out. If you can read the expression, you know what the button does.
 ## Two buttons
 
 ```sbmx
-::: button on:click=count + 1
+:button: on:click=count + 1
 increment
-:::
+:!button:
 
-::: button on:click=count - 1
+:button: on:click=count - 1
 decrement
-:::
+:!button:
 
-::: button on:click=0
+:button: on:click=0
 reset
-:::
+:!button:
 ```
 
 `on:click=0` is a button that sets the count to zero. Not *decrements to* zero — **is** zero. Once
@@ -64,13 +64,13 @@ you see handlers as "the next value", the reset button stops needing a special c
 ## Typing in a box
 
 ```sbmx
-::: props name: String
-:::
+:props: name: String
+:!props:
 
 # Hello {{ name }}
 
-::: input on:input=name
-:::
+:input: on:input=name
+:!input:
 ```
 
 `on:input=name` means *the new value is whatever was typed*. As you type, the heading follows.
@@ -112,9 +112,9 @@ stare at the screen wondering what you got wrong.
 Try to add text to a number:
 
 ```sbmx
-::: button on:click=count + "one"
+:button: on:click=count + "one"
 increment
-:::
+:!button:
 ```
 
 ```
@@ -124,9 +124,9 @@ cannot apply `+` to Int and String
 Misspell your own prop:
 
 ```sbmx
-::: button on:click=cont + 1
+:button: on:click=cont + 1
 increment
-:::
+:!button:
 ```
 
 ```
@@ -158,14 +158,14 @@ pure function update(msg: Msg, m: Model) -> Model {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
 The count is {{ to_string(model.count) }}.
 
-::: button on:click=Msg.Increment
+:button: on:click=Msg.Increment
 more
-:::
+:!button:
 ```
 
 **`on:click=Msg.Increment` names a message.** It no longer says what the next state *is* — it says
@@ -198,8 +198,8 @@ An event brings something with it, and it arrives as `value`:
 | `animationend` | the animation's name |
 
 ```sbmx
-::: input on:input=Msg.Typed(value)
-:::
+:input: on:input=Msg.Typed(value)
+:!input:
 ```
 
 It is text, always — because the boundary between a page and your program is text. Convert it if you

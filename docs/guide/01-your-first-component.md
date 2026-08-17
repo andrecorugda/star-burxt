@@ -17,8 +17,8 @@ Make a file called `hello.sbmx`. **The extension matters**: a `.bmx` is a docume
 render, and a `.sbmx` is a component that needs star — so the name says which.
 
 ```sbmx
-::: props name: String
-:::
+:props: name: String
+:!props:
 
 # Hello {{ name }}
 

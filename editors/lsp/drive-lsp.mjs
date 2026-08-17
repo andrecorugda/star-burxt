@@ -57,37 +57,35 @@ async function diagnosticsFor(text) {
 }
 
 // 1. A well-formed component with a typo in a slot — the layer only star can find.
-let got = await diagnosticsFor('::: props count: Int\n:::\n\nAt {{ to_string(cuont) }}.\n');
+let got = await diagnosticsFor(':props: count: Int\n:!props:\n\nAt {{ to_string(cuont) }}.\n');
 is('a slot typo is reported', got.length >= 1, true);
 is('  …on the line the author wrote it', got[0]?.range.start.line, 3);
 is('  …naming what is wrong', /cuont/.test(got[0]?.message ?? ''), true);
 
 // 2. Not a component: an unknown block. star's own rule, already positioned.
-got = await diagnosticsFor('::: props n: Int\n:::\n\n::: mystery\nhi\n:::\n');
+got = await diagnosticsFor(':props: n: Int\n:!props:\n\n:mystery:\nhi\n:!mystery:\n');
 is('an unknown block is reported with its code', got[0]?.code, 'STAR-E001');
 is('  …on its fence', got[0]?.range.start.line, 3);
 
 // 3. Not a document: a missing fence. BMX's rule.
-got = await diagnosticsFor('::: props n: Int\n:::\n\n::: div\nno closing fence\n');
+got = await diagnosticsFor(':props: n: Int\n:!props:\n\n:div:\nno closing fence\n');
 is('a malformed document is reported with BMX\'s code', got[0]?.code?.startsWith('BMX-E'), true);
 
 // 4. A clean document reports nothing, which is the case a broken server also produces — so it is
 //    asserted last, after three that prove the server can find things.
-got = await diagnosticsFor('::: props count: Int\n:::\n\nAt {{ to_string(count) }}.\n');
+got = await diagnosticsFor(':props: count: Int\n:!props:\n\nAt {{ to_string(count) }}.\n');
 is('a clean component reports nothing', got.length, 0);
 
 // 5. BMX's structural WARNING, merged in beside star's errors — imported from BMX rather than
 //    reimplemented, and severity 2 so it cannot fail a build.
-got = await diagnosticsFor('::: props n: Int\n:::\n\n# One\n\n### Three\n');
+got = await diagnosticsFor(':props: n: Int\n:!props:\n\n# One\n\n### Three\n');
 const warned = got.find((d) => d.code === 'BMX-W001');
 is("BMX's lint warnings are reported too", Boolean(warned), true);
 is('  …as a warning, not an error', warned?.severity, 2);
 
 // 6. And a `===bx` section is NOT linted as markup. Its braces are Burxt, and its lines must not
 //    shift the line numbers of the markup below it.
-got = await diagnosticsFor('===bx\nclass Model { n: Int }\n'
-  + 'pure function update(m: Int, x: Model) -> Model { return x; }\n===\n\n'
-  + '::: props model: Model\n:::\n\n# One\n\n### Three\n');
+got = await diagnosticsFor('===bx\nclass Model { n: Int }\npure function update(m: Int, x: Model) -> Model { return x; }\n===\n\n:props: model: Model\n:!props:\n\n# One\n\n### Three\n');
 const shifted = got.find((d) => d.code === 'BMX-W001');
 // `### Three` is the eleventh line of that document, and LSP counts from zero. **The point is that
 // it is not shifted by the three lines of `===bx` above it** — the sections are blanked space for

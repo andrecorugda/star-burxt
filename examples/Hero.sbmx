@@ -106,15 +106,13 @@ pure function mark(done: Bool) -> String {
 .row.done { color: #9aa1ad; text-decoration: line-through; }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
-::: section class=card
+:section: class=card
     # Today
-    ::: p child={to_string(model.left) + " left"}
-    :::
-    ::: for task in model.tasks key to_string(task.id)
-        ::: button class={{ mark(task.done) }} child={task.label} on:click=Msg.Toggle(string_to_int(key, 0))
-        :::
-    :::
-:::
+    :p: child={to_string(model.left) + " left"} :!p:
+    :for: task in model.tasks key to_string(task.id)
+        :button: class={{ mark(task.done) }} child={task.label} on:click=Msg.Toggle(string_to_int(key, 0)) :!button:
+    :!for:
+:!section:

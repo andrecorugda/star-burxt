@@ -21,11 +21,14 @@ decision, and it is being worked on.
 the head reads one `on:` binding and the rest of the line is the expression. Put the second event on
 a wrapper, or handle it in the one you have.
 
-**A document cannot be indented, and a block cannot open and close on one line.** Nesting is by
-containment, so a block's contents start at column one however deep the block is, and a `span`
-holding one slot costs three lines and a closer. Both are BMX's decision rather than star's, and both
-requests are with them, measured. Until then, blocks that only wrap something — a square, a label —
-are often better done in `===style.local` with a pseudo-element.
+**A single-brace value in an ATTRIBUTE is not star's.** `child={expr}` is star's, and it is checked.
+But `class={expr}` reaches Burxt as the string `"{expr}"` and works only because Burxt interpolates
+braces inside its own string literals — so a value holding a literal brace breaks, and nothing says
+so. Write `class={{ expr }}` in an attribute; keep `{ }` for `child=`.
+
+**A block that only wraps something is still worth avoiding.** A `span` holding nothing but a square
+is three tokens of markup for a shape CSS can draw — `===style.local` with a `::before` is usually the
+better answer, and it keeps the document about content.
 
 ## Deliberately not planned
 

@@ -17,21 +17,21 @@ pure function label(m: Model) -> String {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
 # Counter
 
 {{ label(model) }}
 
-::: button on:click=Msg.Increment
+:button: on:click=Msg.Increment
 more
-:::
+:!button:
 
-::: button on:click=Msg.Decrement
+:button: on:click=Msg.Decrement
 less
-:::
+:!button:
 
-::: button on:click=Msg.Reset
+:button: on:click=Msg.Reset
 reset
-:::
+:!button:

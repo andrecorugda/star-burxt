@@ -21,9 +21,7 @@ GEN = os.path.join(ROOT, "star-generate")
 
 # Every prop the site's examples mention. A fragment naming something that is not here is a page
 # using a name it never introduced, which is worth failing on.
-PREAMBLE = ("::: props count: Int, name: String, greeting: String, unread: Int, ready: Bool,"
-            " total: Decimal<2>, subtotal: Decimal<2>, shipping: Decimal<2>, lines: [Line],"
-            " draft: String, options: [Choice], go: Bool, thing: Line\n:::\n\n")
+PREAMBLE = (":props: count: Int, name: String, greeting: String, unread: Int, ready: Bool, total: Decimal<2>, subtotal: Decimal<2>, shipping: Decimal<2>, lines: [Line], draft: String, options: [Choice], go: Bool, thing: Line\n:!props:\n\n")
 
 
 def examples():
@@ -48,7 +46,12 @@ def examples():
                 # that MENTIONS `===style.local` mid-sentence is prose, and feeding prose to
                 # the generator produces a report that blames a paragraph.
                 has_section = re.search(r"^===\w", body, re.M) is not None
-                if ":::" not in body and "{{" not in body and not has_section:
+                # **A 0.7 fence is `:name:`, so looking for `:::` stopped finding examples.** BMX
+                # respelled the fence in 0.7 and this line decides whether a block is a document at
+                # all — it would have quietly skipped every migrated example and reported a smaller
+                # number as a pass.
+                has_fence = re.search(r"^\s*:!?[A-Za-z][\w-]*:", body, re.M) is not None
+                if not has_fence and "{{" not in body and not has_section:
                     continue
                 yield (os.path.relpath(path, ROOT), text[:m.start()].count("\n") + 1, body)
 
@@ -70,7 +73,8 @@ def hidden_fences():
             text = open(path, encoding="utf-8").read()
             for m in re.finditer(r"^(`{4,})(\w*)\n(.*?)^\1", text, re.S | re.M):
                 body = m.group(3)
-                if ":::" in body or "{{" in body or re.search(r"^===\w", body, re.M):
+                if (re.search(r"^\s*:!?[A-Za-z][\w-]*:", body, re.M) or "{{" in body
+                        or re.search(r"^===\w", body, re.M)):
                     bad.append("%s:%d is a %d-backtick fence holding an example, which the checker "
                                "cannot see — use ```sbmx"
                                % (os.path.relpath(path, ROOT), text[:m.start()].count("\n") + 1,
@@ -86,14 +90,14 @@ def main():
     # Examples that are MEANT to be refused — a page about refusals has to show the thing it
     # refuses. Keyed by the message the page promises, so a fixture cannot drift from its prose.
     expected_refusals = {
-        "::: mystery": "STAR-E001",
+        ":mystery:": "STAR-E001",
         "on:hover": "STAR-E002",
         "type here": "STAR-E004",
         "# Click me": "STAR-E005",
-        "if ready key": "STAR-E006",
+        ":if: ready key": "STAR-E006",
         "remove": "STAR-E007",
         "Msg.Toggle(todo.id)": "STAR-E007",
-        "::: props name: Type": "STAR-E003",
+        "# A component with nothing declared": "STAR-E003",
     }
 
     work = tempfile.mkdtemp(prefix="star-docs-")
@@ -103,23 +107,33 @@ def main():
     # `::: Badge` is checked against a `Badge` that exists. Its props are the ones the pages use —
     # a component here that did not match the documented call would make this check a fiction.
     open(os.path.join(work, "Badge.sbmx"), "w").write(
-        "::: props amount: Int, tone: String\n:::\n\n"
-        "::: span class=badge\n{{ tone }}: {{ to_string(amount) }}\n:::\n")
+        ":props: amount: Int, tone: String\n:!props:\n\n:span: class=badge\n{{ tone }}: {{ to_string(amount) }}\n:!span:\n")
     wrong, checked, refuted, typechecked = list(hidden_fences()), 0, 0, [0]
 
     for path, line, body in examples():
-        if "::: props" in body:
+        # **An example that is MEANT to be refused is fed verbatim.** The preamble below supplies a
+        # `props` block to fragments, which quietly repairs the one example whose whole point is not
+        # having one — and a test that repairs its input tests the repair. Decided before the source is
+        # assembled, so there is one place where it is decided.
+        want = next((code for marker, code in expected_refusals.items() if marker in body), None)
+        # **Only the STAR-E003 example is fed verbatim, and only that one.** The preamble supplies a
+        # `props` block to fragments, which quietly repairs the one example whose whole point is not
+        # having one — a test that repairs its input tests the repair. Every OTHER refusal fragment
+        # still needs the preamble, or it hits E003 before reaching the refusal it is demonstrating.
+        if want == "STAR-E003":
+            source = body
+        elif ":props:" in body:
             source = body
         elif "===bx" in body:
             # A component-mode fragment gets the props its OWN declarations imply. The general
             # preamble names types no page declares (`lines: [Line]`), which is fine for a structure
             # check and is not a program — and these blocks go to the compiler.
-            source = body + "\n::: props model: Model\n:::\n"
+            source = body + "\n:props: model: Model\n:!props:\n"
         else:
             source = PREAMBLE + body
         # A fragment that calls a component needs the import too — the surrounding page has it and
         # the excerpt does not, which is what makes it a fragment.
-        if "::: Badge" in source and "use \"./Badge.sbmx\"" not in source:
+        if ":Badge:" in source and "use \"./Badge.sbmx\"" not in source:
             source = ("===bx\nuse \"./Badge.sbmx\";\n"
                       "pure function update(msg: Int, m: Int) -> Int { return m; }\n===\n\n"
                       + source)
@@ -141,7 +155,6 @@ def main():
         out = subprocess.run([GEN, doc, "c"], capture_output=True, text=True, cwd=ROOT)
         said = (out.stderr or out.stdout).strip()
 
-        want = next((code for marker, code in expected_refusals.items() if marker in body), None)
         if want:
             refuted += 1
             if want not in said:

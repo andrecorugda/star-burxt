@@ -54,15 +54,15 @@ function from_text(text: String) -> Model {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
 # Hello {{ model.user }}
 
-::: p
+:p:
 {{ to_string(model.unread) }} unread
-:::
+:!p:
 
-::: button on:click=Msg.Clear
+:button: on:click=Msg.Clear
 clear
-:::
+:!button:

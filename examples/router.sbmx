@@ -10,43 +10,43 @@ pure function update(msg: Msg, m: Model) -> Model {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
-::: match model.route
+:match: model.route
 
-::: case Home
+:case: Home
 
 # Welcome
 
-::: if model.hits > 0
+:if: model.hits > 0
 
-::: p
+:p:
 seen {{ to_string(model.hits) }} times
-:::
+:!p:
 
-:::
+:!if:
 
-::: else
+:else:
 
-::: p
+:p:
 first visit
-:::
+:!p:
 
-:::
+:!else:
 
-:::
+:!case:
 
-::: case Post(id)
+:case: Post(id)
 
 # Post {{ to_string(id) }}
 
-:::
+:!case:
 
-::: case Search(q)
+:case: Search(q)
 
 # Results for {{ q }}
 
-:::
+:!case:
 
-:::
+:!match:

@@ -1,6 +1,6 @@
-::: props amount: Int, tone: String
-:::
+:props: amount: Int, tone: String
+:!props:
 
-::: span class=badge
+:span: class=badge
 {{ tone }}: {{ to_string(amount) }}
-:::
+:!span:

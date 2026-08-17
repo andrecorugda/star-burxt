@@ -11,14 +11,14 @@ pure function update(msg: Msg, m: Model) -> Model {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
 # Hello {{ model.name }}
 
-::: Badge amount={{ model.unread }} tone=unread
-:::
+:Badge: amount={{ model.unread }} tone=unread
+:!Badge:
 
-::: button on:click=Msg.Clear
+:button: on:click=Msg.Clear
 clear
-:::
+:!button:

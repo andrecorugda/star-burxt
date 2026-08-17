@@ -1,7 +1,7 @@
-::: props name: String
-:::
+:props: name: String
+:!props:
 
 # Hello {{ name }}
 
-::: input on:input=name
-:::
+:input: on:input=name
+:!input:

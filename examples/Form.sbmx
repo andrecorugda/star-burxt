@@ -40,20 +40,20 @@ function from_text(text: String) -> Model {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
-::: form on:submit=Msg.Save
+:form: on:submit=Msg.Save
 
-::: input value={{ model.draft }} on:input=Msg.Typed(value)
-:::
+:input: value={{ model.draft }} on:input=Msg.Typed(value)
+:!input:
 
-::: button
+:button:
 save
-:::
+:!button:
 
-:::
+:!form:
 
-::: p
+:p:
 draft: {{ model.draft }} — saved: {{ model.saved }} ({{ to_string(model.hits) }})
-:::
+:!p:

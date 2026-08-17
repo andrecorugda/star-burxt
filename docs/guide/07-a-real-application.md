@@ -32,14 +32,14 @@ pure function update(msg: Msg, m: Model) -> Model {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
 Count: {{ to_string(model.count) }}
 
-::: button on:click=Msg.Increment
+:button: on:click=Msg.Increment
 more
-:::
+:!button:
 ```
 
 Those two names are fixed, and there is nothing else to name. `update` takes a `Msg` and a `Model` and
@@ -59,11 +59,11 @@ enum Msg { Nothing }
 pure function update(msg: Msg, m: Model) -> Model { return m; }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
-::: Badge amount={{ model.count }} tone=unread
-:::
+:Badge: amount={{ model.count }} tone=unread
+:!Badge:
 ```
 
 Three rules, and they are the whole system:
@@ -85,12 +85,12 @@ A `===style.local` section is CSS for this component only:
 .total:hover { text-decoration: underline; }
 ===
 
-::: props count: Int
-:::
+:props: count: Int
+:!props:
 
-::: span class=total
+:span: class=total
 {{ to_string(count) }}
-:::
+:!span:
 ```
 
 `.total` here cannot reach a `.total` in another file. **Nothing is scoped by convention** — the
@@ -250,42 +250,42 @@ pure function update(msg: Msg, m: Model) -> Model {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
-::: nav
+:nav:
 
-::: a href=/
+:a: href=/
 home
-:::
+:!a:
 
-::: a href=/posts/42
+:a: href=/posts/42
 a post
-:::
+:!a:
 
-:::
+:!nav:
 
-::: match model.route
+:match: model.route
 
-::: case Home
+:case: Home
 
 # Welcome
 
-:::
+:!case:
 
-::: case Post(id)
+:case: Post(id)
 
 # Post {{ to_string(id) }}
 
-:::
+:!case:
 
-::: case Missing
+:case: Missing
 
 Nothing at {{ model.path }}
 
-:::
+:!case:
 
-:::
+:!match:
 ```
 
 **Forget a route and the build fails**, naming the one you left out. That is the difference between a

@@ -16,8 +16,8 @@ Chapter 1 put one value on a page. This chapter is about the rest of what a page
 List them one per line:
 
 ```sbmx
-::: props name: String, greeting: String, unread: Int
-:::
+:props: name: String, greeting: String, unread: Int
+:!props:
 
 # {{ greeting }} {{ name }}
 
@@ -43,13 +43,13 @@ quietly become `"[object Object]"`.
 A `:::` block with an element name wraps whatever is inside it:
 
 ```sbmx
-::: section
+:section:
 
 # Today
 
 Three things happened.
 
-:::
+:!section:
 ```
 
 You have these to reach for:
@@ -72,7 +72,7 @@ quietly lost a section.
 Inside a block or outside it, the ordinary things do the ordinary thing:
 
 ```sbmx
-::: article
+:article:
 
 ## Notes
 
@@ -84,7 +84,7 @@ We are **on track** for the *first* of the month.
 
 > Nothing outstanding.
 
-:::
+:!article:
 ```
 
 Headings, bold, italic, lists, quotes, links, `code`. You do not need a component for a paragraph.

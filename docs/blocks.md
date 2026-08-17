@@ -26,8 +26,8 @@ paragraphs, lists, and more blocks.
 ## `props` — what the component is given
 
 ```sbmx
-::: props name: String, total: Decimal<2>, lines: [Line]
-:::
+:props: name: String, total: Decimal<2>, lines: [Line]
+:!props:
 ```
 
 Always the first block. Empty body.
@@ -47,13 +47,13 @@ The **first** prop is the component's state — the thing your buttons change.
 ## Elements — wrapping things
 
 ```sbmx
-::: section
+:section:
 
 # Today
 
 Three things happened.
 
-:::
+:!section:
 ```
 
 Elements come in three kinds, and the kind decides what may go inside.
@@ -83,18 +83,18 @@ browsers handle the invalid version unpredictably.
 Anything before an `on:` is an attribute:
 
 ```sbmx
-::: div class=card id=main
+:div: class=card id=main
 hello
-:::
+:!div:
 ```
 
 A value with spaces is quoted — `class="tag muted"`. A bare name is a boolean attribute —
 `::: input disabled`. And a value can interpolate:
 
 ```sbmx
-::: a href=/posts/{{ to_string(post.id) }}
+:a: href=/posts/{{ to_string(post.id) }}
 read more
-:::
+:!a:
 ```
 
 The expression is checked like every other one, so a typo is a compile error rather than a broken
@@ -105,12 +105,12 @@ link.
 ## `on:` — events
 
 ```sbmx
-::: button on:click=count + 1
+:button: on:click=count + 1
 increment
-:::
+:!button:
 
-::: input on:input=name
-:::
+:input: on:input=name
+:!input:
 ```
 
 Most DOM events: the pointer and mouse, `keydown`/`keyup`, the form events including `focus` and
@@ -129,13 +129,13 @@ else on it.
 ## `for` — a row per item
 
 ```sbmx
-::: for line in lines key line.id
+:for: line in lines key line.id
 
-::: li
+:li:
 {{ line.label }}
-:::
+:!li:
 
-:::
+:!for:
 ```
 
 `key` is required in practice: it is how a row is recognised when the list changes. Use something
@@ -148,17 +148,17 @@ No `on:` handlers inside a `for` yet.
 ## `match` — choosing between many
 
 ```sbmx
-::: match model.route
+:match: model.route
 
-::: case Home
+:case: Home
 # Welcome
-:::
+:!case:
 
-::: case Post(id)
+:case: Post(id)
 # Post {{ to_string(id) }}
-:::
+:!case:
 
-:::
+:!match:
 ```
 
 A `match` holds `case` blocks and nothing else. A `case`'s head is a pattern, and it binds — `id` is
@@ -172,13 +172,13 @@ fails naming it. See [chapter 4](guide/04-lists-and-choices.html).
 ## `else` — the other branch
 
 ```sbmx
-::: if ready
+:if: ready
 …
-:::
+:!if:
 
-::: else
+:else:
 …
-:::
+:!else:
 ```
 
 Directly after the `if`, nothing between them, and no condition of its own.
@@ -188,13 +188,13 @@ Directly after the `if`, nothing between them, and no condition of its own.
 ## `if` — a section that appears when it should
 
 ```sbmx
-::: if ready
+:if: ready
 
-::: p
+:p:
 Everything is set.
-:::
+:!p:
 
-:::
+:!if:
 ```
 
 Any condition that answers true or false. No `else` — write a second `if`.
@@ -204,8 +204,8 @@ Any condition that answers true or false. No `else` — write a second `if`.
 ## A body written in the head — `child=`
 
 ```sbmx
-::: span class=total child={to_string(amount)}
-:::
+:span: class=total child={to_string(amount)}
+:!span:
 ```
 
 The same element with its text between the fences, in one fewer line. Use it for a leaf — a label, a
@@ -234,9 +234,9 @@ how a field is driven — so that is the one name it could not have been.
 ## Every attribute goes BEFORE `on:`
 
 ```sbmx
-::: button class=danger on:click=Msg.Delete
+:button: class=danger on:click=Msg.Delete
 delete
-:::
+:!button:
 ```
 
 An `on:` binding runs to the end of the line, because a handler is an expression and an expression has
@@ -251,8 +251,8 @@ the handler instead of an attribute. Put every attribute BEFORE the `on:` bindin
 ## A component — a capitalised name
 
 ```sbmx
-::: Badge amount={{ model.count }} tone=unread
-:::
+:Badge: amount={{ model.count }} tone=unread
+:!Badge:
 ```
 
 Any `.sbmx` you imported in `===bx`:

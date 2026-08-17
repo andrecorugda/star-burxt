@@ -59,15 +59,15 @@ function from_text(text: String) -> Model {
 }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
 # Feed — {{ to_string(model.items) }} items
 
-::: button on:click=Msg.Refresh
+:button: on:click=Msg.Refresh
 refresh
-:::
+:!button:
 
-::: button on:click=Msg.TogglePolling
+:button: on:click=Msg.TogglePolling
 toggle polling
-:::
+:!button:

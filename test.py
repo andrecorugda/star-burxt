@@ -68,8 +68,7 @@ def main():
         return checked.stdout + checked.stderr
 
     # ---- the accepting case, first ------------------------------------------------------------
-    good = ("::: props count: Int\n:::\n\nAt {{ to_string(count) }}.\n\n"
-            "::: button on:click=count + 1\nmore\n:::\n")
+    good = (":props: count: Int\n:!props:\n\nAt {{ to_string(count) }}.\n\n:button: on:click=count + 1\nmore\n:!button:\n")
     check("a correct component compiles", "no errors" in compile_component(good),
           compile_component(good))
 
@@ -80,27 +79,24 @@ def main():
           "if handler == 0 { return count + 1; }" in emitted, emitted)
 
     # ---- what the COMPILER refuses ------------------------------------------------------------
-    typo = compile_component("::: props count: Int\n:::\n\nAt {{ to_string(cuont) }}.\n")
+    typo = compile_component(":props: count: Int\n:!props:\n\nAt {{ to_string(cuont) }}.\n")
     check("a slot typo is refused by name", "unknown variable: cuont" in typo, typo)
 
-    wrong = compile_component('::: props count: Int\n:::\n\n'
-                              '::: button on:click=count + "one"\ngo\n:::\n')
+    wrong = compile_component(":props: count: Int\n:!props:\n\n:button: on:click=count + \"one\"\ngo\n:!button:\n")
     check("a handler type error is refused",
           "cannot apply `+` to Int and String" in wrong, wrong)
 
     # The one no framework whose handlers are closures can make.
-    money = compile_component("::: props total: Decimal<2>\n:::\n\n"
-                              "::: button on:click=total * 1.5\nbump\n:::\n")
+    money = compile_component(":props: total: Decimal<2>\n:!props:\n\n:button: on:click=total * 1.5\nbump\n:!button:\n")
     check("money narrowing INSIDE a click handler is a compile error",
           "rounding" in money, money)
 
     # ---- what star-burxt refuses --------------------------------------------------------------
-    unknown = generate("::: props count: Int\n:::\n\n::: mystery\nhi\n:::\n").stderr
+    unknown = generate(":props: count: Int\n:!props:\n\n:mystery:\nhi\n:!mystery:\n").stderr
     check("an undeclared block name is refused by name",
           "STAR-E001" in unknown and "mystery" in unknown, unknown)
 
-    unwired = generate("::: props count: Int\n:::\n\n"
-                       "::: button on:hover=count + 1\nhi\n:::\n").stderr
+    unwired = generate(":props: count: Int\n:!props:\n\n:button: on:hover=count + 1\nhi\n:!button:\n").stderr
     check("an event this host cannot wire is refused (SPEC.md 4a.5)",
           "STAR-E002" in unwired and "on:hover" in unwired, unwired)
 
@@ -114,7 +110,7 @@ def main():
           "hovering is CSS" in unwired and "mouseenter" in unwired, unwired)
 
     for asked, wanted in [("keypress", "keydown"), ("mousemove", "pointermove")]:
-        said = generate("::: props n: Int\n:::\n\n::: div on:%s=n + 1\nx\n:::\n" % asked).stderr
+        said = generate(":props: n: Int\n:!props:\n\n:div: on:%s=n + 1\nx\n:!div:\n" % asked).stderr
         check("`%s` is answered with `%s`" % (asked, wanted), wanted in said, said)
 
     # Every event the driver installs a listener for must be one star accepts, and the reverse. The
@@ -122,19 +118,18 @@ def main():
     for wired in ["click", "dblclick", "keydown", "keyup", "focus", "blur", "mouseenter",
                   "mouseleave", "mouseover", "mouseout", "pointerenter", "wheel", "scroll",
                   "drop", "touchstart", "animationend", "transitionend", "submit", "reset"]:
-        got = generate("::: props n: Int\n:::\n\n::: div on:%s=n + 1\nx\n:::\n" % wired)
+        got = generate(":props: n: Int\n:!props:\n\n:div: on:%s=n + 1\nx\n:!div:\n" % wired)
         check("`on:%s` is wired" % wired, got.returncode == 0, got.stderr)
 
-    voided = generate("::: props n: Int\n:::\n\n::: input on:input=n\noops\n:::\n").stderr
+    voided = generate(":props: n: Int\n:!props:\n\n:input: on:input=n\noops\n:!input:\n").stderr
     check("a void element with a body is refused before it trips a contract",
           "STAR-E004" in voided, voided)
 
-    flowed = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1\n# nope\n:::\n").stderr
+    flowed = generate(":props: n: Int\n:!props:\n\n:button: on:click=n + 1\n# nope\n:!button:\n").stderr
     check("flow content inside a phrasing element is refused",
           "STAR-E005" in flowed, flowed)
 
-    looped = generate("::: props rows: [Row]\n:::\n\n::: for row in rows key row.id\n"
-                      "::: li on:click=row.id\n{{ row.label }}\n:::\n:::\n").stderr
+    looped = generate(":props: rows: [Row]\n:!props:\n\n:for: row in rows key row.id\n:li: on:click=row.id\n{{ row.label }}\n:!li:\n:!for:\n").stderr
     check("a handler inside a `for` is refused, rather than emitting a name out of scope",
           "STAR-E007" in looped, looped)
 
@@ -142,19 +137,7 @@ def main():
     #
     # The accepting case first, as everywhere on this page: a suite of refusals is satisfied by a
     # generator that refuses everything.
-    component = ("===bx\n"
-                 "class Model { count: Int, history: [Int] }\n"
-                 "enum Msg { Increment, Reset }\n"
-                 "pure function update(msg: Msg, m: Model) -> Model {\n"
-                 "    match msg {\n"
-                 "        Increment => { return Model { count: m.count + 1, history: m.history }; }\n"
-                 "        Reset     => { return Model { count: 0, history: m.history }; }\n"
-                 "    }\n"
-                 "}\n"
-                 "===\n\n"
-                 "::: props model: Model\n:::\n\n"
-                 "At {{ to_string(model.count) }}.\n\n"
-                 "::: button on:click=Msg.Increment\nmore\n:::\n")
+    component = ("===bx\nclass Model { count: Int, history: [Int] }\nenum Msg { Increment, Reset }\npure function update(msg: Msg, m: Model) -> Model {\n    match msg {\n        Increment => { return Model { count: m.count + 1, history: m.history }; }\n        Reset     => { return Model { count: 0, history: m.history }; }\n    }\n}\n===\n\n:props: model: Model\n:!props:\n\nAt {{ to_string(model.count) }}.\n\n:button: on:click=Msg.Increment\nmore\n:!button:\n")
     check("a component with a ===bx section compiles", "no errors" in compile_component(component),
           compile_component(component))
 
@@ -168,16 +151,13 @@ def main():
 
     # `use` lines cannot sit where they were written: Burxt scans only a file's LEADING lines for
     # imports, so a `use` after a declaration is a syntax error. They are hoisted.
-    imported = generate("===bx\nuse \"std/string.bx\";\nclass Model { n: Int }\n"
-                        "pure function update(msg: Int, m: Model) -> Model { return m; }\n===\n\n"
-                        "::: props model: Model\n:::\n\nAt {{ to_string(model.n) }}.\n").stdout
+    imported = generate("===bx\nuse \"std/string.bx\";\nclass Model { n: Int }\npure function update(msg: Int, m: Model) -> Model { return m; }\n===\n\n:props: model: Model\n:!props:\n\nAt {{ to_string(model.n) }}.\n").stdout
     check("an author's `use` is hoisted above the generated header",
           imported.index('use "std/string.bx";') < imported.index("class Model"), imported)
 
     # A `===bx` section with no `update` is refused BY NAME rather than left to fail as a compiler
     # error about a function nobody wrote.
-    orphan = generate("===bx\nclass Model { n: Int }\n===\n\n::: props model: Model\n:::\n\n"
-                      "::: button on:click=Msg.Go\ngo\n:::\n").stderr
+    orphan = generate("===bx\nclass Model { n: Int }\n===\n\n:props: model: Model\n:!props:\n\n:button: on:click=Msg.Go\ngo\n:!button:\n").stderr
     check("a ===bx section with no `update` is refused by name",
           "STAR-E008" in orphan and "update" in orphan, orphan)
 
@@ -190,28 +170,7 @@ def main():
     # A route is derived from `location.pathname`, which is a String, and a String crosses the wasm
     # boundary. That is the whole reason routing works today while the rest of an SPA does not: a
     # model that is a RECORD cannot cross, because nothing in Burxt holds state between two calls.
-    routed = ("===bx\nuse \"std/string.bx\";\n"
-              "enum Route { Home, Post(Int), Missing }\n"
-              "class Model { route: Route, path: String }\n"
-              "enum Msg { Navigate(String) }\n"
-              "pure function route_of(path: String) -> Route {\n"
-              "    if path == \"/\" { return Route.Home; }\n"
-              "    if string_starts_with(path, \"/posts/\") {\n"
-              "        return Route.Post(string_to_int(substring(path, 7, len(path) - 7), 0));\n"
-              "    }\n"
-              "    return Route.Missing;\n"
-              "}\n"
-              "pure function update(msg: Msg, m: Model) -> Model {\n"
-              "    match msg {\n"
-              "        Navigate(to) => { return Model { route: route_of(to), path: to }; }\n"
-              "    }\n"
-              "}\n===\n\n"
-              "::: props model: Model\n:::\n\n"
-              "::: nav\n\n::: a href=/posts/42\na post\n:::\n\n:::\n\n"
-              "::: match model.route\n\n"
-              "::: case Home\n\n# Welcome\n\n:::\n\n"
-              "::: case Post(id)\n\n# Post {{ to_string(id) }}\n\n:::\n\n"
-              "::: case Missing\n\n::: p\nNothing at {{ model.path }}\n:::\n\n:::\n\n:::\n")
+    routed = ("===bx\nuse \"std/string.bx\";\nenum Route { Home, Post(Int), Missing }\nclass Model { route: Route, path: String }\nenum Msg { Navigate(String) }\npure function route_of(path: String) -> Route {\n    if path == \"/\" { return Route.Home; }\n    if string_starts_with(path, \"/posts/\") {\n        return Route.Post(string_to_int(substring(path, 7, len(path) - 7), 0));\n    }\n    return Route.Missing;\n}\npure function update(msg: Msg, m: Model) -> Model {\n    match msg {\n        Navigate(to) => { return Model { route: route_of(to), path: to }; }\n    }\n}\n===\n\n:props: model: Model\n:!props:\n\n:nav:\n\n:a: href=/posts/42\na post\n:!a:\n\n:!nav:\n\n:match: model.route\n\n:case: Home\n\n# Welcome\n\n:!case:\n\n:case: Post(id)\n\n# Post {{ to_string(id) }}\n\n:!case:\n\n:case: Missing\n\n:p:\nNothing at {{ model.path }}\n:!p:\n\n:!case:\n\n:!match:\n")
     check("a routed app compiles", "no errors" in compile_component(routed),
           compile_component(routed))
     made = generate(routed).stdout
@@ -232,15 +191,7 @@ def main():
     # and unbuilt". What it was waiting for is structured state, which the language allowed this
     # morning: a row's identity crosses as its `key`, and `update` re-derives the row from the
     # state it is given rather than from a value captured while drawing the page.
-    rows = ("===bx\nuse \"std/string.bx\";\n"
-            "class Todo { id: Int, label: String }\n"
-            "class Model { todos: [Todo] }\n"
-            "enum Msg { Toggle(Int) }\n"
-            "pure function update(msg: Msg, m: Model) -> Model { return m; }\n===\n\n"
-            "::: props model: Model\n:::\n\n"
-            "::: for todo in model.todos key to_string(todo.id)\n\n"
-            "::: li\n\n::: button on:click=Msg.Toggle(string_to_int(key, 0))\n"
-            "{{ todo.label }}\n:::\n\n:::\n\n:::\n")
+    rows = ("===bx\nuse \"std/string.bx\";\nclass Todo { id: Int, label: String }\nclass Model { todos: [Todo] }\nenum Msg { Toggle(Int) }\npure function update(msg: Msg, m: Model) -> Model { return m; }\n===\n\n:props: model: Model\n:!props:\n\n:for: todo in model.todos key to_string(todo.id)\n\n:li:\n\n:button: on:click=Msg.Toggle(string_to_int(key, 0))\n{{ todo.label }}\n:!button:\n\n:!li:\n\n:!for:\n")
     check("a handler inside a `for` compiles", "no errors" in compile_component(rows),
           compile_component(rows))
     made = generate(rows).stdout
@@ -268,18 +219,14 @@ def main():
     # with two parameters of the same name. **Found by running the linter over this repository's own
     # examples** — `Badge.sbmx` had a prop called `value` and had shipped.
     for taken in ["key", "value"]:
-        clash = generate("::: props %s: Int\n:::\n\nAt {{ to_string(%s) }}.\n" % (taken, taken)).stderr
+        clash = generate(":props: %s: Int\n:!props:\n\nAt {{ to_string(%s) }}.\n" % (taken, taken)).stderr
         check("a prop named `%s` is refused by name, not by the compiler" % taken,
               "STAR-E019" in clash and taken in clash, clash)
-    fine = generate("::: props amount: Int\n:::\n\nAt {{ to_string(amount) }}.\n")
+    fine = generate(":props: amount: Int\n:!props:\n\nAt {{ to_string(amount) }}.\n")
     check("a prop named anything else is fine", fine.returncode == 0, fine.stderr)
 
     # ---- styles: `local` scopes, `global` does not, and neither is the default -----------------
-    styled = ("===style.global\nbody { font-family: system-ui; }\n===\n\n"
-              "===style.local\n.card { border: 1px solid #ddd; }\n"
-              ".card p, .note { color: #555; }\n"
-              "@media (max-width: 600px) { .card { padding: .5rem; } }\n===\n\n"
-              "::: props n: Int\n:::\n\n::: div class=card\n\n::: p\ninside\n:::\n\n:::\n")
+    styled = ("===style.global\nbody { font-family: system-ui; }\n===\n\n===style.local\n.card { border: 1px solid #ddd; }\n.card p, .note { color: #555; }\n@media (max-width: 600px) { .card { padding: .5rem; } }\n===\n\n:props: n: Int\n:!props:\n\n:div: class=card\n\n:p:\ninside\n:!p:\n\n:!div:\n")
     made = generate(styled)
     sheet = open(os.path.join(work, "doc.css")).read() if os.path.exists(os.path.join(work, "doc.css")) else ""
     check("a `local` selector is scoped to the component",
@@ -298,18 +245,13 @@ def main():
     # The reason `local` is exact matching rather than a descendant selector: a child component's
     # elements sit inside the parent's subtree, and `[data-s-parent] .card` would reach them.
     check("a component with no local sheet gets no marker and no attribute",
-          'data-s-' not in generate("::: props n: Int\n:::\n\n::: div\nx\n:::\n").stdout,
-          generate("::: props n: Int\n:::\n\n::: div\nx\n:::\n").stdout)
+          'data-s-' not in generate(":props: n: Int\n:!props:\n\n:div:\nx\n:!div:\n").stdout,
+          generate(":props: n: Int\n:!props:\n\n:div:\nx\n:!div:\n").stdout)
 
     # ---- components: another `.sbmx`, imported with `use`, called as a block -------------------
     with open(os.path.join(work, "Badge.sbmx"), "w") as f:
-        f.write("::: props amount: Int, tone: String\n:::\n\n"
-                "::: span class=badge\n{{ tone }}: {{ to_string(amount) }}\n:::\n")
-    page = ("===bx\nuse \"./Badge.sbmx\";\n"
-            "class Model { unread: Int }\n"
-            "pure function update(msg: Int, m: Model) -> Model { return m; }\n===\n\n"
-            "::: props model: Model\n:::\n\n"
-            "::: Badge amount={{ model.unread }} tone=unread\n:::\n")
+        f.write(":props: amount: Int, tone: String\n:!props:\n\n:span: class=badge\n{{ tone }}: {{ to_string(amount) }}\n:!span:\n")
+    page = ("===bx\nuse \"./Badge.sbmx\";\nclass Model { unread: Int }\npure function update(msg: Int, m: Model) -> Model { return m; }\n===\n\n:props: model: Model\n:!props:\n\n:Badge: amount={{ model.unread }} tone=unread\n:!Badge:\n")
     made = generate(page)
     check("a component is CALLED, as an ordinary function",
           "badge((model.unread), \"unread\")" in made.stdout, made.stdout + made.stderr)
@@ -329,13 +271,11 @@ def main():
     check("a call missing a prop is refused, naming it and listing what is wanted",
           "STAR-E017" in missing_prop and "tone" in missing_prop, missing_prop)
 
-    unimported = generate("::: props n: Int\n:::\n\n::: Missing x=1\n:::\n").stderr
+    unimported = generate(":props: n: Int\n:!props:\n\n:Missing: x=1\n:!Missing:\n").stderr
     check("a component block with no import is refused, and says what to write",
           "STAR-E001" in unimported and ".sbmx" in unimported, unimported)
 
-    absent = generate("===bx\nuse \"./Nope.sbmx\";\nclass Model { n: Int }\n"
-                      "pure function update(m: Int, x: Model) -> Model { return x; }\n===\n\n"
-                      "::: props model: Model\n:::\n\nhi\n").stderr
+    absent = generate("===bx\nuse \"./Nope.sbmx\";\nclass Model { n: Int }\npure function update(m: Int, x: Model) -> Model { return x; }\n===\n\n:props: model: Model\n:!props:\n\nhi\n").stderr
     check("an import that does not resolve names the file and the importer",
           "Nope.sbmx" in absent and "imported by" in absent, absent)
 
@@ -343,16 +283,7 @@ def main():
     #
     # This is the claim no JavaScript framework can make. React, Vue and Svelte give you a blank
     # page and a bug report; here the compiler names the variant nobody rendered.
-    router = ("===bx\n"
-              "enum Route { Home, Post(Int) }\n"
-              "class Model { route: Route }\n"
-              "pure function update(msg: Int, m: Model) -> Model { return m; }\n"
-              "===\n\n"
-              "::: props model: Model\n:::\n\n"
-              "::: match model.route\n\n"
-              "::: case Home\n\n# Welcome\n\n:::\n\n"
-              "::: case Post(id)\n\n# Post {{ to_string(id) }}\n\n:::\n\n"
-              ":::\n")
+    router = ("===bx\nenum Route { Home, Post(Int) }\nclass Model { route: Route }\npure function update(msg: Int, m: Model) -> Model { return m; }\n===\n\n:props: model: Model\n:!props:\n\n:match: model.route\n\n:case: Home\n\n# Welcome\n\n:!case:\n\n:case: Post(id)\n\n# Post {{ to_string(id) }}\n\n:!case:\n\n:!match:\n")
     check("a match over a route compiles", "no errors" in compile_component(router),
           compile_component(router))
     check("a case PATTERN destructures, so `id` is in scope in its branch",
@@ -361,29 +292,27 @@ def main():
     # The whole point, and it is checked by REMOVING a branch rather than by adding a variant —
     # same defect, and this way the fixture cannot pass because the compiler was lenient.
     missing = compile_component(router.replace(
-        "::: case Post(id)\n\n# Post {{ to_string(id) }}\n\n:::\n\n", ""))
+        ":case: Post(id)\n\n# Post {{ to_string(id) }}\n\n:!case:\n\n", ""))
     check("A VARIANT WITH NO BRANCH IS A COMPILE ERROR, naming it",
           "does not handle `Post`" in missing, missing)
 
-    stray = generate("::: props n: Int\n:::\n\n::: case Home\nx\n:::\n").stderr
+    stray = generate(":props: n: Int\n:!props:\n\n:case: Home\nx\n:!case:\n").stderr
     check("a `case` outside a `match` is refused", "STAR-E014" in stray, stray)
-    loose = generate("::: props n: Int\n:::\n\n::: match n\n\ntext, not a case\n\n:::\n").stderr
+    loose = generate(":props: n: Int\n:!props:\n\n:match: n\n\ntext, not a case\n\n:!match:\n").stderr
     check("text between branches is refused — it has no branch to belong to",
           "STAR-E011" in loose, loose)
-    empty = generate("::: props n: Int\n:::\n\n::: match n\n\n:::\n").stderr
+    empty = generate(":props: n: Int\n:!props:\n\n:match: n\n\n:!match:\n").stderr
     check("a match with no cases decides nothing, and is refused",
           "STAR-E013" in empty, empty)
 
     # ---- `else` -------------------------------------------------------------------------------
-    branched = generate("::: props n: Int\n:::\n\n::: if n > 0\n\n::: p\nsome\n:::\n\n:::\n\n"
-                        "::: else\n\n::: p\nnone\n:::\n\n:::\n").stdout
+    branched = generate(":props: n: Int\n:!props:\n\n:if: n > 0\n\n:p:\nsome\n:!p:\n\n:!if:\n\n:else:\n\n:p:\nnone\n:!p:\n\n:!else:\n").stdout
     check("an `else` becomes the other branch of the `if` above it",
           "else {" in branched, branched)
-    orphaned = generate("::: props n: Int\n:::\n\nA paragraph.\n\n::: else\n\nx\n\n:::\n").stderr
+    orphaned = generate(":props: n: Int\n:!props:\n\nA paragraph.\n\n:else:\n\nx\n\n:!else:\n").stderr
     check("an `else` with no `if` directly above it is refused",
           "STAR-E016" in orphaned, orphaned)
-    conditioned = generate("::: props n: Int\n:::\n\n::: if n > 0\n\nx\n\n:::\n\n"
-                           "::: else n < 0\n\ny\n\n:::\n").stderr
+    conditioned = generate(":props: n: Int\n:!props:\n\n:if: n > 0\n\nx\n\n:!if:\n\n:else: n < 0\n\ny\n\n:!else:\n").stderr
     check("an `else` carrying a condition is refused rather than silently ignored",
           "STAR-E015" in conditioned, conditioned)
 
@@ -392,25 +321,19 @@ def main():
     # These were byte offsets into the container until BMX 0.3 gave every node its own position.
     # `STAR-E005` said "at 112" — the button — when the heading was at 127, so a reader with a long
     # document was sent to the block and left to find the line themselves.
-    located = generate("::: props n: Int\n:::\n\n# A page\n\nSome introduction\nover two lines.\n\n"
-                       "::: div\n\n::: button on:click=n + 1\n# nope\n:::\n\n:::\n").stderr
+    located = generate(":props: n: Int\n:!props:\n\n# A page\n\nSome introduction\nover two lines.\n\n:div:\n\n:button: on:click=n + 1\n# nope\n:!button:\n\n:!div:\n").stderr
     check("a refusal points at the OFFENDING construct, in line:column",
           "STAR-E005 at 12:1" in located, located)
 
     # `column` counts CHARACTERS, not bytes. A hand-rolled conversion is right on every ASCII line
     # and one place wrong on the first line with an accent in it — which is why this uses BMX's
     # `bmx_where` rather than star's own arithmetic, and why this fixture has an `å` in it.
-    accented = generate("::: props n: Int\n:::\n\nA line with an å in it, then:\n\n"
-                        "::: button on:click=n + 1\n# nope\n:::\n").stderr
+    accented = generate(":props: n: Int\n:!props:\n\nA line with an Ã¥ in it, then:\n\n:button: on:click=n + 1\n# nope\n:!button:\n").stderr
     check("a line with a multi-byte character does not move the caret",
           "STAR-E005 at 7:1" in accented, accented)
 
     # ---- attributes, and the element vocabulary as a content model ---------------------------
-    attrs = ("::: props post: Post\n:::\n\n"
-             "::: div class=card\n\n"
-             "::: span class=\"tag muted\"\ndraft\n:::\n\n"
-             "::: a href=/posts/{{ to_string(post.id) }}\nread more\n:::\n\n"
-             "::: input disabled\n:::\n\n:::\n")
+    attrs = (":props: post: Post\n:!props:\n\n:div: class=card\n\n:span: class=\"tag muted\"\ndraft\n:!span:\n\n:a: href=/posts/{{ to_string(post.id) }}\nread more\n:!a:\n\n:input: disabled\n:!input:\n\n:!div:\n")
     out = generate(attrs).stdout
     check("an attribute reaches the element", 'html_attr("class", "card")' in out, out)
     check("a quoted value keeps its spaces", 'html_attr("class", "tag muted")' in out, out)
@@ -421,23 +344,23 @@ def main():
     # The vocabulary is three sets rather than one list, because the SPLIT is what refuses a
     # heading inside a button. A tag being present is not the interesting half.
     for tag in ["a", "textarea", "table", "select", "details", "dialog", "main", "figure"]:
-        got = generate("::: props n: Int\n:::\n\n::: %s\nx\n:::\n" % tag)
+        got = generate(":props: n: Int\n:!props:\n\n:%s:\nx\n:!%s:\n" % (tag, tag))
         check("`%s` is an element star knows" % tag, got.returncode == 0, got.stderr)
-    voided = generate("::: props n: Int\n:::\n\n::: source\nbody\n:::\n").stderr
+    voided = generate(":props: n: Int\n:!props:\n\n:source:\nbody\n:!source:\n").stderr
     check("a NEWLY added void element is still refused a body",
           "STAR-E004" in voided, voided)
-    flowed = generate("::: props n: Int\n:::\n\n::: textarea\n# nope\n:::\n").stderr
+    flowed = generate(":props: n: Int\n:!props:\n\n:textarea:\n# nope\n:!textarea:\n").stderr
     check("a NEWLY added phrasing element still refuses a heading",
           "STAR-E005" in flowed, flowed)
 
-    unclosed = generate("::: props n: Int\n:::\n\n::: div class=\"oops\nx\n:::\n").stderr
+    unclosed = generate(":props: n: Int\n:!props:\n\n:div: class=\"oops\nx\n:!div:\n").stderr
     check("a quote that never closes is refused rather than guessed at",
           "STAR-E009" in unclosed, unclosed)
 
     # ---- the content model has no seam --------------------------------------------------------
-    one = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1\nonly\n:::\n").stdout
-    two = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1\nfirst\n\nsecond\n:::\n").stdout
-    kept = generate("::: props n: Int\n:::\n\n::: div\nkept\n:::\n").stdout
+    one = generate(":props: n: Int\n:!props:\n\n:button: on:click=n + 1\nonly\n:!button:\n").stdout
+    two = generate(":props: n: Int\n:!props:\n\n:button: on:click=n + 1\nfirst\n\nsecond\n:!button:\n").stdout
+    kept = generate(":props: n: Int\n:!props:\n\n:div:\nkept\n:!div:\n").stdout
     check("one paragraph in a phrasing element unwraps",
           'html_element("p", [], [html_text("only")])' not in one, one)
     check("TWO paragraphs unwrap the same way — no discontinuity",
@@ -450,13 +373,11 @@ def main():
     # `<button><span class=box></span></button>` is correct HTML and how a styled control is built.
     # The first content model refused EVERY nested block inside a phrasing element, so a button could
     # not contain a `span` — found by the site's own showcase, where a checkbox is exactly that.
-    nested = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1\n"
-                      "::: span class=box\n:::\n::: span class=text\nhi\n:::\n:::\n")
+    nested = generate(":props: n: Int\n:!props:\n\n:button: on:click=n + 1\n:span: class=box\n:!span:\n:span: class=text\nhi\n:!span:\n:!button:\n")
     check("a phrasing element may contain another phrasing element",
           nested.returncode == 0 and 'html_element("span"' in nested.stdout,
           (nested.stderr or nested.stdout))
-    flow_in_phrasing = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1\n"
-                                "::: div\nno\n:::\n:::\n")
+    flow_in_phrasing = generate(":props: n: Int\n:!props:\n\n:button: on:click=n + 1\n:div:\nno\n:!div:\n:!button:\n")
     check("but FLOW content inside one is still refused",
           "STAR-E005" in (flow_in_phrasing.stderr + flow_in_phrasing.stdout),
           (flow_in_phrasing.stderr or flow_in_phrasing.stdout))
@@ -466,7 +387,7 @@ def main():
     # `html_element` has a precondition on its attribute names, so a name that is not one exits 70 —
     # a bare "burxt exit 70" in a console, from a function the author never called. An unquoted value
     # with spaces in it is read as several attributes, and the last of them is not a name.
-    unquoted = generate('::: props n: Int\n:::\n\n::: input placeholder=What needs doing?\n:::\n')
+    unquoted = generate(":props: n: Int\n:!props:\n\n:input: placeholder=What needs doing?\n:!input:\n")
     check("an unquoted value with spaces is refused by NAME, with the fix in the message",
           "STAR-E020" in (unquoted.stderr + unquoted.stdout)
           and "quotes" in (unquoted.stderr + unquoted.stdout),
@@ -477,8 +398,7 @@ def main():
     # Burxt refuses `for x in f(y)` — the call would be remade on every pass — and it is right to.
     # But the author wrote `::: for task in shown(model)`, which is reasonable, so the binding is
     # emitted here rather than showing a reader a complaint about generated code.
-    call_loop = generate("::: props items: [Line]\n:::\n\n::: for line in shown(items)\n"
-                         "a row\n:::\n")
+    call_loop = generate(":props: items: [Line]\n:!props:\n\n:for: line in shown(items)\na row\n:!for:\n")
     check("a `for` over a call binds the call before the loop",
           call_loop.returncode == 0 and "let rows_" in call_loop.stdout
           and "in shown(items)" not in call_loop.stdout,
@@ -489,10 +409,7 @@ def main():
     # A heading, a paragraph, a list and a code block all come out of BMX with no attributes, so the
     # scope marker was missing from exactly the elements a document writes most. A local rule for
     # `.card h1` matched nothing, and the site's own hero was the thing that showed it.
-    styled = generate("===bx\nclass Model { n: Int }\nenum Msg { Nothing }\n"
-                      "pure function update(msg: Msg, m: Model) -> Model { return m; }\n===\n\n"
-                      "===style.local\nh1 { color: red; }\n===\n\n"
-                      "::: props model: Model\n:::\n\n# Title\n")
+    styled = generate("===bx\nclass Model { n: Int }\nenum Msg { Nothing }\npure function update(msg: Msg, m: Model) -> Model { return m; }\n===\n\n===style.local\nh1 { color: red; }\n===\n\n:props: model: Model\n:!props:\n\n# Title\n")
     check("a markdown heading carries the component's scope marker",
           styled.returncode == 0 and 'html_element("h1", [html_attr("data-s-' in styled.stdout,
           (styled.stderr or styled.stdout)[:400])
@@ -505,11 +422,7 @@ def main():
     # and `::after`, so every hover state in this repository was dead from the day styles landed.
     # Found by moving a checkbox into a pseudo-element to shorten a document: the squares left the
     # picture, and that was the only symptom there has ever been.
-    pseudo = generate("===bx\nclass Model { n: Int }\nenum Msg { Nothing }\n"
-                      "pure function update(msg: Msg, m: Model) -> Model { return m; }\n===\n\n"
-                      "===style.local\n.row::before { content: \"x\"; }\n.row:hover { color: red; }\n"
-                      ".card h1 { margin: 0; }\n===\n\n"
-                      "::: props model: Model\n:::\n\n::: div class=row\nhi\n:::\n")
+    pseudo = generate("===bx\nclass Model { n: Int }\nenum Msg { Nothing }\npure function update(msg: Msg, m: Model) -> Model { return m; }\n===\n\n===style.local\n.row::before { content: \"x\"; }\n.row:hover { color: red; }\n.card h1 { margin: 0; }\n===\n\n:props: model: Model\n:!props:\n\n:div: class=row\nhi\n:!div:\n")
     # **The stylesheet is a FILE beside the document, not stdout.** Reading the wrong stream is how
     # this assertion first "passed" against a program that had never been asked the question.
     sheet_path = os.path.join(work, "doc.css")
@@ -531,36 +444,36 @@ def main():
     #
     # **It also closes a defect that predates one-liners.** `::: span class=text hello` read `hello`
     # as a boolean attribute and emitted `<span class="text" hidden></span>` — the text silently gone.
-    kid = generate("::: props label: String\n:::\n\n::: span class=text child=hello\n:::\n")
+    kid = generate(":props: label: String\n:!props:\n\n:span: class=text child=hello\n:!span:\n")
     check("`child=` becomes the element's text, not an attribute",
           'html_attr("class", "text")], [html_text("hello")]' in kid.stdout, kid.stdout[-200:])
-    quoted = generate('::: props label: String\n:::\n\n::: span child="two words"\n:::\n')
+    quoted = generate(":props: label: String\n:!props:\n\n:span: child=\"two words\"\n:!span:\n")
     check("a quoted `child=` keeps its spaces and loses its quotes",
           'html_text("two words")' in quoted.stdout, quoted.stdout[-200:])
     # **Braces mean an EXPRESSION, and `child={}` is an empty body said out loud.** Andre's form: the
     # braces say where the value ends, so a body with spaces needs no quotes, and there is a spelling
     # for "deliberately empty" that is different from "content went missing".
-    braced = generate("::: props label: String\n:::\n\n::: span child={label}\n:::\n")
+    braced = generate(":props: label: String\n:!props:\n\n:span: child={label}\n:!span:\n")
     check("`child={expr}` is Burxt the compiler judges",
           "html_text(label)" in braced.stdout, braced.stdout[-200:])
-    spaced = generate("::: props n: Int\n:::\n\n::: span child={to_string(n + 1)}\n:::\n")
+    spaced = generate(":props: n: Int\n:!props:\n\n:span: child={to_string(n + 1)}\n:!span:\n")
     check("a braced body may hold spaces without quotes",
           "html_text(to_string(n + 1))" in spaced.stdout, spaced.stdout[-200:])
-    empty = generate("::: props n: Int\n:::\n\n::: span class=box child={}\n:::\n")
+    empty = generate(":props: n: Int\n:!props:\n\n:span: class=box child={}\n:!span:\n")
     check("`child={}` is an element with NO children, not one holding \"\"",
           'html_attr("class", "box")], []' in empty.stdout, empty.stdout[-200:])
     # `{{ … }}` is the interpolation everywhere else in a head, so it has to mean the same here.
-    slot = generate("::: props label: String\n:::\n\n::: span child={{ label }}\n:::\n")
+    slot = generate(":props: label: String\n:!props:\n\n:span: child={{ label }}\n:!span:\n")
     check("`child={{ x }}` means the same as `child={x}`",
           "html_text(label)" in slot.stdout, slot.stdout[-200:])
-    both = generate("::: props label: String\n:::\n\n::: div child=one\ntwo\n:::\n")
+    both = generate(":props: label: String\n:!props:\n\n:div: child=one\ntwo\n:!div:\n")
     check("a `child=` AND a body is refused rather than one being picked",
           "STAR-E021" in (both.stderr + both.stdout), (both.stderr or both.stdout)[:160])
-    void_child = generate("::: props label: String\n:::\n\n::: input child=nope\n:::\n")
+    void_child = generate(":props: label: String\n:!props:\n\n:input: child=nope\n:!input:\n")
     check("`child=` on a void element is refused",
           "STAR-E004" in (void_child.stderr + void_child.stdout),
           (void_child.stderr or void_child.stdout)[:160])
-    bare = generate("::: props label: String\n:::\n\n::: span class=text hidden\n:::\n")
+    bare = generate(":props: label: String\n:!props:\n\n:span: class=text hidden\n:!span:\n")
     check("and a bare word is STILL a boolean attribute, as in HTML",
           'html_attr("hidden", "")' in bare.stdout, bare.stdout[-200:])
 
@@ -570,16 +483,16 @@ def main():
     # refusal existed: `::: button on:click=n + 1 class=danger` emitted a button with NO class and
     # folded `class=danger` into the dispatch expression, which then failed to compile in generated
     # code with a message about a name the author never wrote there.
-    after = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1 class=danger\nhi\n:::\n")
+    after = generate(":props: n: Int\n:!props:\n\n:button: on:click=n + 1 class=danger\nhi\n:!button:\n")
     check("an attribute written after `on:` is refused, naming it",
           "STAR-E022" in (after.stderr + after.stdout)
           and "class=" in (after.stderr + after.stdout), (after.stderr or after.stdout)[:200])
-    ok_order = generate("::: props n: Int\n:::\n\n::: button class=danger on:click=n + 1\nhi\n:::\n")
+    ok_order = generate(":props: n: Int\n:!props:\n\n:button: class=danger on:click=n + 1\nhi\n:!button:\n")
     check("and the same head with the attribute BEFORE it is accepted",
           ok_order.returncode == 0 and 'html_attr("class", "danger")' in ok_order.stdout,
           (ok_order.stderr or ok_order.stdout)[:200])
     # A handler with `==` or a quoted `=` inside it is not a trailing attribute.
-    compare = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1\nhi\n:::\n")
+    compare = generate(":props: n: Int\n:!props:\n\n:button: on:click=n + 1\nhi\n:!button:\n")
     check("a plain handler is not mistaken for one", compare.returncode == 0,
           (compare.stderr or compare.stdout)[:200])
 

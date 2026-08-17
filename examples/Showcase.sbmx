@@ -214,84 +214,84 @@ function from_text(text: String) -> Model allocates {
 .empty { padding: 1.6rem 1.3rem; color: #9aa1ad; text-align: center; border-bottom: 1px solid #f6f7fa; }
 ===
 
-::: props model: Model
-:::
+:props: model: Model
+:!props:
 
-::: section class=card
+:section: class=card
 
-::: div class=top
+:div: class=top
 
 # Today
 
-::: p
-::: span class=count
+:p:
+:span: class=count
 {{ to_string(open_count(model.tasks)) }} open
-:::
+:!span:
 of {{ to_string(len(model.tasks)) }} — written as a document, compiled to WebAssembly
-:::
+:!p:
 
-:::
+:!div:
 
-::: div class=row-add
+:div: class=row-add
 
-::: input value={{ model.draft }} placeholder="What needs doing?" on:input=Msg.Draft(value)
-:::
+:input: value={{ model.draft }} placeholder="What needs doing?" on:input=Msg.Draft(value)
+:!input:
 
-::: button class=add on:click=Msg.Add
+:button: class=add on:click=Msg.Add
 Add
-:::
+:!button:
 
-:::
+:!div:
 
-::: div class=tabs
+:div: class=tabs
 
-::: button class=tab on:click=Msg.Show("all")
+:button: class=tab on:click=Msg.Show("all")
 All
-:::
+:!button:
 
-::: button class=tab on:click=Msg.Show("open")
+:button: class=tab on:click=Msg.Show("open")
 Open
-:::
+:!button:
 
-::: button class=tab on:click=Msg.Show("done")
+:button: class=tab on:click=Msg.Show("done")
 Done
-:::
+:!button:
 
-:::
+:!div:
 
-::: ul class=list
+:ul: class=list
 
-::: for task in shown(model) key to_string(task.id)
+:for: task in shown(model) key to_string(task.id)
 
-::: li class=item
+:li: class=item
 
-::: button class={{ pick_class(task.done) }} on:click=Msg.Toggle(string_to_int(key, 0))
+:button: class={{ pick_class(task.done) }} on:click=Msg.Toggle(string_to_int(key, 0))
 
-::: span class=box
-:::
+:span: class=box
+:!span:
 
-::: span class=text
+:span: class=text
 {{ task.label }}
-:::
+:!span:
 
-:::
+:!button:
 
-:::
+:!li:
 
-:::
+:!for:
 
-:::
+:!ul:
 
-::: div class=foot
+:div: class=foot
 
-::: span
+:span:
 {{ to_string(open_count(model.tasks)) }} left
-:::
+:!span:
 
-::: button class=clear on:click=Msg.Clear
+:button: class=clear on:click=Msg.Clear
 Clear done
-:::
+:!button:
 
-:::
+:!div:
 
-:::
+:!section:
