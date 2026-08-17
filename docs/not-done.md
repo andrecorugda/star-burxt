@@ -14,7 +14,12 @@ useful to you than a feature list.
 ## Not there yet
 
 **Anything asynchronous.** No fetching, no timers, no loading states. A component is given its data
-and draws it.
+and draws it. The shape is designed — an update answers the next state *and* commands for the driver
+to perform — and it is not built.
+
+**Carrying state costs two functions.** A component that runs in a browser needs `to_text` and
+`from_text`, because nothing in Burxt holds state between two calls. That is a gap rather than a
+decision, and it is being worked on.
 
 ## Deliberately not planned
 

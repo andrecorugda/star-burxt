@@ -130,6 +130,48 @@ match file_read_maybe(path) {
                 print("        return len(html);");
                 print("    \}");
                 print("\}");
+
+                // ---- the STATEFUL entry point, when the component can carry its own state ------
+                //
+                // **Nothing in Burxt holds state between two calls** — a function sees its
+                // arguments and nothing else, which is what makes `pure` mean anything. So a model
+                // that is a record cannot live in the module between events: it has to cross the
+                // boundary, and only text does that today.
+                //
+                // A component that declares `to_text` and `from_text` gets a driver that carries
+                // it. One that does not gets exactly what it got before, which is why this is
+                // additive rather than a new mode.
+                //
+                // **The state goes OUT the way HTML does — through a host call, never a return.**
+                // A String built in a region cannot outlive the block, so the host takes the bytes
+                // before the close. That is the same constraint `host_mount` was written for, and
+                // the reason both calls sit inside the region.
+                if star_mentions(component.code, "function to_text(")
+                    && star_mentions(component.code, "function from_text(") {
+                    print("");
+                    print("// ---- carrying the state, because nothing here can hold it ----------");
+                    print("external function host_state(text: String) -> CInt;");
+                    print("");
+                    print("function " + name + "_first(state: String) -> Int \{");
+                    print("    region frame \{");
+                    print("        let m: Model = from_text(state);");
+                    print("        let html: String = html_render(" + name + "(m));");
+                    print("        let sent: Int = host_mount(html);");
+                    print("        return len(html);");
+                    print("    \}");
+                    print("\}");
+                    print("");
+                    print("// One event: the state in as text, the next state and the page out.");
+                    print("function " + name + "_frame(handler: Int, key: String, state: String) -> Int \{");
+                    print("    region frame \{");
+                    print("        let next: Model = " + name + "_dispatch(handler, key, from_text(state));");
+                    print("        let kept: Int = host_state(to_text(next));");
+                    print("        let html: String = html_render(" + name + "(next));");
+                    print("        let sent: Int = host_mount(html);");
+                    print("        return len(html);");
+                    print("    \}");
+                    print("\}");
+                }
             }
         }
     }

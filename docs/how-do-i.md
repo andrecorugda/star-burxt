@@ -276,6 +276,43 @@ declares them, so two props of the same type cannot swap by accident.
 
 It prints the component. Reading it is encouraged — there is nothing in there you did not write.
 
+## …run a real app in a browser?
+
+Give your component a way to carry its state as text, and the driver does the rest:
+
+```
+===bx
+use "std/json.bx";
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable f: [Field] = [];
+    let a: Int = push(f, json_field("count", json_int(m.count)));
+    return json_render(json_object(f));
+}
+
+function from_text(text: String) -> Model {
+    // …read it back, with your own fallback for a value that is not there
+}
+===
+```
+
+Then:
+
+```html
+<script type="module">
+  import { mount } from './app.js'
+  mount({ wasm: 'app.wasm', root: document.getElementById('root'), component: 'app' })
+</script>
+```
+
+**Why you have to write those two.** Nothing in Burxt holds state between two calls — a function
+sees its arguments and nothing else, which is what lets the compiler promise a view reaches nothing.
+So the host keeps the model and hands it back, and text is what can cross today.
+
+It is a real cost, and it is the one thing on this page that exists because of a gap rather than a
+decision. When the language grows a value the host can hold as-is, these two go away and nothing
+else changes.
+
 ## …build a page with several screens?
 
 Make the route an `enum`, derive it from the path, and `match` on it:

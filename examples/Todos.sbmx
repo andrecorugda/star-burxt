@@ -1,10 +1,11 @@
 ===bx
 use "std/string.bx";
+use "std/json.bx";
 
 class Todo { id: Int, label: String, done: Bool }
-class Model { todos: [Todo], added: Int }
+class Model { todos: [Todo], next_id: Int }
 
-enum Msg { Toggle(Int), ClearDone }
+enum Msg { Toggle(Int), Add }
 
 pure function toggled(todos: [Todo], id: Int) -> [Todo] allocates {
     let mutable out: [Todo] = [];
@@ -23,9 +24,80 @@ pure function toggled(todos: [Todo], id: Int) -> [Todo] allocates {
 
 pure function update(msg: Msg, m: Model) -> Model allocates {
     match msg {
-        Toggle(id) => { return Model { todos: toggled(m.todos, id), added: m.added }; }
-        ClearDone => { return Model { todos: m.todos, added: m.added }; }
+        Toggle(id) => { return Model { todos: toggled(m.todos, id), next_id: m.next_id }; }
+        Add => {
+            let mutable out: [Todo] = [];
+            let mutable i: Int = 0;
+            while i < len(m.todos) { let k: Int = push(out, m.todos[i]); i += 1; }
+            let n: Int = push(out, Todo { id: m.next_id, label: "task " + to_string(m.next_id), done: false });
+            return Model { todos: out, next_id: m.next_id + 1 };
+        }
     }
+}
+
+// The state crosses the boundary as text, because nothing here can hold it between calls.
+pure function to_text(m: Model) -> String allocates {
+    let mutable rows: [Json] = [];
+    let mutable i: Int = 0;
+    while i < len(m.todos) {
+        let mutable f: [Field] = [];
+        let a: Int = push(f, json_field("id", json_int(m.todos[i].id)));
+        let b: Int = push(f, json_field("label", json_text(m.todos[i].label)));
+        let c: Int = push(f, json_field("done", json_truth(m.todos[i].done)));
+        let r: Int = push(rows, json_object(f));
+        i += 1;
+    }
+    let mutable top: [Field] = [];
+    let d: Int = push(top, json_field("todos", json_list(rows)));
+    let e: Int = push(top, json_field("next_id", json_int(m.next_id)));
+    return json_render(json_object(top));
+}
+
+function from_text(text: String) -> Model allocates {
+    let mutable out: [Todo] = [];
+    let mutable most: Int = 1;
+    match json_parse(text) {
+        Error(e) => { return Model { todos: out, next_id: 1 }; }
+        Ok(value) => {
+            match json_at(value, "todos") {
+                None => { }
+                Some(list) => {
+                    match list {
+                        Null => { }
+                        Truth(b) => { }
+                        Number(n) => { }
+                        Text(t) => { }
+                        Object(f) => { }
+                        List(rows) => {
+                            let mutable i: Int = 0;
+                            while i < len(rows) {
+                                let row: Json = rows[i];
+                                let mutable id: Int = 0;
+                                let mutable label: String = "";
+                                let mutable done: Bool = false;
+                                match json_at(row, "id") {
+                                    None => { }
+                                    Some(v) => { match json_as_int(v) { None => { } Some(n) => { id = n; } } }
+                                }
+                                match json_at(row, "label") {
+                                    None => { }
+                                    Some(v) => { match json_as_text(v) { None => { } Some(t) => { label = t; } } }
+                                }
+                                match json_at(row, "done") {
+                                    None => { }
+                                    Some(v) => { match json_as_truth(v) { None => { } Some(b) => { done = b; } } }
+                                }
+                                let k: Int = push(out, Todo { id: id, label: label, done: done });
+                                if id >= most { most = id + 1; }
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return Model { todos: out, next_id: most };
 }
 ===
 
@@ -50,6 +122,6 @@ pure function update(msg: Msg, m: Model) -> Model allocates {
 
 :::
 
-::: button on:click=Msg.ClearDone
-clear done
+::: button on:click=Msg.Add
+add one
 :::

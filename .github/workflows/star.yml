@@ -55,6 +55,24 @@ jobs:
       # refuses is worse than no tutorial: the reader concludes they made the mistake. This found
       # exactly that the day it was written — chapter 1 opened with a document the generator
       # refuses, so the first lesson on the site did not work.
+      # **The driver, against a real WebAssembly module.** Nothing native can catch what this
+      # catches: a component that round-tripped perfectly under `burxt run` exited 70 on its second
+      # frame in the browser, because the driver stubbed 128-bit multiply to zero — which produces
+      # wrong products rather than failing, so the overflow check fired on a correct program.
+      - name: The driver carries the state, in real wasm
+        run: |
+          set -eux
+          ./star-generate examples/Todos.sbmx todos > /tmp/todos.bx
+          burxt build /tmp/todos.bx --target wasm32-unknown-unknown -o /tmp/todos.o
+          LLD=$(ls ~/.rustup/toolchains/*/lib/rustlib/*/bin/rust-lld 2>/dev/null | head -1)
+          if [ -z "$LLD" ]; then LLD=$(command -v wasm-ld); fi
+          "$LLD" -flavor wasm --no-entry --allow-undefined \
+            --export=main --export='bx.todos_first' --export='bx.todos_frame' \
+            --export='burxt.alloc' --export=memory \
+            -z stack-size=1048576 --initial-memory=4194304 --max-memory=268435456 \
+            /tmp/todos.o -o /tmp/todos.wasm
+          node examples/drive.mjs /tmp/todos.wasm
+
       - name: Every example in the documentation actually works
         run: |
           set -eux
