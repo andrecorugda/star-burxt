@@ -164,6 +164,35 @@ def main():
     check("without a ===bx section a handler is still an EXPRESSION",
           "if handler == 0 { return count + 1; }" in generate(good).stdout, generate(good).stdout)
 
+    # ---- attributes, and the element vocabulary as a content model ---------------------------
+    attrs = ("::: props post: Post\n:::\n\n"
+             "::: div class=card\n\n"
+             "::: span class=\"tag muted\"\ndraft\n:::\n\n"
+             "::: a href=/posts/{{ to_string(post.id) }}\nread more\n:::\n\n"
+             "::: input disabled\n:::\n\n:::\n")
+    out = generate(attrs).stdout
+    check("an attribute reaches the element", 'html_attr("class", "card")' in out, out)
+    check("a quoted value keeps its spaces", 'html_attr("class", "tag muted")' in out, out)
+    check("A VALUE INTERPOLATES, so a link can be computed from state",
+          'html_attr("href", "/posts/" + (to_string(post.id)))' in out, out)
+    check("a bare name is a boolean attribute", 'html_attr("disabled", "")' in out, out)
+
+    # The vocabulary is three sets rather than one list, because the SPLIT is what refuses a
+    # heading inside a button. A tag being present is not the interesting half.
+    for tag in ["a", "textarea", "table", "select", "details", "dialog", "main", "figure"]:
+        got = generate("::: props n: Int\n:::\n\n::: %s\nx\n:::\n" % tag)
+        check("`%s` is an element star knows" % tag, got.returncode == 0, got.stderr)
+    voided = generate("::: props n: Int\n:::\n\n::: source\nbody\n:::\n").stderr
+    check("a NEWLY added void element is still refused a body",
+          "STAR-E004" in voided, voided)
+    flowed = generate("::: props n: Int\n:::\n\n::: textarea\n# nope\n:::\n").stderr
+    check("a NEWLY added phrasing element still refuses a heading",
+          "STAR-E005" in flowed, flowed)
+
+    unclosed = generate("::: props n: Int\n:::\n\n::: div class=\"oops\nx\n:::\n").stderr
+    check("a quote that never closes is refused rather than guessed at",
+          "STAR-E009" in unclosed, unclosed)
+
     # ---- the content model has no seam --------------------------------------------------------
     one = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1\nonly\n:::\n").stdout
     two = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1\nfirst\n\nsecond\n:::\n").stdout

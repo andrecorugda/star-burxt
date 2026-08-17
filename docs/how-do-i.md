@@ -98,20 +98,57 @@ There is no `else`. Write a second `::: if` for the other case.
 
 ## …put a class on an element?
 
-Not yet — attributes other than events are not supported. Style by element and by structure for
-now, or wrap the component in your own markup. This is on
-[what's not built yet](not-done.html).
-
-## …use several pieces of state?
-
-The component's state is its **first** prop, so make that one value hold everything that changes:
+Put it in the head, before any `on:`:
 
 ```
-::: props draft: Draft, options: [Choice]
+::: div class=card
+:::
+
+::: span class="tag muted"
+draft
 :::
 ```
 
-`draft` changes; `options` is given to the component and stays put.
+A value with spaces is quoted. A bare name is a boolean attribute — `::: input disabled`.
+
+## …build a link from my data?
+
+Interpolate the value:
+
+```
+::: a href=/posts/{{ to_string(post.id) }}
+read more
+:::
+```
+
+The expression inside `{{ }}` is checked like everything else, so a typo is a compile error rather
+than a link to a page that does not exist.
+
+## …use more than one piece of state?
+
+Write a `===bx` section. Your state becomes a record, your handlers become messages, and an
+`update` function you can read decides what each one does:
+
+```
+===bx
+class Model { count: Int, items: [Item] }
+enum Msg { Increment, Reset }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Increment => { return Model { count: m.count + 1, items: m.items }; }
+        Reset     => { return Model { count: 0, items: m.items }; }
+    }
+}
+===
+
+::: props model: Model
+:::
+
+::: button on:click=Msg.Increment
+more
+:::
+```
 
 ## …delete one row from a list?
 

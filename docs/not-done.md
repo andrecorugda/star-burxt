@@ -17,10 +17,6 @@ useful to you than a feature list.
 [Chapter 4](guide/04-lists-and-choices.html) explains why and what to do instead. This is the
 limitation you are most likely to hit.
 
-**Attributes.** You cannot put a `class`, an `id`, a `placeholder` or an `href` on an element.
-Events are the only attribute. Style by element and structure, or wrap the component in your own
-markup.
-
 **`else`.** Write a second `::: if`.
 
 **More than one changing value.** The component's state is its first prop. Put everything that

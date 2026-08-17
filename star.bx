@@ -325,24 +325,45 @@ pure function star_event_is_wired(name: String) -> Bool {
 // these is invalid HTML, not merely unwanted, which is why the unwrapping above is
 // required rather than a preference. The list is short because it is the set this
 // host declares — adding to it is a decision, not a convenience.
+// ---- the element vocabulary, as a content model rather than a list --------------------------
+//
+// Three sets, and the SPLIT is what does the work rather than the membership. HTML's own rule is
+// that a phrasing element holds text and a flow element holds sections; putting a heading in a
+// button is invalid markup that browsers handle unpredictably, so star refuses it (STAR-E005) and
+// unwraps paragraphs inside phrasing elements so a `button` holds text rather than a `<p>`.
+//
+// Written as space-delimited sets because a chain of forty `||` is a place to make a typo nobody
+// sees. The spaces around each name are load-bearing: without them `p` would match inside `input`.
+
+// Text-level. Paragraphs inside these UNWRAP, and a heading, list, quote or code block is refused.
 pure function star_takes_phrasing(name: String) -> Bool {
-    return name == "button" || name == "label" || name == "strong" || name == "em"
-        || name == "span" || name == "h1" || name == "h2" || name == "h3"
-        || name == "h4" || name == "h5" || name == "h6";
+    return star_in_set(name,
+        " a b button caption code em h1 h2 h3 h4 h5 h6 i label legend mark option q s small span"
+        + " strong sub summary sup textarea title u ");
 }
 
+// Takes no children at all. `html_element` carries `requires !html_is_void(tag) ||
+// len(children) == 0`, so one of these with a body is a CONTRACT violation — refused at generate
+// time rather than left to trip when the page is already open.
+pure function star_is_void(name: String) -> Bool {
+    return star_in_set(name, " area base br col embed hr img input link meta source track wbr ");
+}
+
+// Everything else a document may wrap things in.
+pure function star_takes_flow(name: String) -> Bool {
+    return star_in_set(name,
+        " address article aside blockquote canvas colgroup dd details dialog div dl dt fieldset"
+        + " figcaption figure footer form header hgroup li main nav ol optgroup output p picture"
+        + " pre progress section select table tbody td tfoot th thead tr ul video ");
+}
+
+pure function star_in_set(name: String, set: String) -> Bool {
+    return star_mentions(set, " " + name + " ");
+}
+
+
 pure function star_is_element(name: String) -> Bool {
-    return name == "div" || name == "span" || name == "p" || name == "button"
-        || name == "ul" || name == "ol" || name == "li" || name == "section"
-        || name == "article" || name == "header" || name == "footer" || name == "nav"
-        || name == "form" || name == "label" || name == "strong" || name == "em"
-        || name == "h1" || name == "h2" || name == "h3" || name == "h4"
-        || name == "h5" || name == "h6"
-        // Void elements. `html_element` carries `requires !html_is_void(tag) ||
-        // len(children) == 0`, so one of these with a body is a CONTRACT violation —
-        // which is why star_emit_stmts refuses it at generate time rather than
-        // emitting code that trips the contract when the page is already open.
-        || name == "input" || name == "br" || name == "hr" || name == "img";
+    return star_takes_phrasing(name) || star_is_void(name) || star_takes_flow(name);
 }
 
 
@@ -476,6 +497,15 @@ function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: S
                 if len(key_here) > 0 {
                     key_attr = "html_attr(\"data-star-key\", " + key_here + ")";
                 }
+                // What is left of the head once `on:` and `key` are off it is attributes.
+                let bare_head: String = star_head_without_key(star_head_without_event(fenced.head));
+                let mutable written: String = "";
+                match star_attrs_of(bare_head) {
+                    Error(e) => {
+                        return Result.Error(e + " (at " + to_string(fenced.offset) + ")");
+                    }
+                    Ok(list) => { written = list; }
+                }
                 match star_event_part(fenced.head) {
                     None => { }
                     Some(part) => {
@@ -514,11 +544,8 @@ function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: S
                             event: event,
                             expression: star_event_expression(part),
                         });
-                        attrs = "[html_attr(\"data-star-h\", \"" + to_string(index) + "\")]";
-                        if len(key_attr) > 0 {
-                            attrs = "[html_attr(\"data-star-h\", \"" + to_string(index) + "\"), "
-                                + key_attr + "]";
-                        }
+                        attrs = "[html_attr(\"data-star-h\", \"" + to_string(index) + "\")"
+                            + star_joined(key_attr) + star_joined(written) + "]";
                     }
                 }
                 // **An element that takes phrasing content unwraps its paragraphs**, and
@@ -578,7 +605,7 @@ function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: S
                         }
                         c += 1;
                     }
-                    if len(key_attr) > 0 && attrs == "[]" { attrs = "[" + key_attr + "]"; }
+                    if attrs == "[]" { attrs = star_attr_list(key_attr, written); }
                     out = out + indent + "let " + label + ": Int = push(" + target
                         + ", html_element(\"" + fenced.name + "\", " + attrs
                         + ", [" + phrasing + "]));\n";
@@ -610,7 +637,7 @@ function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: S
                                       indent, handlers, "", in_loop) {
                     Error(e) => { return Result.Error(e); }
                     Ok(body) => {
-                        if len(key_attr) > 0 && attrs == "[]" { attrs = "[" + key_attr + "]"; }
+                        if attrs == "[]" { attrs = star_attr_list(key_attr, written); }
                         out = out + indent + "let mutable " + inner + ": [Html] = [];\n" + body;
                         out = out + indent + "let " + label + ": Int = push(" + target
                             + ", html_element(\"" + fenced.name + "\", " + attrs
@@ -731,6 +758,150 @@ pure function star_is_use_line(line: String) -> Bool {
     }
     return byte_at(line, i) == 117 && byte_at(line, i + 1) == 115
         && byte_at(line, i + 2) == 101 && byte_at(line, i + 3) == 32;
+}
+
+// ---- attributes ---------------------------------------------------------------------------
+//
+// `::: a href=/about class=nav` — the head, once `on:` and `key` have been taken off it, is a list
+// of `name=value` pairs. Without these star can emit a page and not style it, which is the
+// difference between a renderer and something anybody would ship.
+//
+// **A value ends at a space, or is quoted.** `class="a b"` for a value with spaces. That rule is
+// forced rather than chosen: an `on:` expression runs to the end of the head, because expressions
+// contain spaces and equals signs and the format does not parse heads. So `on:` is written last and
+// everything before it is attributes.
+//
+// **A value may interpolate.** `href=/posts/{{ to_string(id) }}` becomes a concatenation, with the
+// expression going through verbatim exactly as a slot does — so a typo in it is a compile error
+// naming what the author wrote, rather than a link to a page that does not exist.
+//
+// A bare name is a boolean attribute: `::: input disabled` emits `disabled=""`, which is how HTML
+// spells true.
+
+// `, x` when x is there, nothing when it is not — so a list can be built by concatenation without
+// a trailing comma nobody can see in generated source.
+pure function star_joined(term: String) -> String {
+    if len(term) == 0 {
+        return "";
+    }
+    return ", " + term;
+}
+
+pure function star_attr_list(key_attr: String, written: String) -> String {
+    let mutable inner: String = key_attr;
+    if len(inner) == 0 {
+        inner = written;
+    } else {
+        inner = inner + star_joined(written);
+    }
+    return "[" + inner + "]";
+}
+
+// The Burxt expression for one attribute value: a String literal, or a concatenation when the value
+// interpolates. `/posts/{{ to_string(id) }}` -> `"/posts/" + to_string(id)`.
+pure function star_attr_value(raw: String) -> String {
+    let mutable out: String = "";
+    let mutable literal: String = "";
+    let mutable i: Int = 0;
+    let width: Int = len(raw);
+    while i < width {
+        if i + 1 < width && byte_at(raw, i) == 123 && byte_at(raw, i + 1) == 123 {
+            let mutable j: Int = i + 2;
+            while j + 1 < width && !(byte_at(raw, j) == 125 && byte_at(raw, j + 1) == 125) {
+                j += 1;
+            }
+            if len(literal) > 0 {
+                if len(out) > 0 { out = out + " + "; }
+                out = out + "\"" + literal + "\"";
+                literal = "";
+            }
+            if len(out) > 0 { out = out + " + "; }
+            out = out + "(" + star_trim(substring(raw, i + 2, j - (i + 2))) + ")";
+            i = j + 2;
+        } else {
+            literal = literal + byte_as_string(byte_at(raw, i));
+            i += 1;
+        }
+    }
+    if len(literal) > 0 {
+        if len(out) > 0 { out = out + " + "; }
+        out = out + "\"" + literal + "\"";
+    }
+    if len(out) == 0 {
+        return "\"\"";
+    }
+    return out;
+}
+
+pure function star_trim(text: String) -> String {
+    let mutable from: Int = 0;
+    while from < len(text) && byte_at(text, from) == 32 {
+        from += 1;
+    }
+    return bmx_strip_end(substring(text, from, len(text) - from));
+}
+
+// Every `name=value` in a head, as `html_attr(...)` terms ready to go in a list.
+//
+// The head handed in has already had `on:` and `key` removed, so what is left is attributes and
+// nothing else. Refuses a value it cannot read rather than dropping it — an attribute that silently
+// does not appear is the failure this whole project keeps finding.
+pure function star_attrs_of(head: String) -> Result<String, String> {
+    let mutable out: String = "";
+    let width: Int = len(head);
+    let mutable i: Int = 0;
+    while i < width {
+        while i < width && byte_at(head, i) == 32 {
+            i += 1;
+        }
+        if i >= width {
+            return Result.Ok(out);
+        }
+        let name_from: Int = i;
+        while i < width && byte_at(head, i) != 32 && byte_at(head, i) != 61 {
+            i += 1;
+        }
+        let name: String = substring(head, name_from, i - name_from);
+        let mutable value: String = "\"\"";
+        if i < width && byte_at(head, i) == 61 {
+            i += 1;
+            if i < width && byte_at(head, i) == 34 {
+                i += 1;
+                let from: Int = i;
+                while i < width && byte_at(head, i) != 34 {
+                    i += 1;
+                }
+                if i >= width {
+                    return Result.Error("STAR-E009: the value of `" + name + "` opens with a quote"
+                        + " and never closes it");
+                }
+                value = star_attr_value(substring(head, from, i - from));
+                i += 1;
+            } else {
+                let from: Int = i;
+                // A `{{ … }}` value may hold spaces, so an interpolation runs to its closing braces
+                // rather than to the next space.
+                let mutable depth: Int = 0;
+                while i < width && (depth > 0 || byte_at(head, i) != 32) {
+                    if i + 1 < width && byte_at(head, i) == 123 && byte_at(head, i + 1) == 123 {
+                        depth += 1;
+                        i += 1;
+                    }
+                    if i + 1 < width && byte_at(head, i) == 125 && byte_at(head, i + 1) == 125 {
+                        depth -= 1;
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                value = star_attr_value(substring(head, from, i - from));
+            }
+        }
+        if len(name) > 0 {
+            if len(out) > 0 { out = out + ", "; }
+            out = out + "html_attr(\"" + name + "\", " + value + ")";
+        }
+    }
+    return Result.Ok(out);
 }
 
 // ---- the two modes, and the `===bx` section is what chooses between them ----------------------

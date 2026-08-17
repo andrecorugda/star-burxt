@@ -56,18 +56,49 @@ Three things happened.
 :::
 ```
 
-**Layout:** `div` `section` `article` `header` `footer` `nav` `form`
+Elements come in three kinds, and the kind decides what may go inside.
 
-**Text:** `p` `span` `strong` `em` `label` `h1` `h2` `h3` `h4` `h5` `h6`
+**Text-level** — holds text and nothing else:
 
-**Lists:** `ul` `ol` `li`
+`a` `b` `button` `caption` `code` `em` `h1`–`h6` `i` `label` `legend` `mark` `option` `q` `s`
+`small` `span` `strong` `sub` `summary` `sup` `textarea` `title` `u`
 
-**Empty:** `input` `img` `br` `hr`
+**Empty** — holds nothing at all:
 
-**Interactive:** `button`
+`area` `base` `br` `col` `embed` `hr` `img` `input` `link` `meta` `source` `track` `wbr`
 
-Text-level elements — `button` `label` `span` `strong` `em` and the headings — hold text only.
-Everything else holds anything.
+**Everything else** — holds anything:
+
+`address` `article` `aside` `blockquote` `canvas` `dd` `details` `dialog` `div` `dl` `dt`
+`fieldset` `figcaption` `figure` `footer` `form` `header` `li` `main` `nav` `ol` `p` `picture`
+`pre` `section` `select` `table` `tbody` `td` `tfoot` `th` `thead` `tr` `ul` `video`
+
+Put a heading in a text-level element and you are told — that is HTML's rule, not star-burxt's, and
+browsers handle the invalid version unpredictably.
+
+---
+
+## Attributes
+
+Anything before an `on:` is an attribute:
+
+```
+::: div class=card id=main
+hello
+:::
+```
+
+A value with spaces is quoted — `class="tag muted"`. A bare name is a boolean attribute —
+`::: input disabled`. And a value can interpolate:
+
+```
+::: a href=/posts/{{ to_string(post.id) }}
+read more
+:::
+```
+
+The expression is checked like every other one, so a typo is a compile error rather than a broken
+link.
 
 ---
 
