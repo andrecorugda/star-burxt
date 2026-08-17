@@ -96,12 +96,20 @@ match file_walk(root) {
         while f < len(paths) {
             let path: String = paths[f];
             f += 1;
-            if !string_ends_with(path, ".md") { continue; }
+            // **`.html` under `_includes` and `_layouts` counts too, and the hole this closes was
+            // real.** A generated include carried a `\{% raw %\}` inside an HTML COMMENT, which is
+            // no shelter — Liquid reads a comment — so it opened a raw block nothing closed and the
+            // literal tag rendered as the first line of a code panel on the live site. Andre saw it
+            // there. Only `.md` was scanned, so no check could have.
+            let is_page: Bool = string_ends_with(path, ".md");
+            let is_part: Bool = string_ends_with(path, ".html")
+                && (string_contains(path, "/_includes/") || string_contains(path, "/_layouts/"));
+            if !is_page && !is_part { continue; }
             match file_read_maybe(path) {
                 None => { let p: Int = push(problems, "cannot read " + path); }
                 Some(text) => {
                     pages += 1;
-                    if !string_starts_with(text, "---\n") {
+                    if is_page && !string_starts_with(text, "---\n") {
                         let p: Int = push(problems, path + ": no front matter, so Jekyll will not render it");
                     }
                     let mutable in_raw: Bool = false;
@@ -112,7 +120,10 @@ match file_walk(root) {
                         let line: String = substring(text, at, stop - at);
                         if opens_raw(line) { in_raw = true; }
                         if closes_raw(line) { in_raw = false; }
-                        if !in_raw {
+                        // A layout IS Liquid — it is meant to be full of tags — so what is checked
+                        // there is only that a `raw` it opens gets closed. A page's delimiters are
+                        // checked as before.
+                        if !in_raw && !string_contains(path, "/_layouts/") {
                             let where: Int = unprotected_at(line);
                             if where >= 0 {
                                 let p: Int = push(problems, path + ":" + to_string(number)
@@ -123,6 +134,17 @@ match file_walk(root) {
                         }
                         at = stop + 1;
                         number += 1;
+                    }
+                    // **A raw block left OPEN, which is the defect that reached the live site.**
+                    // A generated include named the tag inside an HTML comment; a comment is no
+                    // shelter, so Liquid opened a block nothing closed and everything after it
+                    // rendered as source — the literal tag became the first line of a code panel.
+                    // Walking told us which lines were protected and never asked whether the file
+                    // finished protected.
+                    if in_raw {
+                        let p: Int = push(problems, path
+                            + ": a `raw` block is opened and never closed, so everything after it"
+                            + " renders as source. Jekyll will not complain.");
                     }
                 }
             }

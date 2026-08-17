@@ -14,24 +14,24 @@
 
   <figure class="src">
     <figcaption>Hero.sbmx <span>the markup half</span></figcaption>
-    <!-- `{% raw %}` around the CODE only: the markup contains `{{ … }}` slots, which Jekyll would
-         otherwise evaluate as Liquid and delete. The image's `{{ site.baseurl }}` above is Liquid
-         and must stay Liquid, so the guard cannot wrap the whole include. -->
-    {% raw %}<pre><code class="language-sbmx">::: section class=card
+    <!-- The slots are brace ENTITIES rather than a raw block — see `escape` above for why. An HTML
+         comment is no shelter: Liquid reads one, so naming the tag here would OPEN a raw block that
+         nothing closes, and everything after it on the page would render as source. -->
+    <pre><code class="language-sbmx">::: section class=card
 # Today
 ::: p
-{{ to_string(model.left) }} left
+&#123;&#123; to_string(model.left) &#125;&#125; left
 :::
 ::: for task in model.tasks key to_string(task.id)
-::: button class={{ mark(task.done) }} on:click=Msg.Toggle(string_to_int(key, 0))
+::: button class=&#123;&#123; mark(task.done) &#125;&#125; on:click=Msg.Toggle(string_to_int(key, 0))
 ::: span class=box
 :::
 ::: span class=text
-{{ task.label }}
+&#123;&#123; task.label &#125;&#125;
 :::
 :::
 :::
-:::</code></pre>{% endraw %}
+:::</code></pre>
   </figure>
 </div>
 
