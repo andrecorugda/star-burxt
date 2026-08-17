@@ -77,6 +77,44 @@ check('painting preserves the line count',
       painted.split('\n').length === component.split('\n').length,
       `${painted.split('\n').length} vs ${component.split('\n').length}`);
 
+// ---- the nesting is SHOWN without changing the document ---------------------------------------
+//
+// A `.bmx` document cannot be indented, so a component with a loop in it ends in a run of bare `:::`
+// and nothing says what any of them closes. The painter indents the DISPLAY.
+
+const nested = [
+  '::: section class=card',
+  '::: for task in items key task.id',
+  '::: button on:click=Msg.Go',
+  '::: span class=box',
+  ':::',
+  ':::',
+  ':::',
+  ':::',
+].join('\n');
+
+const deep = paint('bmx', nested);
+
+check('a nested document gets depth spans', /class="d1"/.test(deep) && /class="d3"/.test(deep), deep);
+
+// **A closer is drawn at its OPENER's depth**, which is the entire point: four closers that all look
+// identical are what a reader has to count.
+const rows = deep.split('\n');
+const depthOf = (row) => { const m = /class="d(\d)"/.exec(row); return m ? Number(m[1]) : 0; };
+check('a closer sits at the depth of the block it closes',
+      depthOf(rows[3]) === 3 && depthOf(rows[4]) === 3 && depthOf(rows[5]) === 2
+      && depthOf(rows[6]) === 1 && depthOf(rows[7]) === 0,
+      rows.map((r, i) => i + ':' + depthOf(r)).join(' '));
+
+// **AND THE TEXT IS UNCHANGED, which is the half that makes it honest.** A panel showing indented
+// SOURCE would be a trap: a reader copies it and BMX refuses the document. Padding is not text.
+const asText = deep.replace(/<[^>]*>/g, '');
+check('what a reader copies has no leading whitespace',
+      asText.split('\n').every((l) => l === l.trimStart()),
+      asText.split('\n').filter((l) => l !== l.trimStart())[0]);
+check('and it is the document, line for line',
+      asText === nested.replace(/&/g, '&amp;'), asText);
+
 // ---- the other two languages still work ------------------------------------------------------
 check('`burxt` still paints', /t-keyword">function/.test(paint('burxt', 'function f() { }')));
 check('`bmx` still paints', paint('bmx', '::: p\nhi\n:::').includes('t-fence'));

@@ -167,6 +167,21 @@
     return out;
   }
 
+  // ---- showing the nesting without changing the document ---------------------------------------
+  //
+  // **A `.bmx` document cannot be indented — nesting is by containment — so a component with a loop
+  // inside it ends in a run of bare `:::` and nothing says what any of them closes.** Andre pointed
+  // at exactly that: *"example for the for loop every nested component will be readable"*. Whether
+  // leading space becomes legal is BMX's decision and the request is with them.
+  //
+  // What is available here meanwhile: **indent the DISPLAY and leave the text alone.** Each line is
+  // wrapped in a span whose `padding-left` comes from its depth, so a reader sees the structure — and
+  // because padding is not text, **what they copy is still the flat source the format accepts.** A
+  // panel that showed indented source would be a trap: copying it would produce a document BMX
+  // refuses.
+  //
+  // A closer is drawn at its OPENER's depth, which is the whole point — `:::` four deep and `:::` one
+  // deep stop looking identical.
   function bmx(src) {
     const lines = src.split('\n');
     const out = [];
@@ -223,7 +238,35 @@
 
       out.push(bmxInline(line));
     }
-    return out.join('\n');
+    return indented(out, lines).join('\n');
+  }
+
+  // Wrap each painted line in a depth span, in a SECOND PASS over the finished lines.
+  //
+  // **Not inside the loop**, and that is not a style choice: the loop body has a dozen `continue`s, so
+  // a wrapper threaded through it leaves one branch unwrapped and nothing says which. One entry per
+  // source line is already an invariant here — `tools/paints.mjs` asserts the line count — so the two
+  // arrays line up by construction and this pass cannot disagree with the painter.
+  function indented(painted, lines) {
+    let depth = 0;
+    let fence = null;
+    return painted.map((html, i) => {
+      const line = lines[i];
+      if (fence !== null) {
+        if (line.trim() === fence) fence = null;
+        return html;
+      }
+      const opens = /^(\s*)(`{3,}|~{3,})/.exec(line);
+      if (opens) { fence = opens[2]; return html; }
+
+      const block = /^\s*(:{3,})\s*(\S*)/.exec(line);
+      let at = depth;
+      if (block) {
+        if (block[2] === '') { depth = Math.max(0, depth - 1); at = depth; }
+        else { depth += 1; }
+      }
+      return at > 0 ? `<span class="d${Math.min(at, 6)}">${html}</span>` : html;
+    });
   }
 
 

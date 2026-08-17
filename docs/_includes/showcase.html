@@ -24,11 +24,7 @@
 :::
 ::: for task in model.tasks key to_string(task.id)
 ::: button class=&#123;&#123; mark(task.done) &#125;&#125; on:click=Msg.Toggle(string_to_int(key, 0))
-::: span class=box
-:::
-::: span class=text
 &#123;&#123; task.label &#125;&#125;
-:::
 :::
 :::
 :::</code></pre>

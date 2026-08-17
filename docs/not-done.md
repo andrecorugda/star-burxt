@@ -21,9 +21,11 @@ decision, and it is being worked on.
 the head reads one `on:` binding and the rest of the line is the expression. Put the second event on
 a wrapper, or handle it in the one you have.
 
-**A document cannot be indented.** Nesting is by containment, so a block's contents start at column
-one however deep the block is. That reads worse than it should for anything with three levels in it,
-and it is BMX's decision rather than star's — the request is with them, measured.
+**A document cannot be indented, and a block cannot open and close on one line.** Nesting is by
+containment, so a block's contents start at column one however deep the block is, and a `span`
+holding one slot costs three lines and a closer. Both are BMX's decision rather than star's, and both
+requests are with them, measured. Until then, blocks that only wrap something — a square, a label —
+are often better done in `===style.local` with a pseudo-element.
 
 ## Deliberately not planned
 

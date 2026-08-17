@@ -97,9 +97,13 @@ pure function mark(done: Bool) -> String {
 .row { display: flex; gap: .7rem; align-items: center; width: 100%;
        padding: .7rem 1.4rem; font: inherit; color: inherit; text-align: left;
        background: none; border: 0; border-top: 1px solid #f0f2f6; cursor: pointer; }
-.box { width: 1.05rem; height: 1.05rem; border: 1.5px solid #cbd2dd; border-radius: 5px; }
-.row.done .box  { background: #d9531e; border-color: #d9531e; }
-.row.done .text { color: #9aa1ad; text-decoration: line-through; }
+/* **The checkbox is a pseudo-element, so the document does not need a block for it.** A `::: span`
+ * holding nothing but a square costs three lines and a closer, and a reader counting `:::` to find
+ * the structure has to step over all of them. What CSS can draw, CSS should draw. */
+.row::before { content: ""; width: 1.05rem; height: 1.05rem; flex: none;
+               border: 1.5px solid #cbd2dd; border-radius: 5px; }
+.row.done::before { background: #d9531e; border-color: #d9531e; }
+.row.done { color: #9aa1ad; text-decoration: line-through; }
 ===
 
 ::: props model: Model
@@ -112,11 +116,7 @@ pure function mark(done: Bool) -> String {
 :::
 ::: for task in model.tasks key to_string(task.id)
 ::: button class={{ mark(task.done) }} on:click=Msg.Toggle(string_to_int(key, 0))
-::: span class=box
-:::
-::: span class=text
 {{ task.label }}
-:::
 :::
 :::
 :::

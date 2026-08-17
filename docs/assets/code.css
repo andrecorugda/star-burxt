@@ -79,3 +79,30 @@
 .t-selector { color: #1f6f88; }
 .t-prop     { color: #7a5c12; }
 .t-value    { color: #0a6b4a; }
+
+/* ---- showing a document's nesting without changing the document -------------------------------
+ *
+ * A `.bmx` document cannot be indented — nesting is by containment — so a component with a loop in it
+ * ends in a run of bare `:::` and nothing says what any of them closes. Andre pointed at exactly that
+ * case. Whether leading space becomes legal is BMX's decision.
+ *
+ * **This indents the DISPLAY and leaves the text alone**, which is the honest version: `padding` is
+ * not text, so what a reader copies is still the flat source the format accepts. A panel that showed
+ * indented SOURCE would be a trap — copying it produces a document BMX refuses.
+ *
+ * Inline spans rather than blocks, because a `pre` already breaks on the newlines the painter kept:
+ * padding on an inline span lands at the start of its line, and the text content is untouched. */
+/* **`box-decoration-break: clone` is what makes a WRAPPED line keep its indent.** Padding on an
+ * inline box lands once, at the box's start, so a long `on:click=` head wrapped back to column zero
+ * and the structure the indent was drawing came apart at exactly the lines that need it most.
+ * `clone` applies the padding to every fragment. */
+pre code [class^="d"] {
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+pre code .d1 { padding-left: 1.15em; }
+pre code .d2 { padding-left: 2.30em; }
+pre code .d3 { padding-left: 3.45em; }
+pre code .d4 { padding-left: 4.60em; }
+pre code .d5 { padding-left: 5.75em; }
+pre code .d6 { padding-left: 6.90em; }

@@ -497,6 +497,32 @@ def main():
           styled.returncode == 0 and 'html_element("h1", [html_attr("data-s-' in styled.stdout,
           (styled.stderr or styled.stdout)[:400])
 
+    # ---- a scoped selector keeps its pseudo LAST ----------------------------------------------
+    #
+    # `.row::before[data-s-hero]` is invalid CSS and a browser drops the whole rule **silently** — a
+    # dropped rule looks exactly like a rule that decided not to change anything. Appending the marker
+    # at the end of a selector is correct for `.row` and wrong for every `:hover`, `:focus`, `::before`
+    # and `::after`, so every hover state in this repository was dead from the day styles landed.
+    # Found by moving a checkbox into a pseudo-element to shorten a document: the squares left the
+    # picture, and that was the only symptom there has ever been.
+    pseudo = generate("===bx\nclass Model { n: Int }\nenum Msg { Nothing }\n"
+                      "pure function update(msg: Msg, m: Model) -> Model { return m; }\n===\n\n"
+                      "===style.local\n.row::before { content: \"x\"; }\n.row:hover { color: red; }\n"
+                      ".card h1 { margin: 0; }\n===\n\n"
+                      "::: props model: Model\n:::\n\n::: div class=row\nhi\n:::\n")
+    # **The stylesheet is a FILE beside the document, not stdout.** Reading the wrong stream is how
+    # this assertion first "passed" against a program that had never been asked the question.
+    sheet_path = os.path.join(work, "doc.css")
+    sheet = open(sheet_path).read() if os.path.exists(sheet_path) else ""
+    check("a style section writes a stylesheet", len(sheet) > 0, sheet_path)
+    interesting = sheet[:300]
+    check("the marker goes BEFORE a pseudo, not after it",
+          "::before[data-s-" not in sheet and ":hover[data-s-" not in sheet, interesting)
+    check("and it is still attached, so the rule is still scoped",
+          "[data-s-c]::before" in sheet and "[data-s-c]:hover" in sheet, interesting)
+    # A descendant selector stamps its LAST part, or a parent's rule would reach into a child.
+    check("a descendant selector stamps its last part", "h1[data-s-c]" in sheet, interesting)
+
     shutil.rmtree(work, ignore_errors=True)
 
     if failures:

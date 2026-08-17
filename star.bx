@@ -1238,7 +1238,7 @@ pure function star_scoped_selector(selector: String, marker: String) -> String {
                 if byte_at(trimmed, 0) == 64 {
                     out = out + trimmed;
                 } else {
-                    out = out + trimmed + "[data-s-" + marker + "]";
+                    out = out + star_stamped(trimmed, marker);
                 }
             }
             one = "";
@@ -1248,6 +1248,43 @@ pure function star_scoped_selector(selector: String, marker: String) -> String {
         i += 1;
     }
     return out;
+}
+
+// One selector with the component's marker attached to its LAST element — before any pseudo.
+//
+// **`.row::before[data-s-hero]` is invalid CSS and a browser drops the whole rule, silently.** The
+// first version appended the attribute at the end of the selector, which is correct for `.row` and
+// wrong for every `:hover`, `:focus`, `::before` and `::after` in a `===style.local` section. So
+// every hover state in this repository had been dead since styles landed, and nothing could say so:
+// a dropped CSS rule looks exactly like a rule that decided not to change anything. Found by putting
+// a checkbox in a pseudo-element to shorten a document — the squares vanished from the picture.
+//
+// The attribute goes before the first `:` of the last compound selector: `.row[data-s-hero]::before`.
+// A descendant selector stamps only its last part, which is what scoping means — `.card h1` becomes
+// `.card h1[data-s-hero]`, not `.card[data-s-hero] h1`, so a parent's rule cannot reach into a child
+// component.
+pure function star_stamped(selector: String, marker: String) -> String {
+    let attribute: String = "[data-s-" + marker + "]";
+    // Where the last compound selector starts: after the last space, `>`, `+` or `~`.
+    let mutable from: Int = 0;
+    let mutable i: Int = 0;
+    while i < len(selector) {
+        let c: Int = byte_at(selector, i);
+        if c == 32 || c == 62 || c == 43 || c == 126 { from = i + 1; }
+        i += 1;
+    }
+    // The first `:` at or after that point is where a pseudo begins, and the marker goes before it.
+    let mutable at: Int = len(selector);
+    let mutable j: Int = from;
+    while j < len(selector) {
+        if byte_at(selector, j) == 58 {
+            at = j;
+            j = len(selector);
+        } else {
+            j += 1;
+        }
+    }
+    return substring(selector, 0, at) + attribute + substring(selector, at, len(selector) - at);
 }
 
 // ---- components ------------------------------------------------------------------------------
