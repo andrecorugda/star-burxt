@@ -56,7 +56,11 @@ def main():
 
     def compile_component(document):
         out = generate(document)
-        source = out.stdout.replace('use "lib/html.bx";', 'use "std/html.bx";')
+        # **No rewriting.** This used to patch `lib/html.bx` into `std/html.bx` before checking,
+        # which meant the suite tested a line the generator does not emit — so the generator could
+        # emit an import that resolves nowhere and every test would still pass. It did exactly
+        # that. A test that repairs its input is testing the repair.
+        source = out.stdout
         path = os.path.join(work, "c.bx")
         with open(path, "w") as f:
             f.write(source)

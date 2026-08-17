@@ -50,3 +50,13 @@ jobs:
 
       - name: A .bmx document becomes a component the compiler judges
         run: python3 test.py
+
+      # **Every example on the site is generated.** A tutorial that teaches something the tool
+      # refuses is worse than no tutorial: the reader concludes they made the mistake. This found
+      # exactly that the day it was written — chapter 1 opened with a document the generator
+      # refuses, so the first lesson on the site did not work.
+      - name: Every example in the documentation actually works
+        run: |
+          set -eux
+          burxt build examples/generate.bx -o star-generate
+          python3 verify-docs.py

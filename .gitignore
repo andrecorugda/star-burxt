@@ -1,0 +1,5 @@
+# `burxt fetch` writes these; the LOCKFILE is what gets committed, not the checkout.
+.burxt/
+
+# Built from examples/generate.bx by the set-up page and by CI.
+star-generate

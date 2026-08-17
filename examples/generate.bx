@@ -31,7 +31,7 @@ match file_read_maybe(path) {
                 print("// The view and the dispatch are both `pure`, so `burxt effects --allow \"\"`");
                 print("// confirms this component reaches nothing. A handler is an expression");
                 print("// producing the next state — there are no closures to hide it in.");
-                print("use \"lib/html.bx\";");
+                print("use \"std/html.bx\";");
                 print("");
                 print(component.view);
                 print(component.dispatch);

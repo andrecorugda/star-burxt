@@ -2,74 +2,96 @@
 layout: default
 title: Your first component
 section: guide
-description: "Write a .bmx file, generate it, read what came out."
+description: "Write a document, turn it into a component, see what it made."
 ---
 
 {% raw %}
 
 # 1. Your first component
 
-Write `hello.bmx`:
+By the end of this page you will have a greeting on a screen, made from a document you wrote.
+
+## Write the document
+
+Make a file called `hello.bmx`:
 
 ```
 ::: props name: String
 :::
 
-# Hello, {{ name }}
+# Hello {{ name }}
 
-Welcome back.
+Welcome to the page.
 ```
 
-Two things are happening. `::: props name: String` declares what this component takes.
-`{{ name }}` puts it somewhere.
+Three things are going on, and only one of them is new:
 
-Generate it:
+**`# Hello` and the paragraph** are ordinary Markdown. If you have written a README, you have written
+these.
 
-```
+**`::: props name: String`** says *this component is given a name, and a name is text*. Every
+document starts with one of these — it is how the component gets anything to be about.
+
+**`{{ name }}`** puts that value in the page.
+
+## Turn it into a component
+
+```sh
 ./star-generate hello.bmx hello > hello.bx
 ```
 
-## Read what came out
-
-This is the part worth slowing down for, because nothing about it is hidden:
+Open `hello.bx`:
 
 ```burxt
 pure function hello(name: String) -> Html allocates {
     let mutable kids: [Html] = [];
-    let s_0_1: Int = push(kids, html_element("h1", [], [
-        html_text("Hello, "), html_text(name)]));
-    let s_0_2: Int = push(kids, html_element("p", [], [
-        html_text("Welcome back.")]));
+    let s_0_1: Int = push(kids, html_element("h1", [], [html_text("Hello "), html_text(name)]));
+    let s_0_2: Int = push(kids, html_element("p", [], [html_text("Welcome to the page.")]));
     return html_element("div", [html_attr("class", "star")], kids);
 }
 ```
 
-**That is ordinary Burxt.** No framework runtime, no virtual DOM, no component instance. A function
-from your props to an `Html` value. You could have written it by hand, and if you ever need to, you
-can.
+**Nothing surprising is in there.** The heading became an `h1`, the paragraph became a `p`, they went
+into a `div`, and `name` went where you put it. That is the whole translation, and it stays this
+readable however big your document gets.
 
-It is `pure`, so it cannot reach a file, a socket or a clock — and `burxt effects --allow ""`
-confirms that rather than trusting it.
+You will rarely open this file again. Knowing that you *can* — and that there is nothing hidden in
+it — is the point.
 
-## Now make a mistake
+Call `hello("Ada")` and the page says **Hello Ada**.
 
-Change the slot to `{{ nmae }}` and generate again:
+## Get it wrong on purpose
+
+Change `{{ name }}` to `{{ nmae }}` and generate again:
 
 ```
-error: unknown variable: nmae
-  --> hello.bx:9:52
-   |
- 9 |     ... html_element("h1", [], [html_text("Hello, "), html_text(nmae)]));
+unknown variable: nmae
 ```
 
-The compiler caught it, because the slot became an expression rather than staying a string. This is
-the whole idea, and everything else in this guide is a consequence of it.
+**You found that typo now**, not from a blank space on a page after somebody deployed it.
+
+Do this once deliberately, because it is the habit the rest of the tour relies on: when you are not
+sure whether something works, write it and look.
+
+## Every document needs `props`
+
+Drop the `::: props` block and you are told:
+
+```
+this document declares no `props` block, so it has no signature and nothing
+can invoke it. Add `::: props name: Type`
+```
+
+A component that is given nothing has nothing to show that a plain HTML file would not show better.
+If a piece of your page really is fixed text, write it as fixed text.
 
 ## What you have
 
-A component that takes typed props, renders escaped HTML, and cannot compile if you refer to
-something that is not there.
+- a document is a component
+- `::: props` says what it is given, and comes first
+- `{{ }}` puts a value in the page
+- a mistake in a `{{ }}` is caught before the page exists
 
-Next: [making it do something](02-events-and-state.html).
+**[Chapter 2: Showing your data →](02-showing-your-data.html)**
 
 {% endraw %}

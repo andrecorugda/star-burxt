@@ -1,15 +1,17 @@
 ---
 layout: default
 title: star-burxt
-description: "A front-end framework written in Burxt. A .bmx file is a component, and the compiler judges its handlers."
+description: "Write a page in Markdown. Get a real front-end app. star-burxt turns .bmx documents into components that render, respond to clicks, and hold state."
 ---
 
 {% raw %}
 
-# star-burxt
+# Build a front end by writing a document
 
-**A `.bmx` file is a component.** It renders, it takes events, it holds state — and the compiler
-refuses what is wrong about all three before anything reaches a browser.
+star-burxt turns a `.bmx` document into a working component — one that renders, responds to clicks,
+and remembers what happened.
+
+You write this:
 
 ```
 ::: props count: Int
@@ -24,81 +26,88 @@ increment
 :::
 ```
 
-That is the whole component. It becomes a `pure function counter(count: Int) -> Html` and a
-`pure function counter_dispatch(handler: Int, count: Int) -> Int`, compiles to WebAssembly, and
-runs in a browser.
+You get this:
 
 <figure class="shot">
   <img src="assets/examples/counter-running.png"
-       alt="counter.bmx on the left; on the right the same component running in a browser, reading 'The count is 3.' after three clicks of its increment button">
-  <figcaption>Not a mockup — the right-hand panel is that document compiled to WebAssembly and
-  clicked three times.</figcaption>
+       alt="The counter document on the left, and on the right the same document running in a browser, reading 'The count is 3.' with increment and reset buttons">
+  <figcaption>The right-hand side is that document, running. It has been clicked three times.</figcaption>
 </figure>
 
-## What makes it different
+No build config. No component library. No JavaScript to write. **The document *is* the component.**
 
-**The compiler judges your event handlers.** Not a lint, not a runtime check — the ordinary rules
-of the language, reaching a place they have never been:
+## What a document can do
+
+| You write | You get |
+|---|---|
+| `# Heading` and paragraphs | headings and paragraphs, as in any Markdown |
+| `{{ total }}` | your data, in the page |
+| `::: props name: String` | what the component is given |
+| `::: button on:click=count + 1` | a button that changes what is shown |
+| `::: for item in items` | a row per item |
+| `::: if ready` | a section that appears when it should |
+
+That is the whole idea. If you can write a document, you can write a screen.
+
+## Start with the tour
+
+**[Your first component →](guide/01-your-first-component.html)**
+
+Six short chapters. By the end you will have built a counter, a form, a list, and a price table, and
+put them on a real page.
+
+## The one thing that will surprise you
+
+**star-burxt reads your buttons.**
+
+Most frameworks treat what happens on a click as your business — it is a function, it runs, and if
+it is wrong you find out when a user finds out. Here, a click is checked before the page exists.
+
+Misspell something:
 
 ```
-::: button on:click=total * 1.5          (total is a Decimal<2>)
+The total is {{ toatl }}
 ```
 
 ```
-error: this multiplication of Decimal<2> by Decimal<2> has an exact product with
-4 decimal places, and reaching Decimal<2> means rounding it. Say how —
-Decimal<2, RoundHalfEven> — or take the exact answer with Decimal<4>.
+unknown variable: toatl
 ```
 
-**Narrowing money inside a click handler is a compile error.** No framework whose handlers are
-closures can see that, and not through carelessness — a closure's captured state is invisible to
-the signature.
+Try to add a word to a number:
+
+```
+::: button on:click=count + "one"
+increment
+:::
+```
+
+```
+cannot apply `+` to Int and String
+```
+
+Round money without saying how:
+
+```
+::: button on:click=total * 1.5
+apply surcharge
+:::
+```
 
 <figure class="shot">
   <img src="assets/examples/money-refused.png"
-       alt="receipt.bmx on the left; on the right burxt check refusing the multiplication in its on:click handler, pointing at line 16 of the generated component">
-  <figcaption>The refusal points into the <em>generated</em> component, because the handler is
-  ordinary code by the time it is judged.</figcaption>
+       alt="A receipt document on the left, and on the right the checker refusing the multiplication in its on:click handler">
+  <figcaption>That last one is the interesting case, and it has
+  <a href="guide/05-money.html">its own chapter</a>.</figcaption>
 </figure>
 
-## Three properties, and none of them were designed
+You do not have to know why this works to use it. If you would like to,
+[Burxt](https://burxt-lang.org) is the language underneath and the explanation lives there.
 
-They fall out of decisions Burxt made years earlier for unrelated reasons, which is the best
-argument that they will keep holding.
+## Where to go
 
-**Handlers cannot go stale.** Burxt has no closures — declined in `DESIGN.md` because a closure
-needs an owner for its captured state, which is a memory question in a language whose memory model
-is regions. With nothing to capture, a handler must be an expression producing the next state.
-There is no dependency array, because nothing freezes. There is no `useCallback`, because a handler
-is an index rather than a function object.
-
-**Hydration cannot mismatch.** A component rendered natively and the same component rendered in
-WebAssembly produce byte-identical output — checked on every build. Server and client cannot
-disagree about a page, because they are running the same compiled code.
-
-**A page carries nothing executable.** A handler reaches the browser as `data-star-h="0"`, an
-index. One delegated listener calls into the module. There is no inline handler anywhere, which is
-[BMX's §4a.5](https://bmx.burxt-lang.org/building-on.html) satisfied literally rather than
-approximately.
-
-## It is small
-
-| | gzipped |
-|---|---|
-| the compiled component and framework | 4.2 KB |
-| the DOM reconciler | 1.8 KB |
-| the driver | 1.9 KB |
-| **total** | **7.7 KB** |
-
-For comparison, React with ReactDOM is around 45 KB gzipped before you write anything. That is a
-measurement of what ships, not a benchmark — see [what is not done](not-done.html) for the honest
-limits, which include the cases where star-burxt is currently the slower of the two.
-
-## Start here
-
-- **[Getting star-burxt](install.html)** — one line in `burxt.package`, and the Burxt it needs
-- **[Your first component](guide/01-your-first-component.html)** — the four-chapter guide
-- **[When it refuses](refusals.html)** — every refusal, with the reason
-- **[What is not done](not-done.html)** — read this before choosing it for anything real
+- **[Your first component](guide/01-your-first-component.html)** — start here, it takes ten minutes
+- **[Set up](install.html)** — what to install before chapter one
+- **[How do I…?](how-do-i.html)** — short answers to common tasks
+- **[When it says no](refusals.html)** — every refusal, and what to write instead
 
 {% endraw %}

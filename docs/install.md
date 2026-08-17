@@ -1,241 +1,93 @@
 ---
 layout: default
-title: Getting star-burxt
-description: "star-burxt is a Burxt package. Install Burxt, declare one dependency, fetch."
+title: Set up
+description: "Three steps before chapter one: install Burxt, make a project, build the generator."
 ---
 
 {% raw %}
 
-# Getting star-burxt
+# Set up
 
-star-burxt needs Burxt the way Laravel needs PHP: it is **a package written in the language**, not a
-runtime of its own. There is nothing to install globally, no CLI to put on your `PATH`, and no
-`node_modules`. You install Burxt once, then name star-burxt in the manifest of each project that
-uses it.
+Three steps. Ten minutes, most of it waiting for a download.
 
-## Requirements
-
-| | |
-|---|---|
-| **Burxt 1.2 or later** | earlier releases cannot express a `pure` view — see below |
-| **git** | `burxt fetch` clones the dependency at its tag |
-| a wasm linker | only to reach a browser; you already have one, see below |
-| node, or any browser | to run what you build |
-
-**Why 1.2 and not 1.1.** Burxt 1.1.0 shipped a `lib/html.bx` whose element
-builders are not declared `pure`. Purity is transitive, so on that release a
-`pure function view -> Html` cannot be written at all — and star-burxt's whole guarantee is that a
-view is `pure`, so `burxt effects --allow ""` confirms it reaches nothing.
-
-The failure is worth showing, because it does not look like a version problem:
-
-```
-error: `pure function view` may not call `html_element`, which is not declared `pure`:
-the guarantee cannot rest on a function that does not make it.
-Declare `pure function html_element` too, or drop `pure` from `view`.
-```
-
-That error points at **your** file, names a rule you did not break, and its suggested fix — *drop
-`pure` from `view`* — would have you delete the property deliberately. If you see it, the answer is
-a newer Burxt, not a smaller guarantee.
+star-burxt is written in **Burxt**, so Burxt is the one thing you install — the way you install PHP
+before Laravel, or Node before React. After that, star-burxt is a line in your project file.
 
 ## 1. Install Burxt
 
-One line on any of four platforms, and the page that owns it is
-[burxt-lang.org/install](https://burxt-lang.org/install.html). Then:
+Follow [burxt-lang.org/install](https://burxt-lang.org/install.html). Then check it worked:
 
 ```sh
 burxt --version
 ```
 
-**Read this before you go further: the newest release is 1.1.0, and star-burxt needs 1.2.** Until
-1.2 ships there is no tarball that satisfies the requirement above, so today the only way to run
-star-burxt is to build the compiler from `develop`:
+> **Right now you need a newer Burxt than the one that has been released.** star-burxt needs 1.2 and
+> the newest release is 1.1.0, so today you build it from source — the install page shows how, and
+> it takes a few minutes. This note disappears when 1.2 ships.
 
-```sh
-git clone https://github.com/andrecorugda/burxt && cd burxt
-sh scripts/release.sh               # builds, then writes dist/burxt-<version>-<host>.tar.gz
-sudo sh scripts/install.sh          # installs from dist/; PREFIX=~/.local works too
-```
+## 2. Make a project
 
-That needs Rust and LLVM 18 — which is what the release tarball exists to spare you, so it is worth
-checking whether 1.2 has shipped before doing it.
-
-**This is stated rather than left for you to find**, because otherwise the missing version arrives
-as the `pure` error above: inside a file you did not write, about a rule you did not break. It is
-the only place on this site that asks for something not yet published, and it stops being true on
-the day 1.2 ships.
-
-## 2. Declare star-burxt in your manifest
-
-A Burxt project is a directory with a `burxt.package` in it. One line adds star-burxt:
+A project is a folder with a file called `burxt.package` in it:
 
 ```
 name        my-app
 version     0.1.0
+
 dependency  star  https://github.com/andrecorugda/star-burxt  v0.1.0
+dependency  bmx   https://github.com/andrecorugda/bmx         d06722a
 ```
+
+Then:
 
 ```sh
 burxt fetch
 ```
 
-`fetch` clones the tag and writes `burxt.lock`, which pins the **commit** the tag pointed at:
+That downloads both and writes `burxt.lock`. **Keep `burxt.lock`** — it is what makes your
+teammate's build match yours.
 
-```
-package  star  https://github.com/andrecorugda/star-burxt  v0.1.0  bc60edcbb6c05ba4aa4d5a69b202145ebe99675d
-```
+> **Why two lines and not one.** star-burxt uses BMX to read your documents, and a Burxt project
+> names everything it uses, including what its own libraries use. If you forget the second line you
+> will see this, and it is not a mistake in your code:
+>
+> ```
+> error: cannot read .../bmx/burxt/bmx.bx: No such file or directory
+> ```
+>
+> Add the line and it goes away.
 
-**Commit that file.** A tag can be moved; a commit cannot, so the lockfile is what makes two
-machines build the same star-burxt. There are no version ranges to resolve, by design — you name
-one tag and get one commit, so a fetch is a lookup rather than a solver.
+## 3. Build the generator
 
-Then, in your program:
-
-```burxt
-use "star/star.bx";
-```
-
-The first segment is the **dependency's name**, not a directory beside your file. Call it what you
-like — `dependency star-burxt …` gives you `use "star-burxt/star.bx"`.
-
-### star-burxt's own dependency is yours too
-
-**This is the one rough edge, and it is the package manager's rather than star-burxt's.** A package
-import is resolved against the **root** manifest only, so a dependency cannot bring its own
-dependencies with it. star-burxt uses BMX, and your project has to say so as well:
-
-```
-name        my-app
-version     0.1.0
-dependency  star  https://github.com/andrecorugda/star-burxt  v0.1.0
-dependency  bmx   https://github.com/andrecorugda/bmx         d06722a
-```
-
-The name must be **`bmx`**, because that is the first segment star-burxt's own imports use. Leave it
-out and the error names the file rather than the cause:
-
-```
-error: cannot read <star-burxt>/bmx/burxt/bmx.bx: No such file or directory
-  ...used by <star-burxt>/star.bx
-  ...used by app.bx
-```
-
-If you see that, you have not made a mistake in your own program — add the second line.
-
-### Working against a checkout instead
-
-While you are changing star-burxt itself, point at the directory:
-
-```
-dependency  star  ../star-burxt
-```
-
-No fetch, no lockfile entry, and your edits are live. This is also how the repository's own
-`examples/` reach it.
-
-## What the package supports
-
-**Three names**, and the compiler enforces it:
-
-| | |
-|---|---|
-| `star_generate(source, name)` | a document → `Result<StarComponent, String>` |
-| `StarComponent` | `view`, `dispatch`, `handlers`, `props`, `argument_list` |
-| `StarHandler` | `event`, `expression` |
-
-Everything else in `star.bx` is how it is done today. Reach for one and you are told so by name:
-
-```
-error: `star_emit_stmts` is declared in the package `star` but not `public`, so this
-package cannot reach it. A package exposes what it means to support — if
-`star_emit_stmts` is meant to be part of that, the fix belongs in `star`, by writing
-`public` in front of its declaration.
-```
-
-That is not a lint you can turn off; it is the package boundary. It exists so that the day one of
-those internal functions changes is not the day somebody else's build breaks.
-
-## 3. The generator
-
-A `.bmx` document becomes Burxt source. The generator is an **example program** rather than a
-subcommand, because it is ordinary Burxt and reads better as something you can open:
+The generator turns a `.bmx` document into a component. You build it once:
 
 ```sh
 git clone https://github.com/andrecorugda/star-burxt
 burxt build star-burxt/examples/generate.bx -o star-generate
-
-./star-generate counter.bmx counter > counter.bx
-burxt check counter.bx
 ```
 
-`counter.bx` is ordinary Burxt. Read it — it is meant to be read, and the point of the whole design
-is that nothing in it is magic.
-
-Or call `star_generate` from your own program and skip the file, which is what a build step would
-do.
-
-## There is no `main`
-
-**A Burxt program is its top-level statements**, and `main` is a reserved name:
-
-```burxt
-use "star/star.bx";
-
-match star_generate(read_file("counter.bmx"), "counter") {
-    Error(message) => { print_error(message); exit(1); }
-    Ok(component)  => { print(component.view); }
-}
-```
-
-Writing `function main()` out of habit is refused, and says so:
-
-```
-error: `main` is a name the language owns, so a program may not declare it
-```
-
-Delete it and un-indent the body.
-
-*(This page briefly warned that the message was worse than that — in a program with any `use`, a
-different check reported first and pointed into the standard library at a function you never called.
-That was a real defect and it is fixed; both compilers now give the sentence above. Recorded here
-only because a warning about a fixed problem is worse than no warning at all, and this one was
-removed rather than left to age.)*
-
-## 4. Building for a browser
-
-`--target wasm32-unknown-unknown` emits an object; linking it needs a wasm linker, and you already
-have one:
+Now you have a `star-generate` command:
 
 ```sh
-burxt build counter.bx --target wasm32-unknown-unknown -o counter.o
-
-~/.rustup/toolchains/*/lib/rustlib/*/bin/rust-lld -flavor wasm \
-  --no-entry --allow-undefined \
-  --export=main --export='bx.counter_render' --export='bx.counter_dispatch' \
-  -z stack-size=1048576 --initial-memory=4194304 --max-memory=268435456 \
-  counter.o -o counter.wasm
+./star-generate counter.bmx counter
 ```
 
-**`rust-lld -flavor wasm` IS `wasm-ld`.** `lld` is usually not installed, but the Rust toolchain
-ships one, so nothing needs installing for this either.
+It prints the component it made. **You are meant to read that output.** Nothing is hidden in it, and
+watching your document turn into ordinary code is the quickest way to see what star-burxt does for
+you.
 
-Two flags are load-bearing and their failures are confusing:
+## That's it
 
-- **`--allow-undefined`, not `--import-undefined`.** The latter turns undefined *functions* into
-  imports and leaves data symbols alone, so the link fails on `stderr` with three identical errors
-  naming a symbol that looks like it should already be handled.
-- **`--max-memory`**, or the memory is not growable and the allocator cannot serve a region at all.
+**[Chapter 1: Your first component →](guide/01-your-first-component.html)**
 
-`examples/index.html` is the driver, and it is about a hundred lines. Copy it; it holds no
-application logic and you should not need to change it.
+---
 
-## Build through stage-0
+### If something goes wrong
 
-Burxt has two compilers. Build wasm through **stage-0**, the Rust one — the default. Stage-1 emits
-its whole runtime preamble unconditionally, so an object built through it carries `__multi3`,
-`__divti3` and `snprintf` from rounding helpers your program never calls. Nothing is broken; the
-import list simply looks far worse than it is, and you would go looking for a problem that is not
-there.
+**`pure function view may not call html_element…`** — your Burxt is too old. Step 1.
+
+**`cannot read .../bmx/burxt/bmx.bx`** — the second `dependency` line is missing. Step 2.
+
+**`main is a name the language owns`** — a Burxt program is just statements, top to bottom. Delete
+the `function main() {` wrapper and un-indent what was inside it.
 
 {% endraw %}

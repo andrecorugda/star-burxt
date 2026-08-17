@@ -1,111 +1,158 @@
 ---
 layout: default
-title: When it refuses
-description: "Every refusal star-burxt makes, and every refusal it hands to the compiler, with the reason for each."
+title: When it says no
+description: "Every refusal, in plain words, with what to write instead."
 ---
 
 {% raw %}
 
-# When it refuses
+# When it says no
 
-Seven refusals. **Four of them are not star-burxt's** — they are the ordinary rules of Burxt,
-reaching an event handler because the handler is an expression the compiler can see. That is the
-entire argument for generating checked code rather than interpreting a head at run time.
+star-burxt refuses things. Each refusal is here with what to write instead.
 
-## From the compiler
+**Nothing on this page is a bug.** A refusal means the problem reached you in a terminal instead of
+reaching a user on a screen.
 
-### A typo in a slot
+---
+
+## "unknown variable: `nmae`"
+
+A slot or a handler names something that is not there.
 
 ```
-The count is {{ to_string(cuont) }}.
-```
-```
-error: unknown variable: cuont
+Hello {{ nmae }}
 ```
 
-### A type error in a handler
+**Fix:** check the spelling against your `::: props` line. If the value is new, add it there.
+
+---
+
+## "cannot apply `+` to Int and String"
+
+You mixed a number and text.
 
 ```
 ::: button on:click=count + "one"
-```
-```
-error: type error: cannot apply `+` to Int and String
-```
-
-### Money narrowing in a handler
-
-```
-::: props total: Decimal<2>
+increment
 :::
+```
+
+**Fix:** `count + 1`. If you want text, convert first: `to_string(count) + "one"`.
+
+---
+
+## "this multiplication … means rounding it"
+
+You multiplied money and did not say how to round.
+
+```
 ::: button on:click=total * 1.5
-```
-```
-error: this multiplication of Decimal<2> by Decimal<2> has an exact product with
-4 decimal places, and reaching Decimal<2> means rounding it. Say how —
-Decimal<2, RoundHalfEven> — or take the exact answer with Decimal<4>.
+apply surcharge
+:::
 ```
 
-**This is the one to look at twice.** Nobody wrote a rule about money in click handlers. The rule
-already existed and the handler is somewhere it can now reach.
+**Fix:** say how — `::: props total: Decimal<2, RoundHalfEven>` — or keep the exact answer with
+`Decimal<4>`. [Chapter 5](guide/05-money.html) is about this one.
 
-### A missing field, inside a loop
+---
 
-The head of a `for` is real Burxt, so the binding is real. `line.skuu` is a compile error naming
-the field, at the expression you wrote.
+## "`mystery` is not a block this host knows"
 
-## From star-burxt
-
-### STAR-E001 — a block name this host does not declare
+You used a block name that is not an element.
 
 ```
 ::: mystery
-```
-```
-STAR-E001 at 37: this host does not declare a block named `mystery`. Elements and
-`for`/`if`/`props` are declared; a component needs cross-file resolution, which
-does not exist yet
+:::
 ```
 
-BMX's §4a.5, first line: refuse an unknown block name, never render it and never skip it silently.
+**Fix:** use one of these, or check the spelling.
 
-### STAR-E002 — an event this host cannot wire
+`div` `span` `p` `section` `article` `header` `footer` `nav` `form` `label`
+`strong` `em` `h1`–`h6` `ul` `ol` `li` `input` `img` `br` `hr` `button`
 
-```
-::: button on:hover=count + 1
-```
-```
-STAR-E002 at 37: `on:hover` is not an event this host can wire. Wired events are
-click, input, change, submit
-```
+Plus `props`, `for` and `if`, which are not elements.
 
-The alternative would be emitting an inline handler, which §4a.5 forbids for a reason: it puts
-unchecked script on the page.
+---
 
-### STAR-E003 — no props
+## "`on:hover` is not an event this host can wire"
 
-A document with no `props` block has no signature, so nothing can invoke it.
+You asked for an event that is not supported.
 
-### STAR-E004 — a void element with a body
+**Fix:** use `click`, `input`, `change` or `submit`.
+
+The alternative would be to accept `on:hover` and do nothing with it, which would leave you staring
+at a page wondering why nothing happens.
+
+---
+
+## "`input` is a void element, so it cannot have a body"
+
+Some elements hold nothing.
 
 ```
 ::: input on:input=name
-oops
+type here
 :::
 ```
 
-`html_element` carries `requires !html_is_void(tag) || len(children) == 0`. Without this refusal the
-contract would still catch it — at run time, with the page already open. The contract is also what
-makes this refusal provably complete rather than a list somebody maintains.
+**Fix:** leave the body empty. Put the text in a `label` beside it. This applies to `input`, `img`,
+`br` and `hr`.
 
-### STAR-E005 — flow content in a phrasing element
+---
+
+## "`button` takes phrasing content, so it cannot contain a heading"
+
+You put a block-level thing inside a text-level element.
 
 ```
-::: button on:click=n + 1
-# nope
+::: button on:click=go
+# Click me
 :::
 ```
 
-`<button>` takes phrasing content. A heading is flow content. See [the content
-model](components.html#the-content-model).
+**Fix:** use text. `button`, `label`, `span`, `strong`, `em` and the headings hold text; everything
+else holds anything.
+
+This is HTML's rule — a heading inside a button is invalid markup and browsers handle it
+unpredictably.
+
+---
+
+## "`key` belongs on a `for`, not on an `if`"
+
+```
+::: if ready key thing.id
+
+::: p
+Everything is set.
+:::
+
+:::
+```
+
+**Fix:** drop the `key`. A key tells rows apart, and an `if` has one branch with nothing to tell
+apart.
+
+---
+
+## "an `on:` handler inside a `for` is not supported yet"
+
+```
+::: for line in lines key line.id
+::: button on:click=line.id
+remove
+:::
+:::
+```
+
+This one is a limit rather than a mistake, and it is the only refusal on this page that will
+eventually go away.
+
+A handler runs later, on its own, with the component's state. By then `line` no longer exists — it
+was only there while the page was being drawn. The framework needs to remember *which row* rather
+than *which value*, which is designed and not built.
+
+**Fix, today:** drive the change from the whole list rather than from one row. A button outside the
+loop works.
 
 {% endraw %}

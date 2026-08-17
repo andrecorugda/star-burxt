@@ -64,12 +64,10 @@
   </button>
 
   <span class="links">
-    <a href="{{ site.baseurl }}/install.html" class="{% if page.title == 'Getting star-burxt' %}here{% endif %}">Install</a>
-    <a href="{{ site.baseurl }}/guide/01-your-first-component.html" class="{% if page.section == 'guide' %}here{% endif %}">Guide</a>
-    <a href="{{ site.baseurl }}/components.html" class="{% if page.title == 'Writing a component' %}here{% endif %}">Components</a>
-    <a href="{{ site.baseurl }}/events.html"     class="{% if page.title == 'Events and state' %}here{% endif %}">Events</a>
-    <a href="{{ site.baseurl }}/refusals.html"   class="{% if page.title == 'When it refuses' %}here{% endif %}">Refusals</a>
-    <a href="https://github.com/andrecorugda/star-burxt">GitHub</a>
+    <a href="{{ site.baseurl }}/guide/01-your-first-component.html" class="{% if page.section == 'guide' %}here{% endif %}">Learn</a>
+    <a href="{{ site.baseurl }}/how-do-i.html" class="{% if page.title == 'How do I…?' %}here{% endif %}">How do I…?</a>
+    <a href="{{ site.baseurl }}/blocks.html"   class="{% if page.title == 'Blocks' %}here{% endif %}">Blocks</a>
+    <a href="{{ site.baseurl }}/install.html"  class="{% if page.title == 'Set up' %}here{% endif %}">Set up</a>
     <a class="burxt" href="https://burxt-lang.org">Burxt</a>
   </span>
 </nav>
@@ -82,10 +80,10 @@
        renamed heading cannot leave a dead anchor behind in a hand-written list. -->
   <nav class="side" aria-label="Documentation contents">
     <div class="group site">
-      <h2>star-burxt</h2>
+      <h2>Start here</h2>
       <ul>
-        <li class="topic"><a href="{{ site.baseurl }}/"{% if page.title == "star-burxt" %} class="here" aria-current="page"{% endif %}><span>Overview</span></a></li>
-        <li class="topic"><a href="{{ site.baseurl }}/install.html"{% if page.title == "Getting star-burxt" %} class="here" aria-current="page"{% endif %}><span>Getting star-burxt</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/"{% if page.title == "star-burxt" %} class="here" aria-current="page"{% endif %}><span>What is star-burxt?</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/install.html"{% if page.title == "Set up" %} class="here" aria-current="page"{% endif %}><span>Set up</span></a></li>
       </ul>
     </div>
 
@@ -93,35 +91,21 @@
       <h2>Learn</h2>
       <ul>
         <li class="topic"><a href="{{ site.baseurl }}/guide/01-your-first-component.html"{% if page.title == "Your first component" %} class="here" aria-current="page"{% endif %}><span>1. Your first component</span></a></li>
-        <li class="topic"><a href="{{ site.baseurl }}/guide/02-events-and-state.html"{% if page.title == "Events and state" and page.section == "guide" %} class="here" aria-current="page"{% endif %}><span>2. Events and state</span></a></li>
-        <li class="topic"><a href="{{ site.baseurl }}/guide/03-when-it-says-no.html"{% if page.title == "When star-burxt says no" %} class="here" aria-current="page"{% endif %}><span>3. When it says no</span></a></li>
-        <li class="topic"><a href="{{ site.baseurl }}/guide/04-putting-it-in-a-browser.html"{% if page.title == "Putting it in a browser" %} class="here" aria-current="page"{% endif %}><span>4. Putting it in a browser</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/guide/02-showing-your-data.html"{% if page.title == "Showing your data" %} class="here" aria-current="page"{% endif %}><span>2. Showing your data</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/guide/03-buttons-and-events.html"{% if page.title == "Buttons and events" %} class="here" aria-current="page"{% endif %}><span>3. Buttons and events</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/guide/04-lists-and-choices.html"{% if page.title == "Lists and choices" %} class="here" aria-current="page"{% endif %}><span>4. Lists and choices</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/guide/05-money.html"{% if page.title == "Money" %} class="here" aria-current="page"{% endif %}><span>5. Money</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/guide/06-putting-it-on-a-page.html"{% if page.title == "Putting it on a page" %} class="here" aria-current="page"{% endif %}><span>6. Putting it on a page</span></a></li>
       </ul>
     </div>
 
     <div class="group">
-      <h2>Reference</h2>
+      <h2>Look things up</h2>
       <ul>
-        <li class="topic"><a href="{{ site.baseurl }}/components.html"{% if page.title == "Writing a component" %} class="here" aria-current="page"{% endif %}><span>Writing a component</span></a></li>
-        <li class="topic"><a href="{{ site.baseurl }}/events.html"{% if page.title == "Events and state" and page.section != "guide" %} class="here" aria-current="page"{% endif %}><span>Events and state</span></a></li>
-        <li class="topic"><a href="{{ site.baseurl }}/refusals.html"{% if page.title == "When it refuses" %} class="here" aria-current="page"{% endif %}><span>When it refuses</span></a></li>
-      </ul>
-    </div>
-
-    <div class="group">
-      <h2>Implementing</h2>
-      <ul>
-        <li class="topic"><a href="{{ site.baseurl }}/rendering.html"{% if page.title == "How it reaches the page" %} class="here" aria-current="page"{% endif %}><span>How it reaches the page</span></a></li>
-        <li class="topic"><a href="{{ site.baseurl }}/not-done.html"{% if page.title == "What is not done" %} class="here" aria-current="page"{% endif %}><span>What is not done</span></a></li>
-      </ul>
-    </div>
-
-    <div class="group">
-      <h2>Source</h2>
-      <ul>
-        <li class="topic"><a href="https://github.com/andrecorugda/star-burxt/blob/main/star.bx"><span>star.bx</span></a></li>
-        <li class="topic"><a href="https://github.com/andrecorugda/star-burxt/tree/main/examples"><span>examples/</span></a></li>
-        <li class="topic"><a href="https://github.com/andrecorugda/star-burxt/blob/main/test.py"><span>test.py — the guarantees</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/how-do-i.html"{% if page.title == "How do I…?" %} class="here" aria-current="page"{% endif %}><span>How do I…?</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/blocks.html"{% if page.title == "Blocks" %} class="here" aria-current="page"{% endif %}><span>Blocks</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/refusals.html"{% if page.title == "When it says no" %} class="here" aria-current="page"{% endif %}><span>When it says no</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/not-done.html"{% if page.title == "What&#39;s not built yet" %} class="here" aria-current="page"{% endif %}><span>What&#39;s not built yet</span></a></li>
       </ul>
     </div>
 
@@ -129,8 +113,7 @@
       <h2>Underneath</h2>
       <ul>
         <li class="topic"><a class="burxt" href="https://burxt-lang.org"><span>Burxt — the language</span></a></li>
-        <li class="topic"><a class="burxt" href="https://bmx.burxt-lang.org"><span>BMX — the format</span></a></li>
-        <li class="topic"><a class="burxt" href="https://burxt-lang.org/install.html"><span>Installing Burxt {{ site.star_requires }}+</span></a></li>
+        <li class="topic"><a class="burxt" href="https://bmx.burxt-lang.org"><span>BMX — the document format</span></a></li>
       </ul>
     </div>
   </nav>
@@ -152,7 +135,7 @@
     star-burxt {{ site.star_version }} — a front-end framework of the
     <a href="https://burxt-lang.org">Burxt</a> project, built on
     <a href="https://bmx.burxt-lang.org">BMX</a>. Requires Burxt {{ site.star_requires }} or later.
-    <a href="https://github.com/andrecorugda/burxt">Open source</a>, MIT or Apache-2.0.
+    <a href="https://github.com/andrecorugda/star-burxt">Open source</a>, MIT or Apache-2.0.
   </p>
 </footer>
 
