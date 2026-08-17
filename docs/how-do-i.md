@@ -276,6 +276,64 @@ declares them, so two props of the same type cannot swap by accident.
 
 It prints the component. Reading it is encouraged — there is nothing in there you did not write.
 
+## …build a page with several screens?
+
+Make the route an `enum`, derive it from the path, and `match` on it:
+
+```
+===bx
+use "std/string.bx";
+
+enum Route { Home, Post(Int), Missing }
+class Model { route: Route, path: String }
+enum Msg { Navigate(String) }
+
+pure function route_of(path: String) -> Route {
+    if path == "/" { return Route.Home; }
+    if string_starts_with(path, "/posts/") {
+        return Route.Post(string_to_int(substring(path, 7, len(path) - 7), 0));
+    }
+    return Route.Missing;
+}
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Navigate(to) => { return Model { route: route_of(to), path: to }; }
+    }
+}
+===
+
+::: props model: Model
+:::
+
+::: match model.route
+
+::: case Home
+# Welcome
+:::
+
+::: case Post(id)
+# Post {{ to_string(id) }}
+:::
+
+::: case Missing
+::: p
+Nothing at {{ model.path }}
+:::
+:::
+
+:::
+```
+
+Copy `examples/router.js` beside your page. It intercepts in-page links, handles the back button,
+and hands the path in.
+
+**Your links are real markup** — `::: a href=/posts/42` — so they work before any JavaScript runs
+and the driver only upgrades them.
+
+And because the route is an `enum` matched exhaustively, **adding a screen and forgetting to draw it
+fails the build** rather than showing a blank page.
+
 ## …find out why it refused something?
 
 Every refusal is listed with its fix on **[When it says no](refusals.html)**.

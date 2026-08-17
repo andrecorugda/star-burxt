@@ -164,6 +164,47 @@ def main():
     check("without a ===bx section a handler is still an EXPRESSION",
           "if handler == 0 { return count + 1; }" in generate(good).stdout, generate(good).stdout)
 
+    # ---- routing: the path IS the state, so it needs nothing the language lacks ---------------
+    #
+    # A route is derived from `location.pathname`, which is a String, and a String crosses the wasm
+    # boundary. That is the whole reason routing works today while the rest of an SPA does not: a
+    # model that is a RECORD cannot cross, because nothing in Burxt holds state between two calls.
+    routed = ("===bx\nuse \"std/string.bx\";\n"
+              "enum Route { Home, Post(Int), Missing }\n"
+              "class Model { route: Route, path: String }\n"
+              "enum Msg { Navigate(String) }\n"
+              "pure function route_of(path: String) -> Route {\n"
+              "    if path == \"/\" { return Route.Home; }\n"
+              "    if string_starts_with(path, \"/posts/\") {\n"
+              "        return Route.Post(string_to_int(substring(path, 7, len(path) - 7), 0));\n"
+              "    }\n"
+              "    return Route.Missing;\n"
+              "}\n"
+              "pure function update(msg: Msg, m: Model) -> Model {\n"
+              "    match msg {\n"
+              "        Navigate(to) => { return Model { route: route_of(to), path: to }; }\n"
+              "    }\n"
+              "}\n===\n\n"
+              "::: props model: Model\n:::\n\n"
+              "::: nav\n\n::: a href=/posts/42\na post\n:::\n\n:::\n\n"
+              "::: match model.route\n\n"
+              "::: case Home\n\n# Welcome\n\n:::\n\n"
+              "::: case Post(id)\n\n# Post {{ to_string(id) }}\n\n:::\n\n"
+              "::: case Missing\n\n::: p\nNothing at {{ model.path }}\n:::\n\n:::\n\n:::\n")
+    check("a routed app compiles", "no errors" in compile_component(routed),
+          compile_component(routed))
+    made = generate(routed).stdout
+    check("a link is real markup, so it works before any JavaScript runs",
+          'html_element("a", [html_attr("href", "/posts/42")]' in made, made)
+    check("the route is decided by an exhaustive match", "match model.route {" in made, made)
+
+    # Adding a screen to the enum and forgetting its branch fails the BUILD. Checked here on a
+    # router rather than in the abstract, because this is where it earns its keep.
+    grew = compile_component(routed.replace("enum Route { Home, Post(Int), Missing }",
+                                            "enum Route { Home, Post(Int), Missing, Archive }"))
+    check("ADDING A ROUTE AND FORGETTING ITS SCREEN IS A BUILD FAILURE",
+          "does not handle `Archive`" in grew, grew)
+
     # ---- per-row handlers: identity crosses the page as the key -------------------------------
     #
     # This was refused outright until now — STAR-E007 said a handler inside a `for` was "designed

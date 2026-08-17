@@ -1,0 +1,81 @@
+===bx
+use "std/string.bx";
+
+enum Route { Home, Post(Int), Search(String), Missing }
+class Model { route: Route, path: String }
+
+enum Msg { Navigate(String) }
+
+// A path is a String, which crosses the boundary today — so routing needs nothing
+// the language does not already have.
+pure function route_of(path: String) -> Route {
+    if path == "/" { return Route.Home; }
+    if string_starts_with(path, "/posts/") {
+        return Route.Post(string_to_int(substring(path, 7, len(path) - 7), 0));
+    }
+    if string_starts_with(path, "/search/") {
+        return Route.Search(substring(path, 8, len(path) - 8));
+    }
+    return Route.Missing;
+}
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Navigate(to) => { return Model { route: route_of(to), path: to }; }
+    }
+}
+===
+
+===style.local
+.nav a { margin-right: .75rem; }
+.miss { color: #b3261e; }
+===
+
+::: props model: Model
+:::
+
+::: nav class=nav
+
+::: a href=/
+home
+:::
+
+::: a href=/posts/42
+a post
+:::
+
+::: a href=/search/burxt
+a search
+:::
+
+:::
+
+::: match model.route
+
+::: case Home
+
+# Welcome
+
+:::
+
+::: case Post(id)
+
+# Post {{ to_string(id) }}
+
+:::
+
+::: case Search(q)
+
+# Results for {{ q }}
+
+:::
+
+::: case Missing
+
+::: p class=miss
+Nothing at {{ model.path }}
+:::
+
+:::
+
+:::
