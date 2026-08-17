@@ -36,8 +36,18 @@ def markup_half(text):
     body = "\n".join(lines[last + 1:]).strip("\n")
     # The props line is the component's signature rather than its markup, and the hero has no room
     # to explain it. Chapter 1 does.
-    body = re.sub(r"^::: props[^\n]*\n:::\n+", "", body)
-    return body
+    # The 0.7 fence, `:props: … :!props:`. This was written for the 0.6 spelling and silently stopped
+    # matching after the respelling, which put the component's signature at the top of the landing
+    # page's code panel — a regex that no longer matches removes nothing and says nothing.
+    without, count = re.subn(r"^:props:[^\n]*\n:!props:\n+", "", body)
+    if count != 1:
+        raise SystemExit(
+            "tools/showcase.py: expected exactly one `:props:` block to strip from %s and found %d.\n"
+            "This is the check the last version did not have: the pattern was written for the 0.6\n"
+            "fence, stopped matching after the respelling, and put the component's signature at the\n"
+            "top of the landing page's code panel. A regex that no longer matches removes nothing\n"
+            "and reports nothing." % (SOURCE, count))
+    return without
 
 
 def escape(s):

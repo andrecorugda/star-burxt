@@ -17,10 +17,7 @@
     <!-- The slots are brace ENTITIES rather than a raw block — see `escape` above for why. An HTML
          comment is no shelter: Liquid reads one, so naming the tag here would OPEN a raw block that
          nothing closes, and everything after it on the page would render as source. -->
-    <pre><code class="language-sbmx">:props: model: Model
-:!props:
-
-:section: class=card
+    <pre><code class="language-sbmx">:section: class=card
     # Today
     :p: child=&#123;to_string(model.left) + " left"&#125; :!p:
     :for: task in model.tasks key to_string(task.id)
