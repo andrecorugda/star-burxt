@@ -445,6 +445,58 @@ def main():
     check("a flow element KEEPS its paragraph — a content model, not 'strip paragraphs'",
           'html_element("p", [], [html_text("kept")])' in kept, kept)
 
+    # ---- a phrasing element may hold a phrasing element ---------------------------------------
+    #
+    # `<button><span class=box></span></button>` is correct HTML and how a styled control is built.
+    # The first content model refused EVERY nested block inside a phrasing element, so a button could
+    # not contain a `span` — found by the site's own showcase, where a checkbox is exactly that.
+    nested = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1\n"
+                      "::: span class=box\n:::\n::: span class=text\nhi\n:::\n:::\n")
+    check("a phrasing element may contain another phrasing element",
+          nested.returncode == 0 and 'html_element("span"' in nested.stdout,
+          (nested.stderr or nested.stdout))
+    flow_in_phrasing = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1\n"
+                                "::: div\nno\n:::\n:::\n")
+    check("but FLOW content inside one is still refused",
+          "STAR-E005" in (flow_in_phrasing.stderr + flow_in_phrasing.stdout),
+          (flow_in_phrasing.stderr or flow_in_phrasing.stdout))
+
+    # ---- an attribute NAME is checked here, not in the browser --------------------------------
+    #
+    # `html_element` has a precondition on its attribute names, so a name that is not one exits 70 —
+    # a bare "burxt exit 70" in a console, from a function the author never called. An unquoted value
+    # with spaces in it is read as several attributes, and the last of them is not a name.
+    unquoted = generate('::: props n: Int\n:::\n\n::: input placeholder=What needs doing?\n:::\n')
+    check("an unquoted value with spaces is refused by NAME, with the fix in the message",
+          "STAR-E020" in (unquoted.stderr + unquoted.stdout)
+          and "quotes" in (unquoted.stderr + unquoted.stdout),
+          (unquoted.stderr or unquoted.stdout))
+
+    # ---- a `for` over a CALL binds it first ----------------------------------------------------
+    #
+    # Burxt refuses `for x in f(y)` — the call would be remade on every pass — and it is right to.
+    # But the author wrote `::: for task in shown(model)`, which is reasonable, so the binding is
+    # emitted here rather than showing a reader a complaint about generated code.
+    call_loop = generate("::: props items: [Line]\n:::\n\n::: for line in shown(items)\n"
+                         "a row\n:::\n")
+    check("a `for` over a call binds the call before the loop",
+          call_loop.returncode == 0 and "let rows_" in call_loop.stdout
+          and "in shown(items)" not in call_loop.stdout,
+          (call_loop.stderr or call_loop.stdout))
+
+    # ---- `===style.local` can reach a MARKDOWN element -----------------------------------------
+    #
+    # A heading, a paragraph, a list and a code block all come out of BMX with no attributes, so the
+    # scope marker was missing from exactly the elements a document writes most. A local rule for
+    # `.card h1` matched nothing, and the site's own hero was the thing that showed it.
+    styled = generate("===bx\nclass Model { n: Int }\nenum Msg { Nothing }\n"
+                      "pure function update(msg: Msg, m: Model) -> Model { return m; }\n===\n\n"
+                      "===style.local\nh1 { color: red; }\n===\n\n"
+                      "::: props model: Model\n:::\n\n# Title\n")
+    check("a markdown heading carries the component's scope marker",
+          styled.returncode == 0 and 'html_element("h1", [html_attr("data-s-' in styled.stdout,
+          (styled.stderr or styled.stdout)[:400])
+
     shutil.rmtree(work, ignore_errors=True)
 
     if failures:

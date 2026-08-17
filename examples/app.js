@@ -191,7 +191,16 @@ export async function mount({ wasm, root, initial = "{}", component = "app", rec
     },
   };
 
-  const bytes = wasm instanceof ArrayBuffer ? wasm : await (await fetch(wasm)).arrayBuffer();
+  // A URL, an ArrayBuffer, or the bytes themselves.
+  //
+  // **The typed-array case is not convenience.** `readFileSync(path).buffer` looks like the right
+  // way to hand a file to WebAssembly and is wrong: Node serves small files out of a shared pool, so
+  // that ArrayBuffer starts at some other file's bytes and the module is rejected for a bad magic
+  // word. Accepting the view — which knows its own offset and length — is what makes the obvious
+  // call site correct.
+  const bytes = wasm instanceof ArrayBuffer ? wasm
+    : ArrayBuffer.isView(wasm) ? wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength)
+    : await (await fetch(wasm)).arrayBuffer();
   const { instance } = await WebAssembly.instantiate(bytes, { env });
   mem = instance.exports.memory;
   alloc = instance.exports["burxt.alloc"];

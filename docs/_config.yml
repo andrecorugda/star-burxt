@@ -5,7 +5,7 @@
 # and should be re-copied rather than edited when they change there. BMX's site does the same, for
 # the same reason and from the same source.
 title: star-burxt
-description: "A front-end framework written in Burxt. A .bmx file is a component, and the compiler judges its handlers."
+description: "A front-end framework written in Burxt. A .sbmx file is a component — markup and logic in one file — and the compiler judges what your buttons do."
 url: https://star.burxt-lang.org
 baseurl: ""
 
@@ -20,8 +20,8 @@ has_branding: true
 # `star_version` is what a reader is looking at. `star_requires` is the Burxt it needs, and it is
 # stated rather than implied: v1.1.0 shipped an `lib/html.bx` whose builders are not `pure`, and
 # purity is transitive, so on that release a `pure` view cannot be written at all.
-star_version:  "0.1.0"
-star_series:   "0.1"
+star_version:  "0.2.0"
+star_series:   "0.2"
 star_requires: "1.2 (from source — see the set-up page)"
 
 # **Every documented version, newest first. The first entry is the live one.**

@@ -1,10 +1,20 @@
 # `burxt fetch` writes these; the LOCKFILE is what gets committed, not the checkout.
 .burxt/
 
-# Built from examples/generate.bx by the set-up page and by CI.
+# The tools, built from their sources in examples/.
 star-generate
-
-# Generated beside their source by star-generate.
-examples/*.bx
-examples/*.check.bx
 star-check
+star-build
+
+# **Generated beside their source, and the NEGATIONS are the load-bearing part.** `examples/*.bx`
+# alone also swallows the three tools' own sources, which live here too — and a new source file that
+# is silently untracked is the worst shape this can take: it builds locally forever and CI has never
+# seen it. So the generated shapes are ignored and the sources are named back in.
+examples/*.bx
+!examples/generate.bx
+!examples/check.bx
+!examples/build.bx
+examples/*.check.bx
+examples/*.css
+examples/*.o
+examples/*.wasm

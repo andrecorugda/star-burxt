@@ -15,7 +15,7 @@ Chapter 1 put one value on a page. This chapter is about the rest of what a page
 
 List them one per line:
 
-```
+```sbmx
 ::: props name: String, greeting: String, unread: Int
 :::
 
@@ -42,7 +42,7 @@ quietly become `"[object Object]"`.
 
 A `:::` block with an element name wraps whatever is inside it:
 
-```
+```sbmx
 ::: section
 
 # Today
@@ -71,7 +71,7 @@ quietly lost a section.
 
 Inside a block or outside it, the ordinary things do the ordinary thing:
 
-```
+```sbmx
 ::: article
 
 ## Notes

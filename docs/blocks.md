@@ -25,7 +25,7 @@ paragraphs, lists, and more blocks.
 
 ## `props` — what the component is given
 
-```
+```sbmx
 ::: props name: String, total: Decimal<2>, lines: [Line]
 :::
 ```
@@ -46,7 +46,7 @@ The **first** prop is the component's state — the thing your buttons change.
 
 ## Elements — wrapping things
 
-```
+```sbmx
 ::: section
 
 # Today
@@ -82,7 +82,7 @@ browsers handle the invalid version unpredictably.
 
 Anything before an `on:` is an attribute:
 
-```
+```sbmx
 ::: div class=card id=main
 hello
 :::
@@ -91,7 +91,7 @@ hello
 A value with spaces is quoted — `class="tag muted"`. A bare name is a boolean attribute —
 `::: input disabled`. And a value can interpolate:
 
-```
+```sbmx
 ::: a href=/posts/{{ to_string(post.id) }}
 read more
 :::
@@ -104,7 +104,7 @@ link.
 
 ## `on:` — events
 
-```
+```sbmx
 ::: button on:click=count + 1
 increment
 :::
@@ -128,7 +128,7 @@ else on it.
 
 ## `for` — a row per item
 
-```
+```sbmx
 ::: for line in lines key line.id
 
 ::: li
@@ -147,7 +147,7 @@ No `on:` handlers inside a `for` yet.
 
 ## `match` — choosing between many
 
-```
+```sbmx
 ::: match model.route
 
 ::: case Home
@@ -171,7 +171,7 @@ fails naming it. See [chapter 4](guide/04-lists-and-choices.html).
 
 ## `else` — the other branch
 
-```
+```sbmx
 ::: if ready
 …
 :::
@@ -187,7 +187,7 @@ Directly after the `if`, nothing between them, and no condition of its own.
 
 ## `if` — a section that appears when it should
 
-```
+```sbmx
 ::: if ready
 
 ::: p
@@ -203,14 +203,14 @@ Any condition that answers true or false. No `else` — write a second `if`.
 
 ## A component — a capitalised name
 
-```
+```sbmx
 ::: Badge amount={{ model.count }} tone=unread
 :::
 ```
 
 Any `.sbmx` you imported in `===bx`:
 
-```
+```sbmx
 ===bx
 use "./Badge.sbmx";
 ===
@@ -222,7 +222,7 @@ Props are passed by name. Order does not matter; a missing one is named.
 
 ## `{{ }}` — a value in the page
 
-```
+```sbmx
 Hello {{ name }}, you have {{ to_string(unread) }} messages.
 ```
 

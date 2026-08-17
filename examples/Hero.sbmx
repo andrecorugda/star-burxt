@@ -1,0 +1,123 @@
+===bx
+use "std/string.bx";
+use "std/json.bx";
+
+class Task  { id: Int, label: String, done: Bool }
+class Model { tasks: [Task], left: Int }
+enum Msg { Toggle(Int) }
+
+pure function update(msg: Msg, m: Model) -> Model allocates {
+    match msg {
+        Toggle(id) => {
+            let mutable out: [Task] = [];
+            let mutable left: Int = 0;
+            let mutable i: Int = 0;
+            while i < len(m.tasks) {
+                let t: Task = m.tasks[i];
+                let done: Bool = t.id == id && !t.done || t.id != id && t.done;
+                if !done { left += 1; }
+                let a: Int = push(out, Task { id: t.id, label: t.label, done: done });
+                i += 1;
+            }
+            return Model { tasks: out, left: left };
+        }
+    }
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable rows: [Json] = [];
+    let mutable i: Int = 0;
+    while i < len(m.tasks) {
+        let mutable f: [Field] = [];
+        let a: Int = push(f, json_field("id", json_int(m.tasks[i].id)));
+        let b: Int = push(f, json_field("label", json_text(m.tasks[i].label)));
+        let c: Int = push(f, json_field("done", json_truth(m.tasks[i].done)));
+        let r: Int = push(rows, json_object(f));
+        i += 1;
+    }
+    let mutable top: [Field] = [];
+    let d: Int = push(top, json_field("tasks", json_list(rows)));
+    let e: Int = push(top, json_field("left", json_int(m.left)));
+    return json_render(json_object(top));
+}
+
+// `+ ""` on a String pulled out of a `match` — see examples/Todos.sbmx for why it is load-bearing.
+function from_text(text: String) -> Model allocates {
+    let mutable out: [Task] = [];
+    let mutable left: Int = 0;
+    match json_parse(text) {
+        Error(e) => { return Model { tasks: out, left: 0 }; }
+        Ok(value) => {
+            match json_at(value, "tasks") {
+                None => { }
+                Some(list) => {
+                    match list {
+                        Null => { } Truth(b) => { } Number(n) => { } Text(t) => { } Object(f) => { }
+                        List(rows) => {
+                            let mutable i: Int = 0;
+                            while i < len(rows) {
+                                let mutable id: Int = 0;
+                                let mutable label: String = "";
+                                let mutable done: Bool = false;
+                                match json_at(rows[i], "id") {
+                                    None => { }
+                                    Some(v) => { match json_as_int(v) { None => { } Some(n) => { id = n; } } }
+                                }
+                                match json_at(rows[i], "label") {
+                                    None => { }
+                                    Some(v) => { match json_as_text(v) { None => { } Some(t) => { label = t + ""; } } }
+                                }
+                                match json_at(rows[i], "done") {
+                                    None => { }
+                                    Some(v) => { match json_as_truth(v) { None => { } Some(b) => { done = b; } } }
+                                }
+                                if !done { left += 1; }
+                                let k: Int = push(out, Task { id: id, label: label, done: done });
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return Model { tasks: out, left: left };
+}
+
+pure function mark(done: Bool) -> String {
+    if done { return "row done"; }
+    return "row";
+}
+===
+
+===style.local
+.card { max-width: 26rem; padding: 1.4rem 0 .4rem; background: #fff;
+        font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; color: #1f2430; }
+.card h1 { margin: 0 1.4rem; font-size: 1.15rem; }
+.card p  { margin: .3rem 1.4rem 1.1rem; color: #6b7280; font-size: .875rem; }
+.row { display: flex; gap: .7rem; align-items: center; width: 100%;
+       padding: .7rem 1.4rem; font: inherit; color: inherit; text-align: left;
+       background: none; border: 0; border-top: 1px solid #f0f2f6; cursor: pointer; }
+.box { width: 1.05rem; height: 1.05rem; border: 1.5px solid #cbd2dd; border-radius: 5px; }
+.row.done .box  { background: #d9531e; border-color: #d9531e; }
+.row.done .text { color: #9aa1ad; text-decoration: line-through; }
+===
+
+::: props model: Model
+:::
+
+::: section class=card
+# Today
+::: p
+{{ to_string(model.left) }} left
+:::
+::: for task in model.tasks key to_string(task.id)
+::: button class={{ mark(task.done) }} on:click=Msg.Toggle(string_to_int(key, 0))
+::: span class=box
+:::
+::: span class=text
+{{ task.label }}
+:::
+:::
+:::
+:::

@@ -223,13 +223,47 @@ match file_read_maybe(path) {
                         print("// would render twice and could render differently the second time —");
                         print("// which is the hydration mismatch this design does not have, because");
                         print("// both sides run the same compiled component over the same value.");
+                        // **A WHOLE DOCUMENT, not a fragment.** The first version returned the
+                        // root div and the state, which left the reader to hand-write the page
+                        // around it — a `<head>`, a `<link>` to the stylesheet star itself wrote,
+                        // and the four lines that mount the driver. Andre asked why a page needed
+                        // hand-written HTML at all when star knows every one of those answers, and
+                        // the honest reply was that it did not.
+                        //
+                        // So the head is emitted here: the component's own stylesheet, whatever its
+                        // `head` function returns, and nothing else. A component that wants a title,
+                        // a description or an Open Graph tag writes them in `head` as markup, which
+                        // is the point of having one.
                         print("function " + name + "_serve(request: String) -> String touches network, files, clock \{");
                         print("    let m: Model = load(request);");
                         print("    let state: String = to_text(m);");
                         print("    let body: String = html_render(" + name + "(m));");
-                        print("    return \"<div id=\\\"root\\\">\" + body + \"</div>\"");
+                        // `head` returns a LIST, for the same reason `commands` and `watch` do:
+                        // there is nothing to wrap a title and three meta tags in. A single-node
+                        // signature forced the component to invent a wrapper element, and the
+                        // wrapper is then in the page.
+                        print("    let mutable top: String = \"\";");
+                        if star_mentions(component.code, "function head(") {
+                            print("    let tags: [Html] = head(m);");
+                            print("    let mutable ti: Int = 0;");
+                            print("    while ti < len(tags) \{ top = top + html_render(tags[ti]) + \"\\n\"; ti += 1; \}");
+                        }
+                        print("    return \"<!doctype html>\\n<html lang=\\\"en\\\">\\n<head>\\n\"");
+                        print("        + \"<meta charset=\\\"utf-8\\\">\\n\"");
+                        print("        + \"<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n\"");
+                        print("        + top");
+                        print("        + \"<link rel=\\\"stylesheet\\\" href=\\\"./" + name + ".css\\\">\\n\"");
+                        print("        + \"</head>\\n<body>\\n\"");
+                        print("        + \"<div id=\\\"root\\\">\" + body + \"</div>\\n\"");
                         print("        + \"<script type=\\\"application/json\\\" id=\\\"star-state\\\">\"");
-                        print("        + state + \"</script>\";");
+                        print("        + state + \"</script>\\n\"");
+                        print("        + \"<script type=\\\"module\\\">\\n\"");
+                        print("        + \"import \\\{ mount \\\} from './app.js';\\n\"");
+                        print("        + \"import \\\{ reconcile \\\} from './reconcile.js';\\n\"");
+                        print("        + \"await mount(\\\{ wasm: new URL('./" + name + ".wasm', import.meta.url),\\n\"");
+                        print("        + \"  root: document.getElementById('root'), component: '" + name + "',\\n\"");
+                        print("        + \"  initial: document.getElementById('star-state').textContent.trim(), reconcile \\\});\\n\"");
+                        print("        + \"</script>\\n</body>\\n</html>\\n\";");
                         print("\}");
                     }
                     print("// One event: the state in as text, the next state and the page out.");

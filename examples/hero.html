@@ -16,7 +16,7 @@
   selector scoped, `===style.global` as you wrote it — so the page links it and never has to know
   what is in it.
 -->
-<link rel="stylesheet" href="./Showcase.css">
+<link rel="stylesheet" href="./Hero.css">
 
 <style>
   html { background: #f6f7fa; }
@@ -37,7 +37,7 @@
   {"id":3,"label":"Give it a style section","done":false},
   {"id":4,"label":"Fetch something in commands","done":false},
   {"id":5,"label":"Ship it","done":false}],
- "draft":"","view":"all","next_id":6}
+ "left":3}
 </script>
 
 <script type="module">
@@ -47,9 +47,9 @@
   const state = document.getElementById('star-state');
 
   await mount({
-    wasm: new URL('./showcase.wasm', import.meta.url),
+    wasm: new URL('./hero.wasm', import.meta.url),
     root: document.getElementById('root'),
-    component: 'showcase',
+    component: 'hero',
     initial: (state && state.textContent.trim()) || '{}',
     // Patch the page instead of replacing it, so typing does not lose the caret.
     reconcile,

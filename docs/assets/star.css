@@ -48,3 +48,70 @@
 .doc-body figure.shot figcaption {
   margin-top: .7rem; font-size: .875rem; line-height: 1.5; color: #5b6270;
 }
+
+/* ---- the landing page's showcase --------------------------------------------------------------
+ *
+ * **A real screenshot in a window drawn with CSS.** The picture is the component actually running —
+ * `tools/shoot.mjs` loads the real `.wasm` through the real driver and photographs what a browser
+ * painted — and the browser chrome around it is drawn here rather than captured. Two reasons, and
+ * neither is taste: a captured chrome is somebody's operating system at a fixed zoom, and it is
+ * bytes that say nothing about star-burxt.
+ *
+ * The frame is BMX's, moved across unchanged apart from what holds the picture. The three sites
+ * should agree about what a window looks like, and one of them having its own is how they stop
+ * agreeing.
+ *
+ * `.chrome` rather than `.bar`: `.bar` is this site's navigation, and a showcase that renamed it
+ * would restyle the top of every page. */
+.showcase { margin: 1.8rem 0 2.4rem; display: grid; gap: 1rem; align-items: start; }
+
+@media (min-width: 60rem) {
+  /* The picture and its source, side by side — because the claim IS the pairing. Stacked below this
+   * width, where two columns would make the code six characters wide. */
+  .showcase { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.4rem; }
+}
+
+.showcase .win {
+  margin: 0; border-radius: 12px; overflow: hidden; background: #fff;
+  box-shadow: 0 2px 6px rgba(16,24,40,.10), 0 20px 48px rgba(16,24,40,.14);
+}
+.showcase .chrome {
+  display: flex; align-items: center; gap: .45rem; padding: .7rem .85rem;
+  background: #e8eaed; border-bottom: 1px solid #d6d9dd;
+}
+.showcase .dot { width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto; }
+.showcase .dot.r { background: #ff5f57; }
+.showcase .dot.y { background: #febc2e; }
+.showcase .dot.g { background: #28c840; }
+.showcase .url {
+  flex: 1; margin-left: .35rem; background: #fff; border: 1px solid #dcdfe3; border-radius: 6px;
+  padding: .3rem .75rem; font: .75rem/1.4 var(--sans); color: #5b6270; text-align: center;
+}
+/* The page inside the window. `padding` rather than a full-bleed image: a component that does not
+ * fill the viewport should not look like one that does, and the white margin is what says so. */
+.showcase .glass { padding: 1.1rem 1.1rem 1.4rem; background: #fff; }
+.showcase .glass img { display: block; width: 100%; height: auto; }
+
+.showcase .src {
+  margin: 0; background: var(--paper); border: 1px solid var(--hair-2); border-radius: 9px;
+  overflow: hidden;
+}
+/* `text-align` explicitly: a figure's caption is centred on this site, and this one is a label on a
+ * panel rather than a caption under a picture. */
+.showcase .src figcaption {
+  font: 600 .68rem/1 var(--mono); letter-spacing: .07em; text-transform: uppercase; text-align: left;
+  color: var(--ink-2); padding: .6rem .8rem; border-bottom: 1px solid var(--hair);
+  background: var(--wash);
+}
+.showcase .src figcaption span { font-weight: 500; letter-spacing: .04em; opacity: .62; }
+/* Overriding `.doc-body pre`, which gives code blocks their own frame — this panel is the frame.
+ * Wrapped rather than scrolled: `overflow-x` leaves every long line visibly cut at the same column,
+ * and a reader sees a truncated example with no reason to guess that dragging finishes the line. */
+.showcase .src pre {
+  margin: 0; border: 0; border-radius: 0; background: transparent;
+  padding: .75rem .85rem; font-size: .72rem; line-height: 1.6;
+  white-space: pre-wrap; overflow-wrap: break-word;
+}
+.doc-body .showcase-note {
+  margin: 0 0 2.2rem; font-size: .9rem; line-height: 1.55; color: var(--ink-2);
+}

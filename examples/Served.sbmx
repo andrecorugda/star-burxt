@@ -15,6 +15,19 @@ pure function update(msg: Msg, m: Model) -> Model {
 // refuses it. So a page cannot fetch while it renders.
 external function db_lookup(who: String) -> CInt touches network;
 
+// **What goes in the page's `<head>`, as a function of the state.** Optional: a component with no
+// `head` gets a document with the charset, the viewport and its own stylesheet, which is everything
+// star can know by itself. A title is something only the component knows.
+pure function head(m: Model) -> [Html] allocates {
+    let mutable top: [Html] = [];
+    let a: Int = push(top, html_element("title", [], [html_text(m.user + " — unread")]));
+    let b: Int = push(top, html_element("meta", [
+        html_attr("name", "description"),
+        html_attr("content", "Rendered on the server, from the same component the browser runs."),
+    ], []));
+    return top;
+}
+
 function load(request: String) -> Model touches network, files, clock {
     let SECRET_DB_PASSWORD_DO_NOT_SHIP: String = "hunter2-should-never-reach-a-browser";
     let n: Int = db_lookup(SECRET_DB_PASSWORD_DO_NOT_SHIP);

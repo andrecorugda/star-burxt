@@ -13,7 +13,7 @@ Real screens repeat things and hide things. Two blocks do both.
 
 ## A row per item
 
-```
+```sbmx
 ::: props lines: [Line]
 :::
 
@@ -55,7 +55,7 @@ unknown field: idd
 
 ## A section that appears when it should
 
-```
+```sbmx
 ::: props ready: Bool
 :::
 
@@ -73,7 +73,7 @@ absent. There is no `else`; write a second `if` for the other case.
 
 ## The other branch
 
-```
+```sbmx
 ::: if ready
 
 ::: p
@@ -99,7 +99,7 @@ if you meant a different question, write a second `if`.
 When there are more than two answers, `match` is the one to reach for — and it is the reason to
 build a screen this way rather than any other:
 
-```
+```sbmx
 ::: match model.route
 
 ::: case Home
@@ -145,7 +145,7 @@ thing on this site that no other front-end framework can do.
 
 ## Conditions can be expressions
 
-```
+```sbmx
 ::: if len(lines) > 0
 
 ::: p
@@ -162,7 +162,7 @@ rather than a section that never shows up.
 
 **You cannot put a button inside a `for` yet.**
 
-```
+```sbmx
 ::: for line in lines key line.id
 ::: button on:click=line.id
 remove

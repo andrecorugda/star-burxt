@@ -384,7 +384,7 @@ pure function star_is_void(name: String) -> Bool {
 // Everything else a document may wrap things in.
 pure function star_takes_flow(name: String) -> Bool {
     return star_in_set(name,
-        " address article aside blockquote canvas colgroup dd details dialog div dl dt fieldset"
+        " address article aside blockquote canvas colgroup dd details dialog div dl fieldset"
         + " figcaption figure footer form header hgroup li main nav ol optgroup output picture"
         + " pre progress section select table tbody td tfoot th thead tr ul video ");
 }
@@ -607,8 +607,17 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                                     + " able to say which row was clicked. Add `key <expression>`"
                                     + " to the `for`");
                             }
-                            out = out + indent + fenced.name + " " + loop_head + " \{\n"
-                                + body + indent + "\}\n";
+                            // **A `for` over a CALL binds the call first.** Burxt refuses
+                            // `for x in f(y)` — the call would be remade on every pass — and it is
+                            // right to, but the author never wrote that line: they wrote
+                            // `::: for task in shown(model)`, which is a reasonable thing to write.
+                            // So the subject is bound here, where the reader cannot be shown a
+                            // complaint about generated code.
+                            out = out + indent
+                                + star_loop_prelude(fenced.name, loop_head, tag + "_" + to_string(i))
+                                + fenced.name + " "
+                                + star_loop_head(fenced.name, loop_head, tag + "_" + to_string(i))
+                                + " \{\n" + body + indent + "\}\n";
                         }
                     }
                     // **An `else` is the NEXT block, and it is consumed here rather than reached
@@ -819,9 +828,37 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                                     + " contain a code block");
                             }
                             Fenced(f) => {
-                                return Result.Error("STAR-E005 at " + star_at(source, f.offset)
-                                    + ": `" + fenced.name + "` takes phrasing content, so it cannot"
-                                    + " contain a `" + f.name + "` block");
+                                // **A phrasing element may hold another phrasing element.**
+                                // `<p><span>` and `<button><span class=box>` are correct HTML and
+                                // ordinary in a styled component; what HTML forbids here is FLOW
+                                // content, not nesting. The first version of this arm refused every
+                                // nested block, which made a styled button impossible — found by
+                                // the site's own showcase, where a checkbox is a `span` in a
+                                // `button`.
+                                //
+                                // The nested element is built by RECURSING into this same function
+                                // rather than by a second emitter: attributes, events, keys and
+                                // components all have to work inside a `<span>` exactly as they do
+                                // outside one, and two emitters would be two answers.
+                                if star_takes_flow(f.name) {
+                                    return Result.Error("STAR-E005 at " + star_at(source, f.offset)
+                                        + ": `" + fenced.name + "` takes phrasing content, so it"
+                                        + " cannot contain a `" + f.name + "` block");
+                                }
+                                let hold: String = "p_" + tag + "_" + to_string(i) + "_" + to_string(c);
+                                let mutable one: [Block] = [];
+                                let put: Int = push(one, fenced.children[c]);
+                                match star_emit_stmts(source, known, marker, one, hold,
+                                                      tag + "_p" + to_string(i) + "_" + to_string(c),
+                                                      indent, handlers, "", loop_var) {
+                                    Error(e) => { return Result.Error(e); }
+                                    Ok(body) => {
+                                        out = out + indent + "let mutable " + hold
+                                            + ": [Html] = [];\n" + body;
+                                        if len(phrasing) > 0 { phrasing = phrasing + ", "; }
+                                        phrasing = phrasing + hold + "[0]";
+                                    }
+                                }
                             }
                         }
                         c += 1;
@@ -869,31 +906,36 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
             Heading(heading) => {
                 match bmx_emit_one(blocks[i]) {
                     Error(e) => { return Result.Error(e); }
-                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target + ", " + expr + ");\n"; }
+                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target
+                                     + ", " + star_marked(expr, marker) + ");\n"; }
                 }
             }
             Paragraph(words) => {
                 match bmx_emit_one(blocks[i]) {
                     Error(e) => { return Result.Error(e); }
-                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target + ", " + expr + ");\n"; }
+                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target
+                                     + ", " + star_marked(expr, marker) + ");\n"; }
                 }
             }
             Quote(words) => {
                 match bmx_emit_one(blocks[i]) {
                     Error(e) => { return Result.Error(e); }
-                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target + ", " + expr + ");\n"; }
+                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target
+                                     + ", " + star_marked(expr, marker) + ");\n"; }
                 }
             }
             List(list) => {
                 match bmx_emit_one(blocks[i]) {
                     Error(e) => { return Result.Error(e); }
-                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target + ", " + expr + ");\n"; }
+                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target
+                                     + ", " + star_marked(expr, marker) + ");\n"; }
                 }
             }
             Code(code) => {
                 match bmx_emit_one(blocks[i]) {
                     Error(e) => { return Result.Error(e); }
-                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target + ", " + expr + ");\n"; }
+                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target
+                                     + ", " + star_marked(expr, marker) + ");\n"; }
                 }
             }
         }
@@ -1381,11 +1423,111 @@ pure function star_binds(name: String, head: String, outer: String) -> String {
     return outer;
 }
 
+// Where the subject of a `for` starts — after the bound name and the ` in `.
+pure function star_loop_subject_at(head: String) -> Int {
+    let mutable i: Int = 0;
+    while i < len(head) && byte_at(head, i) == 32 { i += 1; }
+    while i < len(head) && byte_at(head, i) != 32 { i += 1; }        // the bound name
+    while i < len(head) && byte_at(head, i) == 32 { i += 1; }
+    if i + 2 <= len(head) && byte_at(head, i) == 105 && byte_at(head, i + 1) == 110 {
+        i += 2;                                                      // `in`
+        while i < len(head) && byte_at(head, i) == 32 { i += 1; }
+        return i;
+    }
+    return 0;
+}
+
+// True when the subject is a call, and so has to be bound before the loop.
+pure function star_loop_needs_binding(name: String, head: String) -> Bool {
+    if name != "for" { return false; }
+    let at: Int = star_loop_subject_at(head);
+    if at == 0 { return false; }
+    return star_mentions(substring(head, at, len(head) - at), "(");
+}
+
+pure function star_loop_prelude(name: String, head: String, tag: String) -> String {
+    if !star_loop_needs_binding(name, head) { return ""; }
+    let at: Int = star_loop_subject_at(head);
+    return "let rows_" + tag + " = " + substring(head, at, len(head) - at) + ";\n    ";
+}
+
+pure function star_loop_head(name: String, head: String, tag: String) -> String {
+    if !star_loop_needs_binding(name, head) { return head; }
+    let at: Int = star_loop_subject_at(head);
+    return substring(head, 0, at) + "rows_" + tag;
+}
+
 pure function star_marker_attr(marker: String) -> String {
     if len(marker) == 0 {
         return "";
     }
     return "html_attr(\"data-s-" + marker + "\", \"\")";
+}
+
+// Put this component's marker on every element inside an expression BMX emitted.
+//
+// **A heading is an element too, and `===style.local` could not reach one.** Every block written as
+// markdown — a heading, a paragraph, a list, a quote, a code block, and the `em`/`strong`/`code`
+// inside them — comes out of BMX as `html_element("h1", [], …)` with no attributes, while a `::: p`
+// block goes through star's own path and gets marked. So a local rule for `.card h1` matched
+// nothing, and the fix belongs here rather than in BMX: the marker is star's, and BMX must not know
+// that a host scopes anything. Found by the site's own showcase, where the card's title was the one
+// unstyled thing in the picture.
+//
+// The scan SKIPS STRING LITERALS, and that is not caution for its own sake: a document whose prose
+// contains the text `html_element("x", [], ` would otherwise have an attribute spliced into a
+// visible sentence.
+pure function star_marked(expr: String, marker: String) -> String {
+    if len(marker) == 0 {
+        return expr;
+    }
+    let attr: String = star_marker_attr(marker);
+    let head: String = "html_element(\"";
+    let empty: String = ", [], ";
+    let mutable out: String = "";
+    let mutable i: Int = 0;
+    while i < len(expr) {
+        // A string literal goes through verbatim, escapes and all.
+        if byte_at(expr, i) == 34 {
+            out = out + "\"";
+            i += 1;
+            while i < len(expr) && byte_at(expr, i) != 34 {
+                if byte_at(expr, i) == 92 && i + 1 < len(expr) {
+                    out = out + substring(expr, i, 2);
+                    i += 2;
+                    continue;
+                }
+                out = out + substring(expr, i, 1);
+                i += 1;
+            }
+            if i < len(expr) {
+                out = out + "\"";
+                i += 1;
+            }
+            continue;
+        }
+        // `html_element("` — the tag's name is a literal, so read it here rather than letting the
+        // string branch above have it, and then the empty attribute list is the next thing.
+        if i + len(head) <= len(expr) && substring(expr, i, len(head)) == head {
+            let from: Int = i + len(head);
+            let mutable j: Int = from;
+            while j < len(expr) && byte_at(expr, j) != 34 {
+                j += 1;
+            }
+            if j < len(expr) && j + 1 + len(empty) <= len(expr)
+                && substring(expr, j + 1, len(empty)) == empty {
+                out = out + substring(expr, i, j + 1 - i) + ", [" + attr + "], ";
+                i = j + 1 + len(empty);
+                continue;
+            }
+            out = out + substring(expr, i, j + 1 - i);
+            i = j + 1;
+            continue;
+        }
+        out = out + substring(expr, i, 1);
+        i += 1;
+    }
+    return out;
 }
 
 pure function star_two(a: String, b: String) -> String {
@@ -1509,6 +1651,21 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
             }
         }
         if len(name) > 0 {
+            // **An attribute NAME is checked here, or it is checked in the browser.**
+            // `html_element` carries a precondition on its attribute names, so a name that is not
+            // one exits 70 — a bare "burxt exit 70" in the console, from a contract inside a
+            // function the author never called.
+            //
+            // The name that gets here is usually not one the author wrote deliberately: an
+            // unquoted value with spaces in it, `placeholder=What needs doing?`, is read as three
+            // attributes, and the third is `doing?`. So the refusal says that, because the fix is
+            // quotes rather than a different name.
+            if !html_is_name(name) {
+                return Result.Error("STAR-E020: `" + name + "` is not an attribute name."
+                    + " An unquoted value ends at the first space, so"
+                    + " `placeholder=What needs doing?` is three attributes — put the value in"
+                    + " quotes: `placeholder=\"What needs doing?\"`");
+            }
             if len(out) > 0 { out = out + ", "; }
             out = out + "html_attr(\"" + name + "\", " + value + ")";
         }

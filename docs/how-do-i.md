@@ -15,7 +15,7 @@ there instead.
 
 Wrap it in `to_string`:
 
-```
+```sbmx
 You have {{ to_string(unread) }} messages.
 ```
 
@@ -24,7 +24,7 @@ Slots put text in the page, so anything that is not already text gets converted.
 
 ## …show a price?
 
-```
+```sbmx
 ::: props total: Decimal<2>
 :::
 
@@ -36,7 +36,7 @@ happens when you multiply one.
 
 ## …make a button do something?
 
-```
+```sbmx
 ::: button on:click=count + 1
 increment
 :::
@@ -47,14 +47,14 @@ zero.
 
 ## …read what someone typed?
 
-```
+```sbmx
 ::: input on:input=name
 :::
 ```
 
 ## …submit a form?
 
-```
+```sbmx
 ::: form on:submit=draft
 
 ::: input on:input=draft
@@ -69,7 +69,7 @@ save
 
 ## …show a list?
 
-```
+```sbmx
 ::: for line in lines key line.id
 
 ::: li
@@ -84,7 +84,7 @@ Always give `key` something that identifies the item. See
 
 ## …hide something until it is ready?
 
-```
+```sbmx
 ::: if ready
 
 ::: p
@@ -100,7 +100,7 @@ There is no `else`. Write a second `::: if` for the other case.
 
 Two sections, and **you have to say which**:
 
-```
+```sbmx
 ===style.local
 .card { border: 1px solid #ddd; padding: 1rem; }
 ===
@@ -126,7 +126,7 @@ uses. One `<link>` loads the tree.
 
 Put it in the head, before any `on:`:
 
-```
+```sbmx
 ::: div class=card
 :::
 
@@ -141,7 +141,7 @@ A value with spaces is quoted. A bare name is a boolean attribute — `::: input
 
 Interpolate the value:
 
-```
+```sbmx
 ::: a href=/posts/{{ to_string(post.id) }}
 read more
 :::
@@ -155,8 +155,9 @@ than a link to a page that does not exist.
 Write a `===bx` section. Your state becomes a record, your handlers become messages, and an
 `update` function you can read decides what each one does:
 
-```
+```sbmx
 ===bx
+class Item  { id: Int, name: String }
 class Model { count: Int, items: [Item] }
 enum Msg { Increment, Reset }
 
@@ -180,7 +181,7 @@ more
 
 Key the loop, and let the handler use `key`:
 
-```
+```sbmx
 ::: for todo in model.todos key to_string(todo.id)
 
 ::: li
@@ -199,7 +200,7 @@ you convert — `string_to_int(key, 0)` for a number.
 
 **What you cannot do is name the loop variable in the handler:**
 
-```
+```sbmx
 ::: for todo in model.todos key to_string(todo.id)
 
 ::: button on:click=Msg.Toggle(todo.id)
@@ -224,7 +225,7 @@ Put the component in its own file, import it, and call it as a block.
 
 `Badge.sbmx`:
 
-```
+```sbmx
 ::: props amount: Int, tone: String
 :::
 
@@ -235,7 +236,7 @@ Put the component in its own file, import it, and call it as a block.
 
 `Page.sbmx`:
 
-```
+```sbmx
 ===bx
 use "./Badge.sbmx";
 
@@ -280,8 +281,20 @@ It prints the component. Reading it is encouraged — there is nothing in there 
 
 Two functions. One says what to go and do, the other receives whatever comes back:
 
-```
+```sbmx
 ===bx
+use "std/string.bx";
+
+class Model { items: Int, status: String }
+enum Msg { Refresh, Other }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Refresh => { return Model { items: m.items, status: "loading" }; }
+        Other   => { return m; }
+    }
+}
+
 pure function commands(msg: Msg, m: Model) -> [StarCmd] allocates {
     let mutable out: [StarCmd] = [];
     match msg {
@@ -313,8 +326,10 @@ and `Cancel` anything in flight.
 
 Say what you want to be listening to, as a function of your state:
 
-```
+```sbmx
 ===bx
+class Model { polling: Bool }
+
 pure function watch(m: Model) -> [StarWatch] allocates {
     let mutable out: [StarWatch] = [];
     if m.polling { let a: Int = push(out, StarWatch.Every(7, 5000)); }
@@ -336,10 +351,13 @@ Timers, keys and websockets all arrive at `arrived`, under your tag.
 
 Give your component a `load`, and its **signature** is what makes it server-only:
 
-```
+```sbmx
 ===bx
+class Model { user: String, unread: Int }
+
 function load(request: String) -> Model touches network, files {
     // …reach a database, read a file, call an API…
+    return Model { user: request, unread: 0 };
 }
 ===
 ```
@@ -371,9 +389,11 @@ checked on every push, with a control that proves the check can find things.
 
 Give your component a way to carry its state as text, and the driver does the rest:
 
-```
+```sbmx
 ===bx
 use "std/json.bx";
+
+class Model { count: Int }
 
 pure function to_text(m: Model) -> String allocates {
     let mutable f: [Field] = [];
@@ -381,8 +401,19 @@ pure function to_text(m: Model) -> String allocates {
     return json_render(json_object(f));
 }
 
+// Your own fallback for a value that is not there — star does not choose one for you.
 function from_text(text: String) -> Model {
-    // …read it back, with your own fallback for a value that is not there
+    let mutable count: Int = 0;
+    match json_parse(text) {
+        Error(e) => { }
+        Ok(v) => {
+            match json_at(v, "count") {
+                None => { }
+                Some(x) => { match json_as_int(x) { None => { } Some(n) => { count = n; } } }
+            }
+        }
+    }
+    return Model { count: count };
 }
 ===
 ```
@@ -408,7 +439,7 @@ else changes.
 
 Make the route an `enum`, derive it from the path, and `match` on it:
 
-```
+```sbmx
 ===bx
 use "std/string.bx";
 

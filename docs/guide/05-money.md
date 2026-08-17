@@ -13,7 +13,7 @@ If your screen shows a price, this chapter is the reason to use star-burxt.
 
 ## Money is its own kind of value
 
-```
+```sbmx
 ::: props total: Decimal<2>
 :::
 
@@ -32,7 +32,7 @@ If you have written a checkout screen before, you know why that sentence needed 
 
 ## Adding up is fine
 
-```
+```sbmx
 ::: props subtotal: Decimal<2>, shipping: Decimal<2>
 :::
 
@@ -43,7 +43,7 @@ Two-decimal money plus two-decimal money is two-decimal money. Nothing to think 
 
 ## Multiplying is where it gets interesting
 
-```
+```sbmx
 ::: props total: Decimal<2>
 :::
 
@@ -73,7 +73,7 @@ Both answers are defensible. Both are wrong for somebody. So you are asked, once
 
 **Round it, and say which way:**
 
-```
+```sbmx
 ::: props total: Decimal<2, RoundHalfEven>
 :::
 
@@ -88,7 +88,7 @@ who reads the file.
 
 **Or keep the exact answer:**
 
-```
+```sbmx
 ::: props total: Decimal<4>
 :::
 ```

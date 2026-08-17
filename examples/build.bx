@@ -1,0 +1,129 @@
+// `star build` — one command from a component to a `.wasm` a browser can run.
+//
+//     burxt build examples/build.bx -o star-build
+//     ./star-build Counter.sbmx counter            # a browser build
+//     ./star-build Page.sbmx page out --server     # the server's half
+//
+// **This was a shell script, and it should not have been.** Andre's objection was the right one:
+// a project whose argument is that a language can be strict enough to catch what a reviewer would
+// miss should not do its own work in a language that cannot. The script had two defects that Burxt
+// makes unwriteable — an unquoted `$exports` that word-split on purpose, and a `grep` whose failure
+// looked the same as a symbol that was genuinely absent.
+//
+// Three things happen here, and only the third is interesting:
+//
+//   1. the document becomes Burxt          `star_generate`, the same call the checker makes
+//   2. the Burxt becomes a wasm object     `burxt build --target wasm32-unknown-unknown`
+//   3. the object is linked                and WHICH ENTRY POINTS ARE EXPORTED is the decision
+//
+// **A reader cannot be expected to know the export list, because it depends on what the component
+// does.** One that fetches needs `arrived`; one that does not must NOT export it, because the symbol
+// does not exist. So the list is derived from the generated code — the one place that can see it.
+// The documentation used to spell the linker line out by hand and named two entry points that had
+// been renamed a milestone earlier: it would not have linked.
+use "std/os.bx";
+use "std/files.bx";
+use "std/string.bx";
+
+// A path as one shell word. **Single quotes rather than a check for spaces**, because "does this
+// need quoting" is the question that goes wrong: the shell script this replaces left `$exports`
+// unquoted deliberately and a path unquoted by accident, and the two look identical in a diff.
+pure function shell_quote(path: String) -> String allocates {
+    let mutable out: String = "'";
+    let mutable i: Int = 0;
+    while i < len(path) {
+        // A single quote inside single quotes: close it, escape it, reopen.
+        if byte_at(path, i) == 39 { out = out + "'\\''"; } else { out = out + substring(path, i, 1); }
+        i += 1;
+    }
+    return out + "'";
+}
+
+// Does the generated program define this function?
+//
+// Asked of the generated SOURCE rather than by running a tool: a `grep` that cannot start looks
+// exactly like a symbol that is genuinely absent, and those two want opposite responses.
+pure function defines(program: String, name: String) -> Bool {
+    return string_contains(program, "\nfunction " + name + "(")
+        || string_contains(program, "\npublic function " + name + "(");
+}
+
+if os_arg_count() < 3 {
+    print_error("usage: star-build <component.sbmx> <name> [outdir] [--server]");
+    exit(2);
+}
+
+let path: String = os_arg(1);
+let name: String = os_arg(2);
+let mutable out: String = ".";
+let mutable side: String = "client";
+if os_arg_count() > 3 {
+    let third: String = os_arg(3);
+    if third == "--server" { side = "server"; } else { out = third; }
+}
+if os_arg_count() > 4 && os_arg(4) == "--server" { side = "server"; }
+
+let bx: String = out + "/" + name + ".bx";
+let object: String = out + "/" + name + ".o";
+let module: String = out + "/" + name + ".wasm";
+
+let made: Int = os_run("mkdir -p " + shell_quote(out));
+if made != 0 { print_error("cannot make " + out); exit(2); }
+
+// **The generator is CALLED, not re-implemented.** The first version of this file built the program
+// out of `star_generate`'s pieces itself and produced a component missing its own `===bx` section —
+// two emitters, and the second one was wrong within an hour of being written. There is one emitter.
+let generator: String = os_env_or("STAR_GENERATE", "./star-generate");
+let generated: Int = os_run(shell_quote(generator) + " " + shell_quote(path) + " " + shell_quote(name)
+    + " > " + shell_quote(bx));
+if generated != 0 { exit(generated); }
+
+match file_read_maybe(bx) {
+    None => { print_error("the generator wrote nothing to " + bx); exit(2); }
+    Some(program) => {
+        let compiled: Int = os_run("burxt build " + shell_quote(bx)
+            + " --target wasm32-unknown-unknown -o " + shell_quote(object));
+        if compiled != 0 { exit(compiled); }
+
+        // **`serve` is not in a browser build's list, and that is the whole partition.** `serve`
+        // calls `load`, `load` reaches a database, and an export is a root the linker must keep — so
+        // exporting it from a browser build would keep the server's code, its strings and its
+        // imports in the module a visitor downloads.
+        let mutable exports: String = "--export=main --export=burxt.alloc --export=memory";
+        let mutable wanted: [String] = [];
+        let a: Int = push(wanted, "first");
+        let b: Int = push(wanted, "frame");
+        let c: Int = push(wanted, "arrived");
+        let d: Int = push(wanted, "watch");
+        if side == "server" { let e: Int = push(wanted, "serve"); }
+
+        let mutable i: Int = 0;
+        while i < len(wanted) {
+            if defines(program, name + "_" + wanted[i]) {
+                exports = exports + " --export=bx." + name + "_" + wanted[i];
+            }
+            i += 1;
+        }
+
+        // **`--gc-sections` is load-bearing rather than a size flag.** Without it nothing drops
+        // `load`, and the module still holds the database password — `examples/prove-partition.mjs`
+        // is the check that says so.
+        let linked: Int = os_run(star_linker() + " -flavor wasm --no-entry --allow-undefined"
+            + " --gc-sections " + exports
+            + " -z stack-size=1048576 --initial-memory=4194304 --max-memory=268435456 "
+            + shell_quote(object) + " -o " + shell_quote(module));
+        if linked != 0 { exit(linked); }
+
+        print(module);
+    }
+}
+
+// Where the wasm linker is. It ships with Rust, which is already installed because Burxt needs it —
+// so there is nothing to install for this, and saying so is worth a function.
+function star_linker() -> String touches commands, files, input {
+    let rustup: String = os_capture(
+        "ls " + os_env_or("HOME", "~") + "/.rustup/toolchains/*/lib/rustlib/*/bin/rust-lld 2>/dev/null | head -1");
+    let found: String = string_trim(rustup);
+    if len(found) > 0 { return shell_quote(found); }
+    return "wasm-ld";
+}

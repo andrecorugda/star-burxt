@@ -1,0 +1,92 @@
+// `code.js` colours a `.sbmx` snippet — checked, rather than eyeballed once.
+//
+//     node tools/paints.mjs
+//
+// **A highlighter that stops working fails silently.** The page still renders; the code is just grey
+// again, which is exactly the state this pair of files exists to end. Nothing in a build would
+// notice, so this does.
+//
+// `code.js` is an IIFE that paints the DOM, so there is nothing to import. It is loaded here with a
+// tiny stub of the two DOM calls it makes — which is the whole integration, and keeps the file
+// dependency-free for the site.
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const source = readFileSync(join(here, '..', 'docs', 'assets', 'code.js'), 'utf8');
+
+// One block per language, painted the way the site paints them.
+const blocks = [];
+const stub = {
+  readyState: 'complete',
+  querySelectorAll(selector) {
+    const m = /language-(\w+)/.exec(selector);
+    return blocks.filter((b) => b.language === m[1]);
+  },
+  addEventListener() {},
+};
+
+function paint(language, text) {
+  const block = { language, textContent: text, innerHTML: '', dataset: {} };
+  blocks.length = 0;
+  blocks.push(block);
+  // `code.js` closes over `document`; give it one.
+  new Function('document', source)(stub);
+  return block.innerHTML;
+}
+
+let failures = 0;
+const check = (name, ok, detail) => {
+  console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${name}`);
+  if (!ok) {
+    failures += 1;
+    if (detail) console.log('        ' + String(detail).slice(0, 300));
+  }
+};
+
+// ---- a `.sbmx` file is three languages, and the SEAM is what earns colour --------------------
+const component = [
+  '===bx',
+  'class Model { count: Int }',
+  '===',
+  '',
+  '===style.local',
+  '.card { color: red; }',
+  '===',
+  '',
+  '::: button on:click=Msg.Add',
+  '{{ to_string(model.count) }}',
+  ':::',
+].join('\n');
+
+const painted = paint('sbmx', component);
+
+check('the `===bx` seam is marked', painted.includes('t-section') && painted.includes('===bx'), painted);
+check('Burxt inside `===bx` is coloured as Burxt',
+      /t-keyword">class/.test(painted) && /t-type">Int/.test(painted), painted);
+check('CSS inside `===style.local` gets a selector and a property',
+      painted.includes('t-selector') && painted.includes('t-prop'), painted);
+check('the markup half still gets its fence and block name',
+      painted.includes('t-fence') && painted.includes('t-name'), painted);
+check('a slot in the markup is a slot', painted.includes('t-slot') || painted.includes('{{'), painted);
+
+// **The painter must not eat a line.** A section painter that dropped or added lines would push
+// every following line out of step with the code it colours, which is worse than no colour at all.
+check('painting preserves the line count',
+      painted.split('\n').length === component.split('\n').length,
+      `${painted.split('\n').length} vs ${component.split('\n').length}`);
+
+// ---- the other two languages still work ------------------------------------------------------
+check('`burxt` still paints', /t-keyword">function/.test(paint('burxt', 'function f() { }')));
+check('`bmx` still paints', paint('bmx', '::: p\nhi\n:::').includes('t-fence'));
+
+// ---- and prose in a snippet cannot be turned into markup -------------------------------------
+//
+// The section scan keys on a `===name` at the START of a line; a paragraph that mentions
+// `===style.local` mid-sentence is a paragraph.
+const prose = paint('sbmx', 'Use ===style.local for this.\n');
+check('a section name mid-sentence is not a section', !prose.includes('t-section'), prose);
+
+console.log(failures ? `\n${failures} failure(s)` : '\nthe highlighter paints all three languages');
+process.exit(failures ? 1 : 0);

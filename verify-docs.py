@@ -38,10 +38,17 @@ def examples():
             # fence of a tagged block, and then hands prose to the generator as if it were an
             # example. That happened, and the report blamed a paragraph.
             for m in re.finditer(r"^```(\w*)\n(.*?)^```", text, re.S | re.M):
-                if m.group(1):
+                # `sbmx` is what a star document IS, so a tagged example is still an example — the
+                # tag is what earns it syntax colour on the site. Every OTHER tag (`sh`, `html`,
+                # `error`) is not a document and must not reach the generator.
+                if m.group(1) and m.group(1) != "sbmx":
                     continue
                 body = m.group(2)
-                if ":::" not in body and "{{" not in body:
+                # A `===` section counts only at the start of a line. A refusal message
+                # that MENTIONS `===style.local` mid-sentence is prose, and feeding prose to
+                # the generator produces a report that blames a paragraph.
+                has_section = re.search(r"^===\w", body, re.M) is not None
+                if ":::" not in body and "{{" not in body and not has_section:
                     continue
                 yield (os.path.relpath(path, ROOT), text[:m.start()].count("\n") + 1, body)
 
@@ -73,16 +80,38 @@ def main():
     open(os.path.join(work, "Badge.sbmx"), "w").write(
         "::: props amount: Int, tone: String\n:::\n\n"
         "::: span class=badge\n{{ tone }}: {{ to_string(amount) }}\n:::\n")
-    wrong, checked, refuted = [], 0, 0
+    wrong, checked, refuted, typechecked = [], 0, 0, [0]
 
     for path, line, body in examples():
-        source = body if "::: props" in body else PREAMBLE + body
+        if "::: props" in body:
+            source = body
+        elif "===bx" in body:
+            # A component-mode fragment gets the props its OWN declarations imply. The general
+            # preamble names types no page declares (`lines: [Line]`), which is fine for a structure
+            # check and is not a program — and these blocks go to the compiler.
+            source = body + "\n::: props model: Model\n:::\n"
+        else:
+            source = PREAMBLE + body
         # A fragment that calls a component needs the import too — the surrounding page has it and
         # the excerpt does not, which is what makes it a fragment.
         if "::: Badge" in source and "use \"./Badge.sbmx\"" not in source:
             source = ("===bx\nuse \"./Badge.sbmx\";\n"
                       "pure function update(msg: Int, m: Int) -> Int { return m; }\n===\n\n"
                       + source)
+        # A `===bx` section shown to teach ONE thing — an import, a style, an effect — is a fragment
+        # too, and STAR-E008 is right to want an `update` in a real file. Supply the missing half
+        # rather than making every excerpt carry it.
+        if "===bx" in source and "function update" not in source:
+            # The injected `update` has to agree with what the fragment DECLARED: a block that
+            # defines a `Model` gets an update over that Model, or the generated dispatch names a
+            # type the example never wrote.
+            # The generated driver names the message type `Msg` and the state `Model`, so a
+            # fragment that shows one framework function still needs both to exist.
+            head = "" if "enum Msg" in source else "enum Msg { Nothing }\n"
+            head += "" if "class Model" in source else "class Model { count: Int }\n"
+            source = source.replace(
+                "===bx\n",
+                "===bx\n" + head + "pure function update(msg: Msg, m: Model) -> Model { return m; }\n", 1)
         open(doc, "w").write(source)
         out = subprocess.run([GEN, doc, "c"], capture_output=True, text=True, cwd=ROOT)
         said = (out.stderr or out.stdout).strip()
@@ -99,13 +128,30 @@ def main():
             wrong.append("%s:%d is refused:\n      %s\n%s"
                          % (path, line, said.splitlines()[0][:110],
                             "".join("      | " + l + "\n" for l in body.strip().splitlines())))
+            continue
+
+        # **Generation checks structure; it cannot check a NAME.** An example calling
+        # `command_get(...)` generates perfectly and does not exist — which is how chapter 7 was
+        # first written, and how chapter 6 shipped a linker line naming two functions that had been
+        # renamed. So a component-mode example goes to the real compiler.
+        if re.search(r"^===bx", body, re.M):
+            typechecked[0] += 1
+            bx = os.path.join(work, "c.bx")
+            open(bx, "w").write(out.stdout)
+            chk = subprocess.run(["burxt", "check", bx], capture_output=True, text=True, cwd=work)
+            if chk.returncode != 0:
+                first = ((chk.stderr or chk.stdout).strip().splitlines() or ["no output"])[0]
+                wrong.append("%s:%d generates but does not compile:\n      %s\n%s"
+                             % (path, line, first[:130],
+                                "".join("      | " + l + "\n" for l in body.strip().splitlines())))
 
     if wrong:
         print("%d problem(s) in %d examples:\n" % (len(wrong), checked + refuted))
         for w in wrong:
             print("  " + w + "\n")
         return 1
-    print("%d examples generate, %d are refused exactly as their page promises" % (checked, refuted))
+    print("%d examples generate (%d of them typecheck), %d are refused exactly as their page promises"
+          % (checked, typechecked[0], refuted))
     return 0
 
 

@@ -11,11 +11,12 @@ description: "Write a document, turn it into a component, see what it made."
 
 By the end of this page you will have a greeting on a screen, made from a document you wrote.
 
-## Write the document
+## Write the component
 
-Make a file called `hello.bmx`:
+Make a file called `hello.sbmx`. **The extension matters**: a `.bmx` is a document any tool can
+render, and a `.sbmx` is a component that needs star — so the name says which.
 
-```
+```sbmx
 ::: props name: String
 :::
 
@@ -37,7 +38,7 @@ document starts with one of these — it is how the component gets anything to b
 ## Turn it into a component
 
 ```sh
-./star-generate hello.bmx hello > hello.bx
+./star-generate hello.sbmx hello > hello.bx
 ```
 
 Open `hello.bx`:
@@ -77,7 +78,7 @@ sure whether something works, write it and look.
 
 Drop the `::: props` block and you are told:
 
-```
+```sbmx
 this document declares no `props` block, so it has no signature and nothing
 can invoke it. Add `::: props name: Type`
 ```
@@ -87,10 +88,19 @@ If a piece of your page really is fixed text, write it as fixed text.
 
 ## What you have
 
-- a document is a component
+- a `.sbmx` file is a component
 - `::: props` says what it is given, and comes first
 - `{{ }}` puts a value in the page
 - a mistake in a `{{ }}` is caught before the page exists
+
+**One command checks all of it**, and you will use it more than the generator:
+
+```sh
+./star-check hello.sbmx
+```
+
+It reports three kinds of problem — a malformed document, something that is not a component, and a
+type error in your own code — and stops at the first.
 
 **[Chapter 2: Showing your data →](02-showing-your-data.html)**
 

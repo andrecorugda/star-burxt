@@ -1,0 +1,298 @@
+===bx
+use "std/string.bx";
+use "std/json.bx";
+
+class Task  { id: Int, label: String, done: Bool }
+class Model { tasks: [Task], draft: String, view: String, next_id: Int }
+
+enum Msg { Toggle(Int), Add, Draft(String), Show(String), Clear }
+
+pure function toggled(tasks: [Task], id: Int) -> [Task] allocates {
+    let mutable out: [Task] = [];
+    let mutable i: Int = 0;
+    while i < len(tasks) {
+        let t: Task = tasks[i];
+        if t.id == id {
+            let a: Int = push(out, Task { id: t.id, label: t.label, done: !t.done });
+        } else {
+            let b: Int = push(out, t);
+        }
+        i += 1;
+    }
+    return out;
+}
+
+pure function kept(tasks: [Task], done: Bool) -> [Task] allocates {
+    let mutable out: [Task] = [];
+    let mutable i: Int = 0;
+    while i < len(tasks) {
+        if tasks[i].done == done { let a: Int = push(out, tasks[i]); }
+        i += 1;
+    }
+    return out;
+}
+
+pure function open_count(tasks: [Task]) -> Int {
+    let mutable n: Int = 0;
+    let mutable i: Int = 0;
+    while i < len(tasks) {
+        if !tasks[i].done { n += 1; }
+        i += 1;
+    }
+    return n;
+}
+
+// A class name is a value, so a state can choose one. There is no `class:done={...}` directive
+// because there does not need to be — the class attribute takes an expression like any other.
+pure function pick_class(done: Bool) -> String {
+    if done { return "pick did"; }
+    return "pick";
+}
+
+// Which rows this state shows. A view asks for it; it does not decide it.
+pure function shown(m: Model) -> [Task] allocates {
+    if m.view == "open" { return kept(m.tasks, false); }
+    if m.view == "done" { return kept(m.tasks, true); }
+    return m.tasks;
+}
+
+pure function update(msg: Msg, m: Model) -> Model allocates {
+    match msg {
+        Toggle(id) => {
+            return Model { tasks: toggled(m.tasks, id), draft: m.draft, view: m.view, next_id: m.next_id };
+        }
+        Draft(text) => {
+            return Model { tasks: m.tasks, draft: text + "", view: m.view, next_id: m.next_id };
+        }
+        Show(which) => {
+            return Model { tasks: m.tasks, draft: m.draft, view: which + "", next_id: m.next_id };
+        }
+        Clear => {
+            return Model { tasks: kept(m.tasks, false), draft: m.draft, view: m.view, next_id: m.next_id };
+        }
+        Add => {
+            if len(m.draft) == 0 { return m; }
+            let mutable out: [Task] = [];
+            let mutable i: Int = 0;
+            while i < len(m.tasks) { let k: Int = push(out, m.tasks[i]); i += 1; }
+            let n: Int = push(out, Task { id: m.next_id, label: m.draft + "", done: false });
+            return Model { tasks: out, draft: "", view: m.view, next_id: m.next_id + 1 };
+        }
+    }
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable rows: [Json] = [];
+    let mutable i: Int = 0;
+    while i < len(m.tasks) {
+        let mutable f: [Field] = [];
+        let a: Int = push(f, json_field("id", json_int(m.tasks[i].id)));
+        let b: Int = push(f, json_field("label", json_text(m.tasks[i].label)));
+        let c: Int = push(f, json_field("done", json_truth(m.tasks[i].done)));
+        let r: Int = push(rows, json_object(f));
+        i += 1;
+    }
+    let mutable top: [Field] = [];
+    let d: Int = push(top, json_field("tasks", json_list(rows)));
+    let e: Int = push(top, json_field("draft", json_text(m.draft)));
+    let g: Int = push(top, json_field("view", json_text(m.view)));
+    let h: Int = push(top, json_field("next_id", json_int(m.next_id)));
+    return json_render(json_object(top));
+}
+
+// `+ ""` on every String pulled out of a `match` — see Todos.sbmx for why it is load-bearing.
+function from_text(text: String) -> Model allocates {
+    let mutable out: [Task] = [];
+    let mutable draft: String = "";
+    let mutable view: String = "all";
+    let mutable most: Int = 1;
+    match json_parse(text) {
+        Error(e) => { return Model { tasks: out, draft: draft, view: view, next_id: 1 }; }
+        Ok(value) => {
+            match json_at(value, "draft") {
+                None => { }
+                Some(v) => { match json_as_text(v) { None => { } Some(t) => { draft = t + ""; } } }
+            }
+            match json_at(value, "view") {
+                None => { }
+                Some(v) => { match json_as_text(v) { None => { } Some(t) => { view = t + ""; } } }
+            }
+            match json_at(value, "tasks") {
+                None => { }
+                Some(list) => {
+                    match list {
+                        Null => { }
+                        Truth(b) => { }
+                        Number(n) => { }
+                        Text(t) => { }
+                        Object(f) => { }
+                        List(rows) => {
+                            let mutable i: Int = 0;
+                            while i < len(rows) {
+                                let row: Json = rows[i];
+                                let mutable id: Int = 0;
+                                let mutable label: String = "";
+                                let mutable done: Bool = false;
+                                match json_at(row, "id") {
+                                    None => { }
+                                    Some(v) => { match json_as_int(v) { None => { } Some(n) => { id = n; } } }
+                                }
+                                match json_at(row, "label") {
+                                    None => { }
+                                    Some(v) => { match json_as_text(v) { None => { } Some(t) => { label = t + ""; } } }
+                                }
+                                match json_at(row, "done") {
+                                    None => { }
+                                    Some(v) => { match json_as_truth(v) { None => { } Some(b) => { done = b; } } }
+                                }
+                                let k: Int = push(out, Task { id: id, label: label, done: done });
+                                if id >= most { most = id + 1; }
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return Model { tasks: out, draft: draft, view: view, next_id: most };
+}
+===
+
+===style.local
+.card {
+  max-width: 30rem; margin: 2.5rem auto; padding: 0;
+  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #1f2430; background: #fff;
+  border: 1px solid #e6e8ee; border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(24,31,50,.07);
+  overflow: hidden;
+}
+.top { padding: 1.15rem 1.3rem .9rem; border-bottom: 1px solid #f0f2f6; }
+.top h1 { margin: 0; font-size: 1.15rem; letter-spacing: -.01em; }
+.top p { margin: .3rem 0 0; color: #6b7280; font-size: .875rem; }
+.count { color: #d9531e; font-weight: 600; margin-right: .3rem; }
+
+.row-add { display: flex; gap: .5rem; padding: .9rem 1.3rem; }
+.row-add input {
+  flex: 1; padding: .55rem .7rem; font: inherit; color: inherit;
+  border: 1px solid #dfe3ea; border-radius: 8px; background: #fbfcfe;
+}
+.row-add input:focus { outline: 2px solid #f4b183; outline-offset: 0; border-color: #d9531e; }
+.add {
+  padding: .55rem .95rem; font: inherit; font-weight: 600; color: #fff;
+  background: #d9531e; border: 0; border-radius: 8px; cursor: pointer;
+}
+.add:hover { background: #c2471a; }
+
+.tabs { display: flex; gap: .35rem; padding: 0 1.3rem .9rem; }
+.tab {
+  padding: .3rem .7rem; font: inherit; font-size: .82rem; color: #4b5563;
+  background: #f4f6fa; border: 0; border-radius: 999px; cursor: pointer;
+}
+.tab:hover { background: #e9edf4; }
+.tab.on { background: #1f2430; color: #fff; }
+
+.list { list-style: none; margin: 0; padding: 0; border-top: 1px solid #f0f2f6; }
+.item { display: flex; align-items: center; gap: .7rem; padding: .1rem 1.3rem; border-bottom: 1px solid #f6f7fa; }
+.pick {
+  flex: 1; display: flex; align-items: center; gap: .65rem;
+  padding: .7rem 0; font: inherit; color: inherit; text-align: left;
+  background: none; border: 0; cursor: pointer;
+}
+.box {
+  width: 1.05rem; height: 1.05rem; flex: none;
+  border: 1.5px solid #cbd2dd; border-radius: 5px;
+}
+.pick.did .box { background: #d9531e; border-color: #d9531e; }
+.pick.did .text { color: #9aa1ad; text-decoration: line-through; }
+
+.foot { display: flex; justify-content: space-between; align-items: center;
+        padding: .8rem 1.3rem; color: #8b919d; font-size: .8rem; }
+.clear { font: inherit; font-size: .8rem; color: #d9531e; background: none;
+         border: 0; padding: 0; cursor: pointer; }
+.clear:hover { text-decoration: underline; }
+.empty { padding: 1.6rem 1.3rem; color: #9aa1ad; text-align: center; border-bottom: 1px solid #f6f7fa; }
+===
+
+::: props model: Model
+:::
+
+::: section class=card
+
+::: div class=top
+
+# Today
+
+::: p
+::: span class=count
+{{ to_string(open_count(model.tasks)) }} open
+:::
+of {{ to_string(len(model.tasks)) }} — written as a document, compiled to WebAssembly
+:::
+
+:::
+
+::: div class=row-add
+
+::: input value={{ model.draft }} placeholder="What needs doing?" on:input=Msg.Draft(value)
+:::
+
+::: button class=add on:click=Msg.Add
+Add
+:::
+
+:::
+
+::: div class=tabs
+
+::: button class=tab on:click=Msg.Show("all")
+All
+:::
+
+::: button class=tab on:click=Msg.Show("open")
+Open
+:::
+
+::: button class=tab on:click=Msg.Show("done")
+Done
+:::
+
+:::
+
+::: ul class=list
+
+::: for task in shown(model) key to_string(task.id)
+
+::: li class=item
+
+::: button class={{ pick_class(task.done) }} on:click=Msg.Toggle(string_to_int(key, 0))
+
+::: span class=box
+:::
+
+::: span class=text
+{{ task.label }}
+:::
+
+:::
+
+:::
+
+:::
+
+:::
+
+::: div class=foot
+
+::: span
+{{ to_string(open_count(model.tasks)) }} left
+:::
+
+::: button class=clear on:click=Msg.Clear
+Clear done
+:::
+
+:::
+
+:::

@@ -19,7 +19,7 @@ reaching a user on a screen.
 
 A slot or a handler names something that is not there.
 
-```
+```sbmx
 Hello {{ nmae }}
 ```
 
@@ -31,7 +31,7 @@ Hello {{ nmae }}
 
 You mixed a number and text.
 
-```
+```sbmx
 ::: button on:click=count + "one"
 increment
 :::
@@ -45,7 +45,7 @@ increment
 
 You multiplied money and did not say how to round.
 
-```
+```sbmx
 ::: button on:click=total * 1.5
 apply surcharge
 :::
@@ -60,7 +60,7 @@ apply surcharge
 
 You used a block name that is not an element.
 
-```
+```sbmx
 ::: mystery
 :::
 ```
@@ -78,7 +78,7 @@ Plus `props`, `for` and `if`, which are not elements.
 
 **There is no `hover` event.** Hovering is CSS, not something that happens once:
 
-```
+```sbmx
 ===style.local
 .card:hover { border-color: #333; }
 ===
@@ -107,7 +107,7 @@ stare at the screen wondering what you got wrong.
 
 Some elements hold nothing.
 
-```
+```sbmx
 ::: input on:input=name
 type here
 :::
@@ -122,7 +122,7 @@ type here
 
 You put a block-level thing inside a text-level element.
 
-```
+```sbmx
 ::: button on:click=go
 # Click me
 :::
@@ -138,7 +138,7 @@ unpredictably.
 
 ## "`key` belongs on a `for`, not on an `if`"
 
-```
+```sbmx
 ::: if ready key thing.id
 
 ::: p
@@ -155,7 +155,7 @@ apart.
 
 ## "an `on:` handler inside a `for` is not supported yet"
 
-```
+```sbmx
 ::: for line in lines key line.id
 ::: button on:click=line.id
 remove

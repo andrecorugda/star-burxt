@@ -11,6 +11,11 @@
      same site. Unused rules (the version picker, the search panel, the mascot) cost nothing and
      keep the diff against upstream readable when it is updated. -->
 <link rel="stylesheet" href="{{ site.baseurl }}/assets/site.css">
+<!-- Syntax colour for `burxt`, `bmx`, `sbmx` and `css` blocks. Rouge knows none of them, so every
+     snippet on this site was grey text beside somebody else's language in colour. This pair comes
+     from the BMX site unchanged apart from the `sbmx` painter, so a keyword looks the same on all
+     three sites — and the same as in the editor grammars, which is where the classes come from. -->
+<link rel="stylesheet" href="{{ site.baseurl }}/assets/code.css">
 <link rel="stylesheet" href="{{ site.baseurl }}/assets/star.css">
 {%- if site.has_branding %}
 <link rel="icon" href="{{ site.baseurl }}/assets/favicon.ico">
@@ -96,6 +101,7 @@
         <li class="topic"><a href="{{ site.baseurl }}/guide/04-lists-and-choices.html"{% if page.title == "Lists and choices" %} class="here" aria-current="page"{% endif %}><span>4. Lists and choices</span></a></li>
         <li class="topic"><a href="{{ site.baseurl }}/guide/05-money.html"{% if page.title == "Money" %} class="here" aria-current="page"{% endif %}><span>5. Money</span></a></li>
         <li class="topic"><a href="{{ site.baseurl }}/guide/06-putting-it-on-a-page.html"{% if page.title == "Putting it on a page" %} class="here" aria-current="page"{% endif %}><span>6. Putting it on a page</span></a></li>
+        <li class="topic"><a href="{{ site.baseurl }}/guide/07-a-real-application.html"{% if page.title == "A real application" %} class="here" aria-current="page"{% endif %}><span>7. A real application</span></a></li>
       </ul>
     </div>
 
@@ -142,5 +148,6 @@
 <div class="scrim" data-close hidden></div>
 
 <script src="{{ site.baseurl }}/assets/site.js" defer></script>
+<script src="{{ site.baseurl }}/assets/code.js" defer></script>
 </body>
 </html>

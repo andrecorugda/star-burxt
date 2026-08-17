@@ -8,12 +8,12 @@ description: "Write a page in Markdown. Get a real front-end app. star-burxt tur
 
 # Build a front end by writing a document
 
-star-burxt turns a `.bmx` document into a working component — one that renders, responds to clicks,
-and remembers what happened.
+star-burxt turns a `.sbmx` file into a working component — one that renders, responds to clicks,
+holds state, fetches, and routes.
 
-You write this:
+A component is markup, and the logic that goes with it, in one file:
 
-```
+```sbmx
 ::: props count: Int
 :::
 
@@ -36,18 +36,59 @@ You get this:
 
 No build config. No component library. No JavaScript to write. **The document *is* the component.**
 
-## What a document can do
+{% endraw %}
+{% include showcase.html %}
+{% raw %}
+
+For anything past a counter, a component has two halves — the markup, and a `===bx` section holding
+your own Burxt:
+
+````
+===bx
+class Item  { id: Int, name: String }
+class Model { count: Int, items: [Item] }
+enum Msg { Increment, Reset }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Increment => { return Model { count: m.count + 1, items: m.items }; }
+        Reset     => { return Model { count: 0, items: m.items }; }
+    }
+}
+===
+
+::: props model: Model
+:::
+
+# Counter
+
+The count is {{ to_string(model.count) }}.
+
+::: button on:click=Msg.Increment
+increment
+:::
+````
+
+`on:click=Msg.Increment` names a **message**, and your `update` decides what it does. That's one
+function you can read, test, and diff — not a closure that re-runs.
+
+## What a component can do
 
 | You write | You get |
 |---|---|
 | `# Heading` and paragraphs | headings and paragraphs, as in any Markdown |
 | `{{ total }}` | your data, in the page |
-| `::: props name: String` | what the component is given |
-| `::: button on:click=count + 1` | a button that changes what is shown |
-| `::: for item in items` | a row per item |
-| `::: if ready` | a section that appears when it should |
+| `::: props model: Model` | what the component is given |
+| `::: button on:click=Msg.Add` | a button, and your `update` decides what it does |
+| `::: for item in items key item.id` | a row per item, each with its own buttons |
+| `::: match model.route` | a screen per route — **forget one and the build fails** |
+| `::: if ready` / `::: else` | a section that appears when it should |
+| `::: Badge amount={{ n }}` | another component, imported with `use` |
+| `===style.local` | CSS scoped to this component, with no default |
+| `commands` and `watch` | fetching, timers, websockets — without `await` |
+| `load` | server rendering, and server code that **cannot** reach the browser |
 
-That is the whole idea. If you can write a document, you can write a screen.
+That is the whole idea. If you can write a document, you can write an app.
 
 ## Start with the tour
 
@@ -65,7 +106,7 @@ it is wrong you find out when a user finds out. Here, a click is checked before 
 
 Misspell something:
 
-```
+```sbmx
 The total is {{ toatl }}
 ```
 
@@ -75,7 +116,7 @@ unknown variable: toatl
 
 Try to add a word to a number:
 
-```
+```sbmx
 ::: button on:click=count + "one"
 increment
 :::
@@ -87,7 +128,7 @@ cannot apply `+` to Int and String
 
 Round money without saying how:
 
-```
+```sbmx
 ::: button on:click=total * 1.5
 apply surcharge
 :::

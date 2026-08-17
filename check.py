@@ -27,6 +27,11 @@ FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 # to appear outside a raw block, because they are what opens and closes one.
 DELIM = re.compile(r"\{\{|\{%")
 RAW_TAG = re.compile(r"\{%-?\s*(end)?raw\s*-?%\}")
+# **Liquid this site MEANS to use.** The guard exists for delimiters that arrive by accident — slot
+# syntax in prose, `{{ total }}` in an example — and a page that includes a partial or asks for
+# `site.baseurl` is using Liquid on purpose. Narrow and explicit rather than a general escape: any
+# delimiter that is not one of these is still an error, which is the whole value of the check.
+INTENDED = re.compile(r"\{%-?\s*include\s+[\w./-]+\s*-?%\}|\{\{\s*site\.[\w.]+\s*\}\}")
 
 
 def pages():
@@ -48,7 +53,7 @@ def unprotected(text):
             in_raw = tag.group(1) is None
         if in_raw:
             continue
-        stripped = RAW_TAG.sub("", line)
+        stripped = INTENDED.sub("", RAW_TAG.sub("", line))
         if DELIM.search(stripped):
             found.append((n, line.strip()))
     return found
