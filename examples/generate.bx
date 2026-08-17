@@ -65,6 +65,10 @@ match file_read_maybe(path) {
                                     + star_imports_of(built.code) + "\n"
                                     + star_code_without_imports(built.code)
                                     + built.view + built.dispatch);
+                                if len(bmx_strip_end(built.style)) > 0 {
+                                    let styled: Int = file_write(
+                                        star_without_extension(child_path) + ".css", built.style);
+                                }
                                 let noted: Int = push(known, StarKnown {
                                     name: child_name, props: built.props,
                                 });
@@ -78,6 +82,19 @@ match file_read_maybe(path) {
         match star_generate(source, name, known) {
             Error(message) => { print_error(message); exit(1); }
             Ok(component) => {
+                // The page's stylesheet: its own rules, and an `@import` per component it
+                // uses, so one <link> loads the tree. Written beside the source like everything
+                // else, because a relative `@import` has to mean what its author meant.
+                let mutable sheet: String = "";
+                let mutable si: Int = 0;
+                while si < len(known) {
+                    sheet = sheet + "@import \"./" + known[si].name + ".css\";\n";
+                    si += 1;
+                }
+                sheet = sheet + component.style;
+                if len(bmx_strip_end(sheet)) > 0 {
+                    let wrote_css: Int = file_write(star_without_extension(path) + ".css", sheet);
+                }
                 print("// GENERATED from " + path + " by star-burxt. Do not edit.");
                 print("//");
                 print("// The view and the dispatch are both `pure`, so `burxt effects --allow \"\"`");

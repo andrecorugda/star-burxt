@@ -103,6 +103,10 @@ public class StarComponent {
     // The `===bx` section, verbatim. Empty when the document has none — which is also the switch
     // between the two modes below, so a reader can tell which one a file is in by looking at it.
     code: String,
+    // `===style.global` as written, plus `===style.local` with every selector scoped to this
+    // component. One sheet, because the page loads one file per component and the difference
+    // between the two sections is spent by the time it is written.
+    style: String,
     // The declaration verbatim (`count: Int`) and the names alone (`count`), so the
     // emitted entry point can both DECLARE and PASS the props without the caller
     // re-deriving either.
@@ -428,7 +432,7 @@ pure function star_head_without_key(head: String) -> String {
 // diagnostic, which is the kind of remedy that quietly damages the thing it is fixing the moment a
 // message legitimately contains those characters. One parameter through four call sites is cheaper
 // and cannot be wrong.
-function star_emit_stmts(source: String, known: [StarKnown], blocks: [Block], target: String, tag: String, indent: String,
+function star_emit_stmts(source: String, known: [StarKnown], marker: String, blocks: [Block], target: String, tag: String, indent: String,
                          mutable handlers: [StarHandler], key_here: String,
                          in_loop: Bool) -> Result<String, String> {
     let mutable out: String = "";
@@ -477,7 +481,7 @@ function star_emit_stmts(source: String, known: [StarKnown], blocks: [Block], ta
                                     return Result.Error("STAR-E012 at " + star_at(source, arm.offset)
                                         + ": a `case` needs a pattern — `::: case Post(id)`");
                                 }
-                                match star_emit_stmts(source, known, arm.children, target,
+                                match star_emit_stmts(source, known, marker, arm.children, target,
                                                       tag + "_" + to_string(i) + "_" + to_string(c),
                                                       indent + "        ", handlers, key_here, in_loop) {
                                     Error(e) => { return Result.Error(e); }
@@ -555,7 +559,7 @@ function star_emit_stmts(source: String, known: [StarKnown], blocks: [Block], ta
                         None => { }
                         Some(expr) => { keyed = expr; }
                     }
-                    match star_emit_stmts(source, known, fenced.children, target, tag + "_" + to_string(i),
+                    match star_emit_stmts(source, known, marker, fenced.children, target, tag + "_" + to_string(i),
                                           indent + "    ", handlers, keyed,
                                           in_loop || fenced.name == "for") {
                         Error(e) => { return Result.Error(e); }
@@ -579,7 +583,7 @@ function star_emit_stmts(source: String, known: [StarKnown], blocks: [Block], ta
                                             + " branch of the `if` above it. Write a second `if`"
                                             + " if you meant a different question");
                                     }
-                                    match star_emit_stmts(source, known, next.children, target,
+                                    match star_emit_stmts(source, known, marker, next.children, target,
                                                           tag + "_" + to_string(i) + "e",
                                                           indent + "    ", handlers, keyed, in_loop) {
                                         Error(e) => { return Result.Error(e); }
@@ -656,6 +660,11 @@ function star_emit_stmts(source: String, known: [StarKnown], blocks: [Block], ta
                 if len(key_here) > 0 {
                     key_attr = "html_attr(\"data-star-key\", " + key_here + ")";
                 }
+                // The scoping marker, on every element THIS component emits. A child component's
+                // elements carry the CHILD's marker, which is what stops a parent's `local` rules
+                // reaching into it.
+                let mut_marker: String = marker;
+                let mark_attr: String = star_marker_attr(mut_marker);
                 // What is left of the head once `on:` and `key` are off it is attributes.
                 let bare_head: String = star_head_without_key(star_head_without_event(fenced.head));
                 let mutable written: String = "";
@@ -704,7 +713,8 @@ function star_emit_stmts(source: String, known: [StarKnown], blocks: [Block], ta
                             expression: star_event_expression(part),
                         });
                         attrs = "[html_attr(\"data-star-h\", \"" + to_string(index) + "\")"
-                            + star_joined(key_attr) + star_joined(written) + "]";
+                            + star_joined(key_attr) + star_joined(written)
+                            + star_joined(mark_attr) + "]";
                     }
                 }
                 // **An element that takes phrasing content unwraps its paragraphs**, and
@@ -764,7 +774,7 @@ function star_emit_stmts(source: String, known: [StarKnown], blocks: [Block], ta
                         }
                         c += 1;
                     }
-                    if attrs == "[]" { attrs = star_attr_list(key_attr, written); }
+                    if attrs == "[]" { attrs = star_attr_list(key_attr, star_two(written, mark_attr)); }
                     out = out + indent + "let " + label + ": Int = push(" + target
                         + ", html_element(\"" + fenced.name + "\", " + attrs
                         + ", [" + phrasing + "]));\n";
@@ -792,11 +802,11 @@ function star_emit_stmts(source: String, known: [StarKnown], blocks: [Block], ta
                         Fenced(f) => { }
                     }
                 }
-                match star_emit_stmts(source, known, fenced.children, inner, tag + "_" + to_string(i),
+                match star_emit_stmts(source, known, marker, fenced.children, inner, tag + "_" + to_string(i),
                                       indent, handlers, "", in_loop) {
                     Error(e) => { return Result.Error(e); }
                     Ok(body) => {
-                        if attrs == "[]" { attrs = star_attr_list(key_attr, written); }
+                        if attrs == "[]" { attrs = star_attr_list(key_attr, star_two(written, mark_attr)); }
                         out = out + indent + "let mutable " + inner + ": [Html] = [];\n" + body;
                         out = out + indent + "let " + label + ": Int = push(" + target
                             + ", html_element(\"" + fenced.name + "\", " + attrs
@@ -1011,6 +1021,111 @@ public function star_burxt_imports(code: String) -> String {
     return out;
 }
 
+// ---- styles ----------------------------------------------------------------------------------
+//
+//     ===style.local     scoped to this component
+//     ===style.global    exactly as written
+//
+// **There is no default, and that is the design.** Vue's `<style>` is global unless you remember
+// `scoped`; Apex is the same shape. Here neither spelling is shorter, so neither is the lazy
+// choice — the same rule as `Decimal<2>` refusing to round until you say how. **The dangerous
+// option does not get to be the short one.**
+//
+// Scoping stamps `data-s-<name>` on every element THIS component emits and appends the matching
+// attribute to every selector. `.card` becomes `.card[data-s-page]`.
+//
+// A descendant selector — `[data-s-page] .card` — would have been three lines shorter and would
+// leak into child components, because a child's elements sit inside this one's subtree. Exact
+// matching cannot: a child's elements carry the CHILD's marker, so a parent's `.card` rule stops
+// at the boundary. That is what `local` has to mean to be worth writing.
+
+// Every selector in the sheet, with the marker appended. Declarations are untouched.
+pure function star_scoped_css(css: String, marker: String) -> String {
+    let mutable out: String = "";
+    let mutable selector: String = "";
+    let mutable depth: Int = 0;
+    let mutable i: Int = 0;
+    while i < len(css) {
+        let b: Int = byte_at(css, i);
+        if depth == 0 && b == 123 {
+            let head: String = star_trim(selector);
+            // **An at-rule with a block holds RULES, and those are what need scoping.** `@media`
+            // is not a selector; stamping it produces `@media (max-width: 600px)[data-s-x]`, which
+            // is not CSS. Its body is scoped by walking it, so the rules inside get the marker and
+            // the at-rule itself does not.
+            if len(head) > 0 && byte_at(head, 0) == 64 {
+                let close: Int = star_matching_brace(css, i);
+                out = out + head + " \{" + star_scoped_css(substring(css, i + 1, close - i - 1), marker)
+                    + "\}";
+                selector = "";
+                i = close;
+            } else {
+                out = out + star_scoped_selector(selector, marker) + " \{";
+                selector = "";
+                depth += 1;
+            }
+        } else {
+            if depth > 0 {
+                out = out + byte_as_string(b);
+                if b == 123 { depth += 1; }
+                if b == 125 { depth -= 1; }
+            } else {
+                selector = selector + byte_as_string(b);
+            }
+        }
+        i += 1;
+    }
+    // Whatever is left was never a rule — an `@import`, a comment, trailing space. It goes through
+    // unchanged rather than being dropped, because a stylesheet star silently shortened would be
+    // very hard to debug from the page.
+    return out + selector;
+}
+
+// The index of the `\}` closing the `\{` at `from`.
+pure function star_matching_brace(css: String, from: Int) -> Int {
+    let mutable depth: Int = 0;
+    let mutable i: Int = from;
+    while i < len(css) {
+        if byte_at(css, i) == 123 { depth += 1; }
+        if byte_at(css, i) == 125 {
+            depth -= 1;
+            if depth == 0 {
+                return i;
+            }
+        }
+        i += 1;
+    }
+    return len(css) - 1;
+}
+
+// `.card, .note p` -> `.card[data-s-x], .note p[data-s-x]`. Appended to the END of each
+// comma-separated selector, which is the element the rule actually styles.
+pure function star_scoped_selector(selector: String, marker: String) -> String {
+    let mutable out: String = "";
+    let mutable one: String = "";
+    let mutable i: Int = 0;
+    while i <= len(selector) {
+        if i == len(selector) || byte_at(selector, i) == 44 {
+            let trimmed: String = star_trim(one);
+            if len(trimmed) > 0 {
+                if len(out) > 0 { out = out + ", "; }
+                // An at-rule — `@media (...)` — is not a selector and must not be stamped. Its
+                // BODY holds rules, and those are scoped when the walk reaches them.
+                if byte_at(trimmed, 0) == 64 {
+                    out = out + trimmed;
+                } else {
+                    out = out + trimmed + "[data-s-" + marker + "]";
+                }
+            }
+            one = "";
+        } else {
+            one = one + byte_as_string(byte_at(selector, i));
+        }
+        i += 1;
+    }
+    return out;
+}
+
 // ---- components ------------------------------------------------------------------------------
 //
 // `::: Badge value={{ model.count }}` is a call. The component is another `.sbmx`, imported with
@@ -1162,6 +1277,20 @@ pure function star_joined(term: String) -> String {
     return ", " + term;
 }
 
+pure function star_marker_attr(marker: String) -> String {
+    if len(marker) == 0 {
+        return "";
+    }
+    return "html_attr(\"data-s-" + marker + "\", \"\")";
+}
+
+pure function star_two(a: String, b: String) -> String {
+    if len(a) == 0 {
+        return b;
+    }
+    return a + star_joined(b);
+}
+
 pure function star_attr_list(key_attr: String, written: String) -> String {
     let mutable inner: String = key_attr;
     if len(inner) == 0 {
@@ -1208,9 +1337,13 @@ pure function star_attr_value(raw: String) -> String {
     return out;
 }
 
+// Leading whitespace, not only spaces. A CSS selector arrives with the newline that ended the
+// previous rule in front of it, and a trim that only knew about spaces left `@media` looking like
+// an ordinary selector — which is exactly how it came to be stamped with a scoping attribute.
 pure function star_trim(text: String) -> String {
     let mutable from: Int = 0;
-    while from < len(text) && byte_at(text, from) == 32 {
+    while from < len(text) && (byte_at(text, from) == 32 || byte_at(text, from) == 10
+                               || byte_at(text, from) == 9 || byte_at(text, from) == 13) {
         from += 1;
     }
     return bmx_strip_end(substring(text, from, len(text) - from));
@@ -1293,6 +1426,17 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
 // refusal, not a compiler error about a function nobody wrote.
 public function star_generate(source: String, name: String, known: [StarKnown]) -> Result<StarComponent, String> {
     let code: String = star_section(source, "bx");
+    // The stylesheet, and the marker that scopes it. A component with no `===style.local` gets no
+    // marker and no attribute on its elements — the scoping machinery costs nothing when unused.
+    let local: String = star_section(source, "style.local");
+    let mutable marker: String = "";
+    if len(bmx_strip_end(local)) > 0 {
+        marker = name;
+    }
+    let mutable style: String = star_section(source, "style.global");
+    if len(marker) > 0 {
+        style = style + star_scoped_css(local, marker);
+    }
     let component_mode: Bool = len(bmx_strip_end(code)) > 0;
     if component_mode && !star_mentions(code, "function update(") {
         return Result.Error("STAR-E008: this document has a `===bx` section, so its `on:` handlers"
@@ -1309,7 +1453,7 @@ public function star_generate(source: String, name: String, known: [StarKnown]) 
                     + " no signature and nothing can invoke it. Add `::: props name: Type`");
             }
             let mutable handlers: [StarHandler] = [];
-            match star_emit_stmts(source, known, blocks, "kids", "0", "    ", handlers, "", false) {
+            match star_emit_stmts(source, known, marker, blocks, "kids", "0", "    ", handlers, "", false) {
                 Error(e) => { return Result.Error(e); }
                 Ok(body) => {
                     let mutable view: String = "pure function " + name + "(" + props + ") -> Html allocates \{\n";
@@ -1358,6 +1502,7 @@ public function star_generate(source: String, name: String, known: [StarKnown]) 
 
                     return Result.Ok(StarComponent {
                         view: view, dispatch: dispatch, handlers: handlers, code: code,
+                        style: style,
                         props: props, argument_list: star_argument_list(props),
                     });
                 }

@@ -96,6 +96,32 @@ Everything is set.
 
 There is no `else`. Write a second `::: if` for the other case.
 
+## …style a component?
+
+Two sections, and **you have to say which**:
+
+```
+===style.local
+.card { border: 1px solid #ddd; padding: 1rem; }
+===
+
+===style.global
+body { font-family: system-ui; }
+===
+```
+
+`local` is scoped to this component: `.card` becomes `.card[data-s-page]`, and star stamps that
+attribute on the elements it emits. A component you call gets its *own* marker, so your rules stop
+at its edge.
+
+`global` is exactly what you wrote.
+
+Neither spelling is shorter than the other, on purpose. There is no default, so nothing leaks
+because somebody forgot a word.
+
+Generating writes `Page.css` beside `Page.sbmx`, with an `@import` for each component the page
+uses. One `<link>` loads the tree.
+
 ## …put a class on an element?
 
 Put it in the head, before any `on:`:

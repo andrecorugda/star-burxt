@@ -164,6 +164,33 @@ def main():
     check("without a ===bx section a handler is still an EXPRESSION",
           "if handler == 0 { return count + 1; }" in generate(good).stdout, generate(good).stdout)
 
+    # ---- styles: `local` scopes, `global` does not, and neither is the default -----------------
+    styled = ("===style.global\nbody { font-family: system-ui; }\n===\n\n"
+              "===style.local\n.card { border: 1px solid #ddd; }\n"
+              ".card p, .note { color: #555; }\n"
+              "@media (max-width: 600px) { .card { padding: .5rem; } }\n===\n\n"
+              "::: props n: Int\n:::\n\n::: div class=card\n\n::: p\ninside\n:::\n\n:::\n")
+    made = generate(styled)
+    sheet = open(os.path.join(work, "doc.css")).read() if os.path.exists(os.path.join(work, "doc.css")) else ""
+    check("a `local` selector is scoped to the component",
+          ".card[data-s-c]" in sheet, sheet)
+    check("a `global` rule is left exactly as written",
+          "body { font-family: system-ui; }" in sheet, sheet)
+    check("the marker lands on the elements, so the scope is real",
+          'html_attr("data-s-c", "")' in made.stdout, made.stdout)
+
+    # `@media` is not a selector. Stamping it produces `@media (…)[data-s-c]`, which is not CSS —
+    # its BODY holds the rules that need scoping.
+    check("AN AT-RULE IS NOT STAMPED; the rules inside it are",
+          "@media (max-width: 600px) {" in sheet and ".card[data-s-c] { padding: .5rem; }" in sheet,
+          sheet)
+
+    # The reason `local` is exact matching rather than a descendant selector: a child component's
+    # elements sit inside the parent's subtree, and `[data-s-parent] .card` would reach them.
+    check("a component with no local sheet gets no marker and no attribute",
+          'data-s-' not in generate("::: props n: Int\n:::\n\n::: div\nx\n:::\n").stdout,
+          generate("::: props n: Int\n:::\n\n::: div\nx\n:::\n").stdout)
+
     # ---- components: another `.sbmx`, imported with `use`, called as a block -------------------
     with open(os.path.join(work, "Badge.sbmx"), "w") as f:
         f.write("::: props value: Int, tone: String\n:::\n\n"
