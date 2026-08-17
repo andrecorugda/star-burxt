@@ -117,6 +117,53 @@ def main():
     check("a handler inside a `for` is refused, rather than emitting a name out of scope",
           "STAR-E007" in looped, looped)
 
+    # ---- component mode: a `===bx` section, and handlers become MESSAGES ----------------------
+    #
+    # The accepting case first, as everywhere on this page: a suite of refusals is satisfied by a
+    # generator that refuses everything.
+    component = ("===bx\n"
+                 "class Model { count: Int, history: [Int] }\n"
+                 "enum Msg { Increment, Reset }\n"
+                 "pure function update(msg: Msg, m: Model) -> Model {\n"
+                 "    match msg {\n"
+                 "        Increment => { return Model { count: m.count + 1, history: m.history }; }\n"
+                 "        Reset     => { return Model { count: 0, history: m.history }; }\n"
+                 "    }\n"
+                 "}\n"
+                 "===\n\n"
+                 "::: props model: Model\n:::\n\n"
+                 "At {{ to_string(model.count) }}.\n\n"
+                 "::: button on:click=Msg.Increment\nmore\n:::\n")
+    check("a component with a ===bx section compiles", "no errors" in compile_component(component),
+          compile_component(component))
+
+    emitted = generate(component).stdout
+    check("STATE IS A RECORD HOLDING A LIST — the thing the region rule refused until today",
+          "class Model { count: Int, history: [Int] }" in emitted, emitted)
+    check("a handler is a MESSAGE, routed through the author's `update`",
+          "return update(Msg.Increment, model);" in emitted, emitted)
+    check("the author's code is emitted BEFORE the view that names it",
+          emitted.index("pure function update") < emitted.index("pure function c("), emitted)
+
+    # `use` lines cannot sit where they were written: Burxt scans only a file's LEADING lines for
+    # imports, so a `use` after a declaration is a syntax error. They are hoisted.
+    imported = generate("===bx\nuse \"std/string.bx\";\nclass Model { n: Int }\n"
+                        "pure function update(msg: Int, m: Model) -> Model { return m; }\n===\n\n"
+                        "::: props model: Model\n:::\n\nAt {{ to_string(model.n) }}.\n").stdout
+    check("an author's `use` is hoisted above the generated header",
+          imported.index('use "std/string.bx";') < imported.index("class Model"), imported)
+
+    # A `===bx` section with no `update` is refused BY NAME rather than left to fail as a compiler
+    # error about a function nobody wrote.
+    orphan = generate("===bx\nclass Model { n: Int }\n===\n\n::: props model: Model\n:::\n\n"
+                      "::: button on:click=Msg.Go\ngo\n:::\n").stderr
+    check("a ===bx section with no `update` is refused by name",
+          "STAR-E008" in orphan and "update" in orphan, orphan)
+
+    # Expression mode is untouched — the guide teaches it and it keeps working.
+    check("without a ===bx section a handler is still an EXPRESSION",
+          "if handler == 0 { return count + 1; }" in generate(good).stdout, generate(good).stdout)
+
     # ---- the content model has no seam --------------------------------------------------------
     one = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1\nonly\n:::\n").stdout
     two = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1\nfirst\n\nsecond\n:::\n").stdout

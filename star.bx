@@ -100,11 +100,146 @@ public class StarComponent {
     view: String,
     dispatch: String,
     handlers: [StarHandler],
+    // The `===bx` section, verbatim. Empty when the document has none — which is also the switch
+    // between the two modes below, so a reader can tell which one a file is in by looking at it.
+    code: String,
     // The declaration verbatim (`count: Int`) and the names alone (`count`), so the
     // emitted entry point can both DECLARE and PASS the props without the caller
     // re-deriving either.
     props: String,
     argument_list: String,
+}
+
+// ---- `.sbmx` sections, split off before BMX ever sees the file ----------------
+//
+// A component file has two halves: Burxt in `===bx`, and markup. The markup goes to BMX; the code
+// does not, and **that is the boundary rather than a convenience**. Handing the code to BMX would
+// make the markup format responsible for transporting a payload it cannot read — and it fails in
+// practice, not only in principle: a fenced code block shreds a component the moment a Burxt string
+// contains a line beginning with three backticks, splitting the program in two with a paragraph in
+// the middle. `===` delimiters are star's, so star controls what terminates them.
+//
+// A section opens with `===name` and closes with a bare `===`. Everything outside every section is
+// markup. If star ever failed to strip a section, BMX would render it as a paragraph — visibly
+// wrong on the page rather than silently miscompiled, which is the right way for this to break.
+
+pure function star_end_of_line(text: String, from: Int, width: Int) -> Int {
+    let mutable i: Int = from;
+    while i < width && byte_at(text, i) != 10 {
+        i += 1;
+    }
+    return i;
+}
+
+// A line that is exactly `===` closes whatever is open. Checked before the opener, because `===`
+// would otherwise read as an opener whose name is empty.
+pure function star_closes_section(line: String) -> Bool {
+    return bmx_strip_end(line) == "===";
+}
+
+pure function star_opens_section(line: String) -> Bool {
+    if len(line) < 4 {
+        return false;
+    }
+    return byte_at(line, 0) == 61 && byte_at(line, 1) == 61 && byte_at(line, 2) == 61;
+}
+
+pure function star_section_name(line: String) -> String {
+    return bmx_strip_end(substring(line, 3, len(line) - 3));
+}
+
+// The text of one section, or the empty String when the file has none of that kind.
+pure function star_section(source: String, wanted: String) -> String {
+    let mutable out: String = "";
+    let mutable inside: Bool = false;
+    let width: Int = len(source);
+    let mutable at: Int = 0;
+    while at < width {
+        let stop: Int = star_end_of_line(source, at, width);
+        let line: String = substring(source, at, stop - at);
+        if star_closes_section(line) {
+            inside = false;
+        } else {
+            if star_opens_section(line) {
+                inside = star_section_name(line) == wanted;
+            } else {
+                if inside {
+                    out = out + line + "\n";
+                }
+            }
+        }
+        at = stop + 1;
+    }
+    return out;
+}
+
+// Everything that is not in a section. This is what BMX parses.
+//
+// A section's lines become BLANK rather than disappearing, so every byte offset after them is where
+// it was — which is what keeps BMX's error offsets pointing at the line the author wrote. The same
+// trick the compiler's own module loader uses on `use` lines, and for the same reason.
+pure function star_markup(source: String) -> String {
+    let mutable out: String = "";
+    let mutable inside: Bool = false;
+    let width: Int = len(source);
+    let mutable at: Int = 0;
+    while at < width {
+        let stop: Int = star_end_of_line(source, at, width);
+        let line: String = substring(source, at, stop - at);
+        let mutable keep: Bool = false;
+        if star_closes_section(line) {
+            inside = false;
+        } else {
+            if star_opens_section(line) {
+                inside = true;
+            } else {
+                keep = !inside;
+            }
+        }
+        if keep {
+            out = out + line + "\n";
+        } else {
+            out = out + star_blanked(line) + "\n";
+        }
+        at = stop + 1;
+    }
+    return out;
+}
+
+// A line of spaces the same width, so offsets do not move.
+pure function star_blanked(line: String) -> String {
+    let mutable out: String = "";
+    let mutable i: Int = 0;
+    while i < len(line) {
+        out = out + " ";
+        i += 1;
+    }
+    return out;
+}
+
+// Does this text contain that one? Written here rather than imported: star depends on `std/string`
+// for nothing else, and one substring search is not worth a dependency.
+pure function star_mentions(haystack: String, needle: String) -> Bool {
+    let n: Int = len(needle);
+    if n == 0 {
+        return true;
+    }
+    let mutable i: Int = 0;
+    while i + n <= len(haystack) {
+        let mutable j: Int = 0;
+        let mutable same: Bool = true;
+        while j < n && same {
+            if byte_at(haystack, i + j) != byte_at(needle, j) {
+                same = false;
+            }
+            j += 1;
+        }
+        if same {
+            return true;
+        }
+        i += 1;
+    }
+    return false;
 }
 
 // ---- head parsing, which is the host's job and not the format's --------------
@@ -549,8 +684,77 @@ pure function star_props(blocks: [Block]) -> String {
 //
 // Both functions are `pure`, so `burxt effects --allow ""` confirms a component
 // reaches nothing — a confirmation by construction rather than a discovery.
+// The `use` lines of a `===bx` section, and everything else, split apart.
+//
+// Burxt finds imports by scanning a file's LEADING lines and stops at the first declaration — a
+// `use` after a `class` is a syntax error, measured rather than assumed. So a component's imports
+// have to be lifted above the generated header, and the rest of the author's code placed after it.
+//
+// A `use` is recognised at the start of a line, which is where the language requires it anyway.
+public function star_imports_of(code: String) -> String {
+    let mutable out: String = "";
+    let width: Int = len(code);
+    let mutable at: Int = 0;
+    while at < width {
+        let stop: Int = star_end_of_line(code, at, width);
+        let line: String = substring(code, at, stop - at);
+        if star_is_use_line(line) {
+            out = out + line + "\n";
+        }
+        at = stop + 1;
+    }
+    return out;
+}
+
+public function star_code_without_imports(code: String) -> String {
+    let mutable out: String = "";
+    let width: Int = len(code);
+    let mutable at: Int = 0;
+    while at < width {
+        let stop: Int = star_end_of_line(code, at, width);
+        let line: String = substring(code, at, stop - at);
+        if !star_is_use_line(line) {
+            out = out + line + "\n";
+        }
+        at = stop + 1;
+    }
+    return out;
+}
+
+pure function star_is_use_line(line: String) -> Bool {
+    let mutable i: Int = 0;
+    while i < len(line) && byte_at(line, i) == 32 {
+        i += 1;
+    }
+    if i + 4 > len(line) {
+        return false;
+    }
+    return byte_at(line, i) == 117 && byte_at(line, i + 1) == 115
+        && byte_at(line, i + 2) == 101 && byte_at(line, i + 3) == 32;
+}
+
+// ---- the two modes, and the `===bx` section is what chooses between them ----------------------
+//
+// **Expression mode** — no `===bx`. `on:click=count + 1` says what the next state IS, and a handler
+// is a one-line expression. This is what the guide teaches and it stays exactly as it was.
+//
+// **Component mode** — a `===bx` section. `on:click=Msg.Increment` names a MESSAGE, and the author's
+// own `update` decides the next state. That lifts the one-line limit: an update can `match`, call
+// helpers, and be read and tested on its own.
+//
+// The switch is the presence of the section rather than a flag, because a reader can see it. And it
+// is not sniffed from whether an `update` exists — a file with `===bx` and no `update` gets a named
+// refusal, not a compiler error about a function nobody wrote.
 public function star_generate(source: String, name: String) -> Result<StarComponent, String> {
-    match bmx_parse(source) {
+    let code: String = star_section(source, "bx");
+    let component_mode: Bool = len(bmx_strip_end(code)) > 0;
+    if component_mode && !star_mentions(code, "function update(") {
+        return Result.Error("STAR-E008: this document has a `===bx` section, so its `on:` handlers"
+            + " are MESSAGES and something has to turn a message into the next state. Add"
+            + " `pure function update(msg: Msg, m: Model) -> Model`, or remove the `===bx`"
+            + " section to write handlers as expressions.");
+    }
+    match bmx_parse(star_markup(source)) {
         Error(e) => { return Result.Error(e); }
         Ok(blocks) => {
             let props: String = star_props(blocks);
@@ -590,8 +794,15 @@ public function star_generate(source: String, name: String) -> Result<StarCompon
                         + props + ") -> " + trimmed + " \{\n";
                     let mutable h: Int = 0;
                     while h < len(handlers) {
+                        // Expression mode returns the expression. Component mode hands it to
+                        // `update` as a message — the ONE line that separates the two, because
+                        // everything else about a handler is the same in both.
+                        let mutable answer: String = handlers[h].expression;
+                        if component_mode {
+                            answer = "update(" + answer + ", " + star_first_prop_name(props) + ")";
+                        }
                         dispatch = dispatch + "    if handler == " + to_string(h) + " \{ return "
-                            + handlers[h].expression + "; \}\n";
+                            + answer + "; \}\n";
                         h += 1;
                     }
                     // An index the page could not have produced is a bug in the
@@ -600,7 +811,7 @@ public function star_generate(source: String, name: String) -> Result<StarCompon
                     dispatch = dispatch + "    return " + star_first_prop_name(props) + ";\n\}\n";
 
                     return Result.Ok(StarComponent {
-                        view: view, dispatch: dispatch, handlers: handlers,
+                        view: view, dispatch: dispatch, handlers: handlers, code: code,
                         props: props, argument_list: star_argument_list(props),
                     });
                 }

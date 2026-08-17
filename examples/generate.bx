@@ -31,8 +31,16 @@ match file_read_maybe(path) {
                 print("// The view and the dispatch are both `pure`, so `burxt effects --allow \"\"`");
                 print("// confirms this component reaches nothing. A handler is an expression");
                 print("// producing the next state — there are no closures to hide it in.");
+                // **`use` lines lead the file, so the author's imports are hoisted out of the
+                // `===bx` section and emitted first.** Burxt scans only the leading lines for
+                // imports — a `use` after a declaration is a syntax error — so a component's
+                // `use "./Badge.sbmx"` cannot simply sit where it was written.
                 print("use \"std/html.bx\";");
+                print(star_imports_of(component.code));
                 print("");
+                // The author's own code, verbatim and before the generated halves, so `update`,
+                // `Model` and `Msg` exist by the time the view and the dispatch name them.
+                print(star_code_without_imports(component.code));
                 print(component.view);
                 print(component.dispatch);
                 // The runtime entry point, emitted rather than hand-written so the

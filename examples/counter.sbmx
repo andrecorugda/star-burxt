@@ -1,0 +1,37 @@
+===bx
+class Model { count: Int, history: [Int] }
+
+enum Msg { Increment, Decrement, Reset }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Increment => { return Model { count: m.count + 1, history: m.history }; }
+        Decrement => { return Model { count: m.count - 1, history: m.history }; }
+        Reset     => { return Model { count: 0, history: m.history }; }
+    }
+}
+
+pure function label(m: Model) -> String {
+    if m.count == 0 { return "nothing yet"; }
+    return "counted " + to_string(m.count);
+}
+===
+
+::: props model: Model
+:::
+
+# Counter
+
+{{ label(model) }}
+
+::: button on:click=Msg.Increment
+more
+:::
+
+::: button on:click=Msg.Decrement
+less
+:::
+
+::: button on:click=Msg.Reset
+reset
+:::
