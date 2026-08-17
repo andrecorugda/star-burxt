@@ -28,7 +28,7 @@ One line in your project's `burxt.package`:
 
 ```
 dependency  star  https://github.com/andrecorugda/star-burxt  v0.1.0
-dependency  bmx   https://github.com/andrecorugda/bmx         d06722a
+dependency  bmx   https://github.com/andrecorugda/bmx         burxt-0.1.0
 ```
 
 Then `burxt fetch`. Full instructions: [star.burxt-lang.org/install](https://star.burxt-lang.org/install.html).

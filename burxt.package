@@ -14,15 +14,19 @@ version     0.1.0
 #
 # A path dependency wants a directory that is the package, and BMX now has one.
 #
-# **A COMMIT, NOT A TAG, and that is a decision rather than a gap.** `burxt.lock` pins commits
-# rather than tags for the reason that applies here one level up: a tag can be moved and a commit
-# cannot. BMX's Burxt half cannot be checked against any released compiler — `std/` is unreleased —
-# so there is no green run behind a version number yet, and minting one would name something nothing
-# has verified. It gets a tag when a run stands behind it.
+# **`burxt-0.1.0`, and the tag's NAME is the interesting part.** It is not `v0.2.0`, because this
+# repository holds a format at 0.2 and an implementation of it, and one number for both invites them
+# to be read off each other — the exact conflation BMX's `VERSIONING.md` exists to prevent. So a tag
+# names an implementation release and says WHICH implementation, leaving `js-…` free for the
+# reference parser.
+#
+# A commit pin stood here until BMX had a green run to tag against: minting a version number nothing
+# has verified is worse than naming a commit. That run exists now — 56/56 conformance, 56/56
+# agreement with the reference implementation, level 2 in CI — so the pin is a tag.
 #
 # The import is `use "bmx/burxt/bmx.bx"` rather than `bmx/bmx.bx`: in the format's repository
 # `reference/bmx.js` defines what BMX means and `burxt/bmx.bx` is one implementation of it. Putting
 # the Burxt file at that repo's root would shorten this by seven characters and make a specification
 # repository look like a Burxt package, which is the one thing it must not look like. It needs no
 # manifest of its own — nothing reads a dependency's — so it stays exactly what it is.
-dependency  bmx  https://github.com/andrecorugda/bmx  d06722a
+dependency  bmx  https://github.com/andrecorugda/bmx  burxt-0.1.0
