@@ -1,0 +1,6 @@
+::: props value: Int, tone: String
+:::
+
+::: span class=badge
+{{ tone }}: {{ to_string(value) }}
+:::

@@ -195,6 +195,25 @@ Any condition that answers true or false. No `else` — write a second `if`.
 
 ---
 
+## A component — a capitalised name
+
+```
+::: Badge value={{ model.count }} tone=unread
+:::
+```
+
+Any `.sbmx` you imported in `===bx`:
+
+```
+===bx
+use "./Badge.sbmx";
+===
+```
+
+Props are passed by name. Order does not matter; a missing one is named.
+
+---
+
 ## `{{ }}` — a value in the page
 
 ```

@@ -17,9 +17,6 @@ useful to you than a feature list.
 [Chapter 4](guide/04-lists-and-choices.html) explains why and what to do instead. This is the
 limitation you are most likely to hit.
 
-**More than one changing value.** The component's state is its first prop. Put everything that
-changes into one value.
-
 **Anything asynchronous.** No fetching, no timers, no loading states. A component is given its data
 and draws it.
 

@@ -65,10 +65,23 @@ def main():
 
     work = tempfile.mkdtemp(prefix="star-docs-")
     doc = os.path.join(work, "d.bmx")
+
+    # Components the pages show the reader, written beside the examples so a page teaching
+    # `::: Badge` is checked against a `Badge` that exists. Its props are the ones the pages use —
+    # a component here that did not match the documented call would make this check a fiction.
+    open(os.path.join(work, "Badge.sbmx"), "w").write(
+        "::: props value: Int, tone: String\n:::\n\n"
+        "::: span class=badge\n{{ tone }}: {{ to_string(value) }}\n:::\n")
     wrong, checked, refuted = [], 0, 0
 
     for path, line, body in examples():
         source = body if "::: props" in body else PREAMBLE + body
+        # A fragment that calls a component needs the import too — the surrounding page has it and
+        # the excerpt does not, which is what makes it a fragment.
+        if "::: Badge" in source and "use \"./Badge.sbmx\"" not in source:
+            source = ("===bx\nuse \"./Badge.sbmx\";\n"
+                      "pure function update(msg: Int, m: Int) -> Int { return m; }\n===\n\n"
+                      + source)
         open(doc, "w").write(source)
         out = subprocess.run([GEN, doc, "c"], capture_output=True, text=True, cwd=ROOT)
         said = (out.stderr or out.stdout).strip()

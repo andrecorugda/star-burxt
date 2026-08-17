@@ -1,0 +1,24 @@
+===bx
+use "./Badge.sbmx";
+
+class Model { unread: Int, name: String }
+enum Msg { Clear }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Clear => { return Model { unread: 0, name: m.name }; }
+    }
+}
+===
+
+::: props model: Model
+:::
+
+# Hello {{ model.name }}
+
+::: Badge value={{ model.unread }} tone=unread
+:::
+
+::: button on:click=Msg.Clear
+clear
+:::

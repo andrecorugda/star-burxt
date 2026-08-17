@@ -3,3 +3,6 @@
 
 # Built from examples/generate.bx by the set-up page and by CI.
 star-generate
+
+# Generated beside their source by star-generate.
+examples/*.bx

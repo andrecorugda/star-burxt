@@ -164,6 +164,44 @@ def main():
     check("without a ===bx section a handler is still an EXPRESSION",
           "if handler == 0 { return count + 1; }" in generate(good).stdout, generate(good).stdout)
 
+    # ---- components: another `.sbmx`, imported with `use`, called as a block -------------------
+    with open(os.path.join(work, "Badge.sbmx"), "w") as f:
+        f.write("::: props value: Int, tone: String\n:::\n\n"
+                "::: span class=badge\n{{ tone }}: {{ to_string(value) }}\n:::\n")
+    page = ("===bx\nuse \"./Badge.sbmx\";\n"
+            "class Model { unread: Int }\n"
+            "pure function update(msg: Int, m: Model) -> Model { return m; }\n===\n\n"
+            "::: props model: Model\n:::\n\n"
+            "::: Badge value={{ model.unread }} tone=unread\n:::\n")
+    made = generate(page)
+    check("a component is CALLED, as an ordinary function",
+          "badge((model.unread), \"unread\")" in made.stdout, made.stdout + made.stderr)
+    check("the child is generated too, beside its own source",
+          os.path.exists(os.path.join(work, "Badge.bx")), work)
+    check("the generated page imports the child as `.bx`, not `.sbmx`",
+          'use "./Badge.bx";' in made.stdout, made.stdout)
+
+    # ARGUMENTS GO IN THE CALLEE'S ORDER, not the order they were written — two props of the same
+    # type would swap in silence otherwise, and the compiler cannot see that mistake.
+    reordered = generate(page.replace("value={{ model.unread }} tone=unread",
+                                      "tone=unread value={{ model.unread }}"))
+    check("ARGUMENT ORDER FOLLOWS THE CALLEE, not the call site",
+          "badge((model.unread), \"unread\")" in reordered.stdout, reordered.stdout)
+
+    missing_prop = generate(page.replace(" tone=unread", "")).stderr
+    check("a call missing a prop is refused, naming it and listing what is wanted",
+          "STAR-E017" in missing_prop and "tone" in missing_prop, missing_prop)
+
+    unimported = generate("::: props n: Int\n:::\n\n::: Missing x=1\n:::\n").stderr
+    check("a component block with no import is refused, and says what to write",
+          "STAR-E001" in unimported and ".sbmx" in unimported, unimported)
+
+    absent = generate("===bx\nuse \"./Nope.sbmx\";\nclass Model { n: Int }\n"
+                      "pure function update(m: Int, x: Model) -> Model { return x; }\n===\n\n"
+                      "::: props model: Model\n:::\n\nhi\n").stderr
+    check("an import that does not resolve names the file and the importer",
+          "Nope.sbmx" in absent and "imported by" in absent, absent)
+
     # ---- `match`: adding a screen and forgetting its view is a BUILD FAILURE -----------------
     #
     # This is the claim no JavaScript framework can make. React, Vue and Svelte give you a blank

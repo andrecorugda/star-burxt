@@ -158,8 +158,53 @@ list: a "clear completed" button outside the loop works.
 
 ## …split a screen into several components?
 
-Generate each document separately and call one from another. Each `.bmx` file becomes an ordinary
-function, so a component is used the way any function is used.
+Put the component in its own file, import it, and call it as a block.
+
+`Badge.sbmx`:
+
+```
+::: props value: Int, tone: String
+:::
+
+::: span class=badge
+{{ tone }}: {{ to_string(value) }}
+:::
+```
+
+`Page.sbmx`:
+
+```
+===bx
+use "./Badge.sbmx";
+
+class Model { unread: Int }
+enum Msg { Clear }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Clear => { return Model { unread: 0 }; }
+    }
+}
+===
+
+::: props model: Model
+:::
+
+::: Badge value={{ model.unread }} tone=unread
+:::
+```
+
+Generating `Page.sbmx` generates `Badge.sbmx` too, beside its own source. One command.
+
+**A prop you forget is named**, along with what the component wants:
+
+```
+STAR-E017: `Badge` needs `tone`, and this call does not give it.
+Its props are `value: Int, tone: String`
+```
+
+And the order you write them in does not matter — arguments are passed in the order the component
+declares them, so two props of the same type cannot swap by accident.
 
 ## …see what my document turned into?
 
