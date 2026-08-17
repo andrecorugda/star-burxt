@@ -82,7 +82,7 @@ burxt fetch
 `fetch` clones the tag and writes `burxt.lock`, which pins the **commit** the tag pointed at:
 
 ```
-package  star  https://github.com/andrecorugda/star-burxt  v0.1.0  29b88e0c2816…
+package  star  https://github.com/andrecorugda/star-burxt  v0.1.0  bc60edcbb6c05ba4aa4d5a69b202145ebe99675d
 ```
 
 **Commit that file.** A tag can be moved; a commit cannot, so the lockfile is what makes two
