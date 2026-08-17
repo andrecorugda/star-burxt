@@ -88,6 +88,13 @@ jobs:
           set -eux
           for doc in examples/*.sbmx; do ./star-check "$doc"; done
 
+      # **The server, over the real protocol.** A server tested only by opening an editor is a
+      # server whose protocol handling is a guess — and the last assertion, that a clean document
+      # reports nothing, comes after three that prove it can find things. A server that answered
+      # nothing to everything would pass that one alone.
+      - name: The language server speaks the protocol
+        run: STAR_CHECK=./star-check node editors/lsp/drive-lsp.mjs
+
       - name: A .bmx document becomes a component the compiler judges
         run: python3 test.py
 

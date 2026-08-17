@@ -1,0 +1,84 @@
+// The language server, spoken to over JSON-RPC exactly as an editor would.
+//
+// **A server tested only by opening an editor is a server whose protocol handling is a guess.** This
+// speaks the four messages that matter, on a document with a real problem in each of the three
+// layers, and asserts the diagnostics come back on the right lines.
+//
+//     STAR_CHECK=./star-check node editors/lsp/drive-lsp.mjs
+import { spawn } from 'child_process';
+
+const server = spawn('node', ['editors/lsp/star-lsp.mjs'], {
+  stdio: ['pipe', 'pipe', 'inherit'],
+  env: { ...process.env, STAR_CHECK: process.env.STAR_CHECK || 'star-check' },
+});
+
+let buffer = Buffer.alloc(0);
+const waiting = [];
+server.stdout.on('data', (chunk) => {
+  buffer = Buffer.concat([buffer, chunk]);
+  for (;;) {
+    const split = buffer.indexOf('\r\n\r\n');
+    if (split < 0) return;
+    const length = Number(/Content-Length: (\d+)/i.exec(buffer.slice(0, split).toString())?.[1] ?? 0);
+    if (buffer.length < split + 4 + length) return;
+    const message = JSON.parse(buffer.slice(split + 4, split + 4 + length).toString('utf8'));
+    buffer = buffer.slice(split + 4 + length);
+    const next = waiting.shift();
+    if (next) next(message);
+  }
+});
+
+const send = (m) => {
+  const text = JSON.stringify({ jsonrpc: '2.0', ...m });
+  server.stdin.write(`Content-Length: ${Buffer.byteLength(text, 'utf8')}\r\n\r\n${text}`);
+};
+const reply = () => new Promise((resolve) => waiting.push(resolve));
+
+let failures = 0;
+const is = (what, got, want) => {
+  const ok = String(got) === String(want);
+  if (!ok) failures++;
+  console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${what}`);
+  if (!ok) console.log(`       got  ${got}\n       want ${want}`);
+};
+
+// A document beside the real examples, so component imports resolve the way they would in a project.
+const uri = `file://${process.cwd()}/examples/.lsp-probe.sbmx`;
+
+send({ id: 1, method: 'initialize', params: { capabilities: {} } });
+const ready = await reply();
+is('the server answers initialize', ready.result.serverInfo.name, 'star-lsp');
+is('it offers text sync', ready.result.capabilities.textDocumentSync, 1);
+
+async function diagnosticsFor(text) {
+  send({ method: 'textDocument/didOpen', params: { textDocument: { uri, languageId: 'sbmx', version: 1, text } } });
+  const note = await reply();
+  return note.params.diagnostics;
+}
+
+// 1. A well-formed component with a typo in a slot — the layer only star can find.
+let got = await diagnosticsFor('::: props count: Int\n:::\n\nAt {{ to_string(cuont) }}.\n');
+is('a slot typo is reported', got.length >= 1, true);
+is('  …on the line the author wrote it', got[0]?.range.start.line, 3);
+is('  …naming what is wrong', /cuont/.test(got[0]?.message ?? ''), true);
+
+// 2. Not a component: an unknown block. star's own rule, already positioned.
+got = await diagnosticsFor('::: props n: Int\n:::\n\n::: mystery\nhi\n:::\n');
+is('an unknown block is reported with its code', got[0]?.code, 'STAR-E001');
+is('  …on its fence', got[0]?.range.start.line, 3);
+
+// 3. Not a document: a missing fence. BMX's rule.
+got = await diagnosticsFor('::: props n: Int\n:::\n\n::: div\nno closing fence\n');
+is('a malformed document is reported with BMX\'s code', got[0]?.code?.startsWith('BMX-E'), true);
+
+// 4. A clean document reports nothing, which is the case a broken server also produces — so it is
+//    asserted last, after three that prove the server can find things.
+got = await diagnosticsFor('::: props count: Int\n:::\n\nAt {{ to_string(count) }}.\n');
+is('a clean component reports nothing', got.length, 0);
+
+send({ id: 2, method: 'shutdown' });
+await reply();
+send({ method: 'exit' });
+
+console.log(failures ? `\n${failures} failure(s)` : '\nthe server speaks the protocol');
+process.exit(failures ? 1 : 0);
