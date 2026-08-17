@@ -76,6 +76,24 @@ is('a malformed document is reported with BMX\'s code', got[0]?.code?.startsWith
 got = await diagnosticsFor('::: props count: Int\n:::\n\nAt {{ to_string(count) }}.\n');
 is('a clean component reports nothing', got.length, 0);
 
+// 5. BMX's structural WARNING, merged in beside star's errors — imported from BMX rather than
+//    reimplemented, and severity 2 so it cannot fail a build.
+got = await diagnosticsFor('::: props n: Int\n:::\n\n# One\n\n### Three\n');
+const warned = got.find((d) => d.code === 'BMX-W001');
+is("BMX's lint warnings are reported too", Boolean(warned), true);
+is('  …as a warning, not an error', warned?.severity, 2);
+
+// 6. And a `===bx` section is NOT linted as markup. Its braces are Burxt, and its lines must not
+//    shift the line numbers of the markup below it.
+got = await diagnosticsFor('===bx\nclass Model { n: Int }\n'
+  + 'pure function update(m: Int, x: Model) -> Model { return x; }\n===\n\n'
+  + '::: props model: Model\n:::\n\n# One\n\n### Three\n');
+const shifted = got.find((d) => d.code === 'BMX-W001');
+// `### Three` is the eleventh line of that document, and LSP counts from zero. **The point is that
+// it is not shifted by the three lines of `===bx` above it** — the sections are blanked space for
+// space rather than removed, so every offset below them is where the author put it.
+is('a warning below a ===bx section is on the right line', shifted?.range.start.line, 10);
+
 send({ id: 2, method: 'shutdown' });
 await reply();
 send({ method: 'exit' });

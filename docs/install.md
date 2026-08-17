@@ -46,7 +46,7 @@ name        my-app
 version     0.1.0
 
 dependency  star  https://github.com/andrecorugda/star-burxt  v0.1.0
-dependency  bmx   https://github.com/andrecorugda/bmx         burxt-0.3.0
+dependency  bmx   https://github.com/andrecorugda/bmx         burxt-0.5.1
 ```
 
 Then:
@@ -68,7 +68,7 @@ teammate's build match yours.
 >
 > Add the line and it goes away.
 >
-> **`burxt-0.3.0` is not a typo for the format's version.** BMX the *format* is at 0.2; that tag
+> **`burxt-0.5.1` is not a typo for the format's version.** BMX the *format* is at 0.2; that tag
 > names the Burxt implementation of it, which is a separate thing released on its own schedule.
 
 ## 3. Build the generator

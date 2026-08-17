@@ -105,7 +105,19 @@ function check(uri, text) {
   try {
     writeFileSync(shadow, text);
     const run = spawnSync(CHECK, [shadow], { encoding: 'utf8' });
-    publish(uri, diagnose((run.stderr || '') + (run.stdout || ''), text, shadow));
+      const diagnostics = diagnose((run.stderr || '') + (run.stdout || ''), text, shadow);
+    // BMX's warnings, on the MARKUP half — a `===bx` section is Burxt and its braces are not blocks.
+    loadLint().then((lint) => {
+      if (lint) {
+        for (const w of lint(withoutSections(text))) {
+          diagnostics.push({
+            range: range(text, w.line ?? 1, w.column ?? 1),
+            severity: 2, source: 'bmx', code: w.code, message: w.message,
+          });
+        }
+      }
+      publish(uri, diagnostics);
+    });
   } catch (e) {
     log(`could not check: ${e.message}`);
   } finally {
@@ -123,6 +135,37 @@ function range(text, line, column, length) {
   const c = Math.max(0, column - 1);
   const width = length ?? Math.max(1, (lines[l] ?? '').length - c);
   return { start: { line: l, character: c }, end: { line: l, character: c + width } };
+}
+
+// BMX's four structural warnings, from BMX's own implementation rather than from a copy of it.
+//
+// **Warnings, never errors** — their rule and the right one: a linter that fails a build is a linter
+// people switch off. And imported rather than reimplemented, which is the same reason the three error
+// layers come from `star-check`.
+let bmxLint = null;
+async function loadLint() {
+  if (bmxLint !== null) return bmxLint;
+  // The dependency, wherever `burxt fetch` put it. Found rather than configured, because the path is
+  // a mangled URL nobody should have to type.
+  // A directory scan rather than `fs.globSync`, which is Node 22 and up. The first version used it
+  // and silently found nothing on Node 20 — the warnings simply never appeared, which is the failure
+  // shape a `try/catch` around an optional feature always has.
+  try {
+    const { readdirSync, existsSync } = await import('fs');
+    const root = `${process.cwd()}/.burxt/packages`;
+    if (existsSync(root)) {
+      for (const dir of readdirSync(root)) {
+        const candidate = `${root}/${dir}/reference/bmx.js`;
+        if (existsSync(candidate)) {
+          bmxLint = (await import(candidate)).lint;
+          return bmxLint;
+        }
+      }
+    }
+    log('BMX lint not found under .burxt/packages — warnings will be absent');
+  } catch (e) { log(`no BMX lint available: ${e.message}`); }
+  bmxLint = false;
+  return bmxLint;
 }
 
 function diagnose(output, text, shadow) {
@@ -183,6 +226,19 @@ function locate(text, message, generatedLine) {
     }
   }
   return { range: range(text, 1, 1, 1), exact: false };
+}
+
+// The markup half, with `===` sections blanked. Same rule the generator uses — space for space, so
+// every line number after a section is where it was, and a warning points at the line the author
+// wrote rather than one shifted by however long their code is.
+function withoutSections(text) {
+  let inside = false;
+  return text.split('\n').map((line) => {
+    const bare = line.trimEnd();
+    if (bare === '===') { inside = false; return ''; }
+    if (/^===[a-zA-Z]/.test(bare)) { inside = true; return ''; }
+    return inside ? '' : line;
+  }).join('\n');
 }
 
 log(`ready (checker: ${CHECK}, scratch: ${work})`);
