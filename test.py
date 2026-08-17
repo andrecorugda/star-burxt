@@ -223,8 +223,8 @@ def main():
     check("a handler inside a `for` compiles", "no errors" in compile_component(rows),
           compile_component(rows))
     made = generate(rows).stdout
-    check("`dispatch` takes the row's KEY as its second parameter",
-          "_dispatch(handler: Int, key: String, model: Model)" in made, made)
+    check("`dispatch` takes the row's KEY and the event's VALUE, in that order",
+          "_dispatch(handler: Int, key: String, value: String, model: Model)" in made, made)
     check("the row carries its key on the page, which is what the driver sends",
           'html_attr("data-star-key", to_string(todo.id))' in made, made)
 
