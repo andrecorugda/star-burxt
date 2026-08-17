@@ -198,7 +198,7 @@ Any condition that answers true or false. No `else` — write a second `if`.
 ## A component — a capitalised name
 
 ```
-::: Badge value={{ model.count }} tone=unread
+::: Badge amount={{ model.count }} tone=unread
 :::
 ```
 

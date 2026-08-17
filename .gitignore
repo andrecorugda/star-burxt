@@ -6,3 +6,5 @@ star-generate
 
 # Generated beside their source by star-generate.
 examples/*.bx
+examples/*.check.bx
+star-check

@@ -1,0 +1,39 @@
+{
+  "name": "star-burxt",
+  "displayName": "star-burxt",
+  "description": "Syntax highlighting and diagnostics for .sbmx components.",
+  "version": "0.1.0",
+  "publisher": "andrecorugda",
+  "license": "MIT",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Programming Languages"],
+  "extensionDependencies": ["andrecorugda.bmx", "andrecorugda.burxt"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "sbmx",
+        "aliases": ["star-burxt component", "sbmx"],
+        "extensions": [".sbmx"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "sbmx",
+        "scopeName": "source.sbmx",
+        "path": "./syntaxes/sbmx.tmLanguage.json",
+        "embeddedLanguages": {
+          "source.burxt": "burxt",
+          "source.css": "css",
+          "text.bmx": "bmx"
+        }
+      },
+      {
+        "//": "Injected into BMX rather than shipped as a language: a slot's expression and a block's head are Burxt, and BMX leaves both uncoloured on purpose. This colours them wherever BMX is highlighted — in a .bmx as well as a .sbmx.",
+        "scopeName": "star.injection",
+        "path": "./syntaxes/star-injection.tmLanguage.json",
+        "injectTo": ["text.bmx", "source.sbmx"]
+      }
+    ]
+  }
+}

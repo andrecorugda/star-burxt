@@ -225,11 +225,11 @@ Put the component in its own file, import it, and call it as a block.
 `Badge.sbmx`:
 
 ```
-::: props value: Int, tone: String
+::: props amount: Int, tone: String
 :::
 
 ::: span class=badge
-{{ tone }}: {{ to_string(value) }}
+{{ tone }}: {{ to_string(amount) }}
 :::
 ```
 
@@ -252,7 +252,7 @@ pure function update(msg: Msg, m: Model) -> Model {
 ::: props model: Model
 :::
 
-::: Badge value={{ model.unread }} tone=unread
+::: Badge amount={{ model.unread }} tone=unread
 :::
 ```
 

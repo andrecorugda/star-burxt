@@ -76,6 +76,18 @@ jobs:
       - name: Build the generator
         run: burxt build examples/generate.bx -o star-generate
 
+      - name: Build the checker
+        run: burxt build examples/check.bx -o star-check
+
+      # **All three layers, on every component in this repository.** A person editing a `.sbmx` does
+      # not care which layer refuses them, and until this existed they had to run three tools to find
+      # out. The third — the compiler, on the generated component — is the one nobody else can do,
+      # and it is the whole reason star exists.
+      - name: Every component in this repository checks clean
+        run: |
+          set -eux
+          for doc in examples/*.sbmx; do ./star-check "$doc"; done
+
       - name: A .bmx document becomes a component the compiler judges
         run: python3 test.py
 

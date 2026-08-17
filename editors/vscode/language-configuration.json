@@ -1,0 +1,19 @@
+{
+  "comments": { "lineComment": "//" },
+  "brackets": [["{", "}"], ["[", "]"], ["(", ")"]],
+  "autoClosingPairs": [
+    { "open": "{", "close": "}" },
+    { "open": "[", "close": "]" },
+    { "open": "(", "close": ")" },
+    { "open": "\"", "close": "\"" },
+    { "open": "{{ ", "close": " }}" }
+  ],
+  "surroundingPairs": [["{", "}"], ["[", "]"], ["(", ")"], ["\"", "\""]],
+  "//": "A block and a section both open and close with a marker on its own line, so folding is by pattern rather than by indentation — a `.sbmx` has none, because BMX 0.4 still refuses an indented line.",
+  "folding": {
+    "markers": {
+      "start": "^\\s*(:::\\s*\\S|===\\S)",
+      "end": "^\\s*(:::|===)\\s*$"
+    }
+  }
+}

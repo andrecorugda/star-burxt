@@ -1,0 +1,40 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "scopeName": "star.injection",
+  "//": "star-burxt's half of the highlighting, INJECTED into BMX's grammar rather than replacing it. BMX colours document structure and deliberately leaves three things uncoloured, each with a stable name it treats as a compatibility surface. This fills two of them.",
+  "//2": "Nothing here reimplements Burxt. `source.burxt` already exists, so including it gives full expression highlighting inside a slot for one line — and gets it right by construction, including the day Burxt gains a keyword.",
+  "injectionSelector": "L:meta.slot.bmx, L:meta.block.head.bmx, L:meta.inline-block.head.bmx",
+  "patterns": [{ "include": "#head" }],
+  "repository": {
+    "head": {
+      "patterns": [
+        { "include": "#event" },
+        { "include": "#key-clause" },
+        { "include": "#attribute" },
+        { "include": "source.burxt" }
+      ]
+    },
+    "event": {
+      "//": "`on:click=` — the name is star's vocabulary and the value is Burxt, so the two are coloured differently. An event star cannot wire is still coloured; the REFUSAL is the linter's job, and colouring it red here would be guessing at a list that lives in `star.bx`.",
+      "match": "\\b(on:)([a-z]+)(=)",
+      "captures": {
+        "1": { "name": "keyword.control.event.star" },
+        "2": { "name": "entity.name.function.event.star" },
+        "3": { "name": "keyword.operator.assignment.star" }
+      }
+    },
+    "key-clause": {
+      "//": "`key <expression>` on a `for`. The word is star's; what follows is Burxt and falls through to `source.burxt`.",
+      "match": "\\b(key)\\b(?=\\s)",
+      "captures": { "1": { "name": "keyword.control.key.star" } }
+    },
+    "attribute": {
+      "//": "`class=card`, `href=/x`. An unquoted value is text until a space; a `{{ … }}` inside it is a slot BMX has already scoped, so it is left alone here.",
+      "match": "\\b([a-zA-Z][a-zA-Z0-9-]*)(=)(?![=])",
+      "captures": {
+        "1": { "name": "entity.other.attribute-name.star" },
+        "2": { "name": "keyword.operator.assignment.star" }
+      }
+    }
+  }
+}

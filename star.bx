@@ -1486,6 +1486,36 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
     return Result.Ok(out);
 }
 
+// The complete source of a generated component, minus the runtime entry points.
+//
+// **One implementation, because two diverged.** The generator emitted the `StarCmd`/`StarWatch`
+// vocabulary and the checker did not, so the checker reported `unknown type StarCmd` on a component
+// that generates and runs. The complaint was about the checker, and nothing could have told them
+// apart except running both — which is what a linter over this repository's own examples now does.
+public function star_source_of(component: StarComponent, name: String) -> String {
+    let mutable out: String = "use \"std/html.bx\";\n" + star_burxt_imports(component.code) + "\n";
+    // The command and subscription vocabulary, only when the component asks for it — a document that
+    // uses neither carries neither.
+    let wants_runtime: Bool = star_mentions(component.code, "StarCmd")
+        || star_mentions(component.code, "StarWatch");
+    if wants_runtime {
+        out = out + star_runtime_types();
+    }
+    out = out + star_code_without_imports(component.code);
+    if wants_runtime {
+        out = out + star_runtime_encoders();
+    }
+    return out + component.view + component.dispatch;
+}
+
+// The `props` declaration of a document, read without generating it.
+function star_props_of(source: String) -> String {
+    match bmx_parse(star_markup(source)) {
+        Error(e) => { return ""; }
+        Ok(blocks) => { return star_props(blocks); }
+    }
+}
+
 // ---- commands and subscriptions: async, in a language with no async ---------------------------
 //
 // The browser is already an event loop, and a wasm module that blocks freezes the tab. So Burxt
@@ -1586,6 +1616,28 @@ pure function star_runtime_encoders() -> String {
 // refusal, not a compiler error about a function nobody wrote.
 public function star_generate(source: String, name: String, known: [StarKnown]) -> Result<StarComponent, String> {
     let code: String = star_section(source, "bx");
+    // **`key` and `value` are star's, and a prop may not take them.** A dispatch is
+    // `(handler, key, value, <props>)`, so a prop of either name produces a function with two
+    // parameters of the same name — which the compiler refuses, in generated code, about a
+    // declaration the author did write in a file they did not.
+    //
+    // Refused here by name instead. And not renamed silently to make room: `key` and `value` are
+    // what a handler writes — `Msg.Toggle(string_to_int(key, 0))` — so a prop shadowing one would be
+    // confusing in a document even if it compiled.
+    //
+    // Found by running the linter over this repository's own examples, on a component that had
+    // shipped: `Badge.sbmx` had a prop called `value`.
+    let declared: [String] = star_prop_names(star_props_of(source));
+    let mutable pi: Int = 0;
+    while pi < len(declared) {
+        if declared[pi] == "key" || declared[pi] == "value" {
+            return Result.Error("STAR-E019: `" + declared[pi] + "` is a name star gives every"
+                + " handler — a dispatch is `(handler, key, value, <props>)` — so a prop cannot"
+                + " take it. Rename the prop; `" + declared[pi] + "` stays available inside an"
+                + " `on:` expression, which is what it is for.");
+        }
+        pi += 1;
+    }
     // The stylesheet, and the marker that scopes it. A component with no `===style.local` gets no
     // marker and no attribute on its elements — the scoping machinery costs nothing when unused.
     let local: String = star_section(source, "style.local");

@@ -71,8 +71,8 @@ def main():
     # `::: Badge` is checked against a `Badge` that exists. Its props are the ones the pages use —
     # a component here that did not match the documented call would make this check a fiction.
     open(os.path.join(work, "Badge.sbmx"), "w").write(
-        "::: props value: Int, tone: String\n:::\n\n"
-        "::: span class=badge\n{{ tone }}: {{ to_string(value) }}\n:::\n")
+        "::: props amount: Int, tone: String\n:::\n\n"
+        "::: span class=badge\n{{ tone }}: {{ to_string(amount) }}\n:::\n")
     wrong, checked, refuted = [], 0, 0
 
     for path, line, body in examples():

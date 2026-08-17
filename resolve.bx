@@ -1,0 +1,67 @@
+// ============================================================================
+// resolve.bx — the file-reading half, shared by every program that generates.
+//
+// **This exists because two programs did it separately and diverged within an hour.** The generator
+// resolved component imports and emitted the runtime types; the checker did neither, so it reported
+// `unknown type StarCmd` and `unknown block Badge` on components that generate perfectly. Both
+// complaints were about the checker.
+//
+// `star.bx` reads no files — that is what keeps the generator's core testable and free of effects.
+// Everything that touches the disk is here, so there is one implementation of "what a component's
+// source actually is" rather than one per program.
+// ============================================================================
+use "star.bx";
+use "std/files.bx";
+
+// Every component a document imports, generated beside its own source, with what it declares.
+//
+// `written` decides whether the children's `.bx` and `.css` files are produced. The generator wants
+// them; the checker does not — it only needs to know each child's props so a call can be built in the
+// callee's order. Same walk either way, because a checker that resolved imports differently from the
+// generator would pass documents the generator refuses.
+public function star_resolve(path: String, source: String, written: Bool) -> [StarKnown] touches files {
+    let mutable known: [StarKnown] = [];
+    let here: String = star_directory_of(path);
+    let imports: String = star_imports_of(star_section(source, "bx"));
+    let mutable at: Int = 0;
+    while at < len(imports) {
+        let stop: Int = star_end_of_line(imports, at, len(imports));
+        let line: String = substring(imports, at, stop - at);
+        let target: String = star_quoted_path(line);
+        if star_ends_with(target, ".sbmx") {
+            let child_path: String = here + target;
+            match file_read_maybe(child_path) {
+                None => {
+                    print_error("cannot read " + child_path + ", imported by " + path);
+                    exit(2);
+                }
+                Some(child) => {
+                    let child_name: String = star_component_name(target);
+                    match star_generate(child, star_function_name(child_name), []) {
+                        Error(message) => {
+                            print_error(message + "  (in " + child_path + ")");
+                            exit(1);
+                        }
+                        Ok(built) => {
+                            if written {
+                                let out: String = star_without_extension(child_path) + ".bx";
+                                let wrote: Int = file_write(out,
+                                    "// GENERATED from " + child_path + " by star-burxt. Do not edit.\n"
+                                    + star_source_of(built, star_function_name(child_name)));
+                                if len(bmx_strip_end(built.style)) > 0 {
+                                    let styled: Int = file_write(
+                                        star_without_extension(child_path) + ".css", built.style);
+                                }
+                            }
+                            let noted: Int = push(known, StarKnown {
+                                name: child_name, props: built.props,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        at = stop + 1;
+    }
+    return known;
+}

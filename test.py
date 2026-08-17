@@ -241,6 +241,18 @@ def main():
     check("an unkeyed `for` containing a handler is refused",
           "STAR-E018" in unkeyed, unkeyed)
 
+    # ---- `key` and `value` belong to star ------------------------------------------------------
+    #
+    # A dispatch is `(handler, key, value, <props>)`, so a prop of either name produces a function
+    # with two parameters of the same name. **Found by running the linter over this repository's own
+    # examples** — `Badge.sbmx` had a prop called `value` and had shipped.
+    for taken in ["key", "value"]:
+        clash = generate("::: props %s: Int\n:::\n\nAt {{ to_string(%s) }}.\n" % (taken, taken)).stderr
+        check("a prop named `%s` is refused by name, not by the compiler" % taken,
+              "STAR-E019" in clash and taken in clash, clash)
+    fine = generate("::: props amount: Int\n:::\n\nAt {{ to_string(amount) }}.\n")
+    check("a prop named anything else is fine", fine.returncode == 0, fine.stderr)
+
     # ---- styles: `local` scopes, `global` does not, and neither is the default -----------------
     styled = ("===style.global\nbody { font-family: system-ui; }\n===\n\n"
               "===style.local\n.card { border: 1px solid #ddd; }\n"
@@ -270,13 +282,13 @@ def main():
 
     # ---- components: another `.sbmx`, imported with `use`, called as a block -------------------
     with open(os.path.join(work, "Badge.sbmx"), "w") as f:
-        f.write("::: props value: Int, tone: String\n:::\n\n"
-                "::: span class=badge\n{{ tone }}: {{ to_string(value) }}\n:::\n")
+        f.write("::: props amount: Int, tone: String\n:::\n\n"
+                "::: span class=badge\n{{ tone }}: {{ to_string(amount) }}\n:::\n")
     page = ("===bx\nuse \"./Badge.sbmx\";\n"
             "class Model { unread: Int }\n"
             "pure function update(msg: Int, m: Model) -> Model { return m; }\n===\n\n"
             "::: props model: Model\n:::\n\n"
-            "::: Badge value={{ model.unread }} tone=unread\n:::\n")
+            "::: Badge amount={{ model.unread }} tone=unread\n:::\n")
     made = generate(page)
     check("a component is CALLED, as an ordinary function",
           "badge((model.unread), \"unread\")" in made.stdout, made.stdout + made.stderr)
@@ -287,8 +299,8 @@ def main():
 
     # ARGUMENTS GO IN THE CALLEE'S ORDER, not the order they were written — two props of the same
     # type would swap in silence otherwise, and the compiler cannot see that mistake.
-    reordered = generate(page.replace("value={{ model.unread }} tone=unread",
-                                      "tone=unread value={{ model.unread }}"))
+    reordered = generate(page.replace("amount={{ model.unread }} tone=unread",
+                                      "tone=unread amount={{ model.unread }}"))
     check("ARGUMENT ORDER FOLLOWS THE CALLEE, not the call site",
           "badge((model.unread), \"unread\")" in reordered.stdout, reordered.stdout)
 

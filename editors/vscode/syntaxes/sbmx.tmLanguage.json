@@ -1,0 +1,52 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "scopeName": "source.sbmx",
+  "name": "star-burxt component",
+  "//": "A `.sbmx` is a BMX document with star's sections cut out of it. So this grammar does exactly what the generator does: recognise the sections, hand each to the language that owns it, and hand everything else to BMX.",
+  "//2": "`===bx` gets `source.burxt`, `===style.*` gets `source.css`, and the rest gets `text.bmx` — which then picks up star's injection above. Nothing is reimplemented; three existing grammars are pointed at three regions.",
+  "patterns": [
+    { "include": "#section-burxt" },
+    { "include": "#section-style" },
+    { "include": "#section-unknown" },
+    { "include": "text.bmx" }
+  ],
+  "repository": {
+    "section-burxt": {
+      "begin": "^(===)(bx)\\s*$",
+      "end": "^(===)\\s*$",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.section.begin.star" },
+        "2": { "name": "entity.name.section.star" }
+      },
+      "endCaptures": { "1": { "name": "punctuation.definition.section.end.star" } },
+      "name": "meta.embedded.block.burxt",
+      "contentName": "source.burxt",
+      "patterns": [{ "include": "source.burxt" }]
+    },
+    "section-style": {
+      "//": "`local` and `global` are coloured the same, deliberately: neither is the default, so neither should look like one.",
+      "begin": "^(===)(style)(\\.)(local|global)\\s*$",
+      "end": "^(===)\\s*$",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.section.begin.star" },
+        "2": { "name": "entity.name.section.star" },
+        "3": { "name": "punctuation.separator.star" },
+        "4": { "name": "entity.name.section.scope.star" }
+      },
+      "endCaptures": { "1": { "name": "punctuation.definition.section.end.star" } },
+      "name": "meta.embedded.block.css",
+      "contentName": "source.css",
+      "patterns": [{ "include": "source.css" }]
+    },
+    "section-unknown": {
+      "//": "A section star does not know. Marked INVALID rather than left to look like markup, because the generator refuses it and a reader should see that before they run anything.",
+      "begin": "^(===)([a-zA-Z][a-zA-Z0-9.]*)\\s*$",
+      "end": "^(===)\\s*$",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.section.begin.star" },
+        "2": { "name": "invalid.illegal.unknown-section.star" }
+      },
+      "endCaptures": { "1": { "name": "punctuation.definition.section.end.star" } }
+    }
+  }
+}

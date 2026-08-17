@@ -16,7 +16,7 @@ pure function update(msg: Msg, m: Model) -> Model {
 
 # Hello {{ model.name }}
 
-::: Badge value={{ model.unread }} tone=unread
+::: Badge amount={{ model.unread }} tone=unread
 :::
 
 ::: button on:click=Msg.Clear
