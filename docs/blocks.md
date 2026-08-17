@@ -139,6 +139,46 @@ No `on:` handlers inside a `for` yet.
 
 ---
 
+## `match` — choosing between many
+
+```
+::: match model.route
+
+::: case Home
+# Welcome
+:::
+
+::: case Post(id)
+# Post {{ to_string(id) }}
+:::
+
+:::
+```
+
+A `match` holds `case` blocks and nothing else. A `case`'s head is a pattern, and it binds — `id` is
+in scope inside that branch.
+
+**Every variant must have a branch.** Add one to the enum and forget its `case`, and the build
+fails naming it. See [chapter 4](guide/04-lists-and-choices.html).
+
+---
+
+## `else` — the other branch
+
+```
+::: if ready
+…
+:::
+
+::: else
+…
+:::
+```
+
+Directly after the `if`, nothing between them, and no condition of its own.
+
+---
+
 ## `if` — a section that appears when it should
 
 ```

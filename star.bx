@@ -338,8 +338,8 @@ pure function star_event_is_wired(name: String) -> Bool {
 // Text-level. Paragraphs inside these UNWRAP, and a heading, list, quote or code block is refused.
 pure function star_takes_phrasing(name: String) -> Bool {
     return star_in_set(name,
-        " a b button caption code em h1 h2 h3 h4 h5 h6 i label legend mark option q s small span"
-        + " strong sub summary sup textarea title u ");
+        " a b button caption code dt em h1 h2 h3 h4 h5 h6 i label legend mark option p q s small"
+        + " span strong sub summary sup textarea title u ");
 }
 
 // Takes no children at all. `html_element` carries `requires !html_is_void(tag) ||
@@ -353,7 +353,7 @@ pure function star_is_void(name: String) -> Bool {
 pure function star_takes_flow(name: String) -> Bool {
     return star_in_set(name,
         " address article aside blockquote canvas colgroup dd details dialog div dl dt fieldset"
-        + " figcaption figure footer form header hgroup li main nav ol optgroup output p picture"
+        + " figcaption figure footer form header hgroup li main nav ol optgroup output picture"
         + " pre progress section select table tbody td tfoot th thead tr ul video ");
 }
 
@@ -443,6 +443,97 @@ function star_emit_stmts(source: String, blocks: [Block], target: String, tag: S
                     i += 1;
                     continue;
                 }
+                // ---- `match`, and the reason it earns its own construct -----------------------
+                //
+                // A real screen decides. `::: if` can do it, and four `if`s over a route lose the
+                // thing that makes deciding in Burxt worth anything:
+                //
+                //     error: this `match` on `Route` does not handle `Archive`. Every variant must
+                //     be handled — that is what makes adding a variant later a compile error
+                //     instead of a silent fall-through.
+                //
+                // **Add a screen, forget its view, and the build fails.** No JavaScript framework
+                // can say that; they give you a blank page and a bug report. The exhaustiveness is
+                // the compiler's — star only has to emit a `match` rather than a chain of `if`s,
+                // and the arms' patterns go through verbatim like every other head, so the
+                // compiler does the destructuring too.
+                if fenced.name == "match" {
+                    if len(bmx_strip_end(fenced.head)) == 0 {
+                        return Result.Error("STAR-E010 at " + star_at(source, fenced.offset)
+                            + ": a `match` needs something to match on — `::: match model.route`");
+                    }
+                    let mutable arms: String = "";
+                    let mutable c: Int = 0;
+                    while c < len(fenced.children) {
+                        match fenced.children[c] {
+                            Fenced(arm) => {
+                                if arm.name != "case" {
+                                    return Result.Error("STAR-E011 at " + star_at(source, arm.offset)
+                                        + ": a `match` holds `case` blocks and nothing else, so"
+                                        + " every branch is one the compiler can check. Found `"
+                                        + arm.name + "`");
+                                }
+                                if len(bmx_strip_end(arm.head)) == 0 {
+                                    return Result.Error("STAR-E012 at " + star_at(source, arm.offset)
+                                        + ": a `case` needs a pattern — `::: case Post(id)`");
+                                }
+                                match star_emit_stmts(source, arm.children, target,
+                                                      tag + "_" + to_string(i) + "_" + to_string(c),
+                                                      indent + "        ", handlers, key_here, in_loop) {
+                                    Error(e) => { return Result.Error(e); }
+                                    Ok(body) => {
+                                        arms = arms + indent + "    " + bmx_strip_end(arm.head)
+                                            + " => \{\n" + body + indent + "    \}\n";
+                                    }
+                                }
+                            }
+                            Paragraph(p) => {
+                                return Result.Error("STAR-E011 at " + star_at(source, p.offset)
+                                    + ": a `match` holds `case` blocks and nothing else — text"
+                                    + " between the branches has no branch to belong to");
+                            }
+                            Heading(h) => {
+                                return Result.Error("STAR-E011 at " + star_at(source, h.offset)
+                                    + ": a `match` holds `case` blocks and nothing else");
+                            }
+                            Quote(q) => {
+                                return Result.Error("STAR-E011 at " + star_at(source, q.offset)
+                                    + ": a `match` holds `case` blocks and nothing else");
+                            }
+                            List(l) => {
+                                return Result.Error("STAR-E011 at " + star_at(source, l.offset)
+                                    + ": a `match` holds `case` blocks and nothing else");
+                            }
+                            Code(cd) => {
+                                return Result.Error("STAR-E011 at " + star_at(source, cd.offset)
+                                    + ": a `match` holds `case` blocks and nothing else");
+                            }
+                        }
+                        c += 1;
+                    }
+                    if len(arms) == 0 {
+                        return Result.Error("STAR-E013 at " + star_at(source, fenced.offset)
+                            + ": a `match` with no `case` blocks decides nothing");
+                    }
+                    out = out + indent + "match " + bmx_strip_end(fenced.head) + " \{\n"
+                        + arms + indent + "\}\n";
+                    i += 1;
+                    continue;
+                }
+                // A `case` outside a `match` has no scrutinee, so it is refused where it is
+                // written rather than emitted as code naming a pattern with nothing to match.
+                if fenced.name == "case" {
+                    return Result.Error("STAR-E014 at " + star_at(source, fenced.offset)
+                        + ": a `case` belongs inside a `match`");
+                }
+                // Reached only when the `if` arm did not consume it, which means there is no `if`
+                // immediately above — an `else` separated from its `if` by a paragraph is the
+                // mistake this catches, and it would otherwise render as an unknown block.
+                if fenced.name == "else" {
+                    return Result.Error("STAR-E016 at " + star_at(source, fenced.offset)
+                        + ": an `else` must come directly after an `if`, with nothing between"
+                        + " them");
+                }
                 if fenced.name == "for" || fenced.name == "if" {
                     // The head is host CODE and goes through verbatim. Neither
                     // construct produces an element, so the body pushes into the
@@ -471,6 +562,40 @@ function star_emit_stmts(source: String, blocks: [Block], target: String, tag: S
                         Ok(body) => {
                             out = out + indent + fenced.name + " " + loop_head + " \{\n"
                                 + body + indent + "\}\n";
+                        }
+                    }
+                    // **An `else` is the NEXT block, and it is consumed here rather than reached
+                    // on its own.** Writing two `if`s with hand-negated conditions is what an
+                    // author does without this, and the two drift: a condition is edited in one
+                    // place and the other still says what it used to.
+                    if fenced.name == "if" && i + 1 < len(blocks) {
+                        match blocks[i + 1] {
+                            Fenced(next) => {
+                                if next.name == "else" {
+                                    if len(bmx_strip_end(next.head)) > 0 {
+                                        return Result.Error("STAR-E015 at "
+                                            + star_at(source, next.offset)
+                                            + ": an `else` takes no condition — it is the other"
+                                            + " branch of the `if` above it. Write a second `if`"
+                                            + " if you meant a different question");
+                                    }
+                                    match star_emit_stmts(source, next.children, target,
+                                                          tag + "_" + to_string(i) + "e",
+                                                          indent + "    ", handlers, keyed, in_loop) {
+                                        Error(e) => { return Result.Error(e); }
+                                        Ok(otherwise) => {
+                                            out = out + indent + "else \{\n" + otherwise
+                                                + indent + "\}\n";
+                                        }
+                                    }
+                                    i += 1;
+                                }
+                            }
+                            Paragraph(p) => { }
+                            Heading(h) => { }
+                            Quote(q) => { }
+                            List(l) => { }
+                            Code(cd) => { }
                         }
                     }
                     i += 1;

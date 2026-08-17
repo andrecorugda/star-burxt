@@ -1,0 +1,52 @@
+===bx
+enum Route { Home, Post(Int), Search(String) }
+class Model { route: Route, hits: Int }
+enum Msg { Go(Route) }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Go(r) => { return Model { route: r, hits: m.hits + 1 }; }
+    }
+}
+===
+
+::: props model: Model
+:::
+
+::: match model.route
+
+::: case Home
+
+# Welcome
+
+::: if model.hits > 0
+
+::: p
+seen {{ to_string(model.hits) }} times
+:::
+
+:::
+
+::: else
+
+::: p
+first visit
+:::
+
+:::
+
+:::
+
+::: case Post(id)
+
+# Post {{ to_string(id) }}
+
+:::
+
+::: case Search(q)
+
+# Results for {{ q }}
+
+:::
+
+:::

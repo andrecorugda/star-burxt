@@ -164,6 +164,54 @@ def main():
     check("without a ===bx section a handler is still an EXPRESSION",
           "if handler == 0 { return count + 1; }" in generate(good).stdout, generate(good).stdout)
 
+    # ---- `match`: adding a screen and forgetting its view is a BUILD FAILURE -----------------
+    #
+    # This is the claim no JavaScript framework can make. React, Vue and Svelte give you a blank
+    # page and a bug report; here the compiler names the variant nobody rendered.
+    router = ("===bx\n"
+              "enum Route { Home, Post(Int) }\n"
+              "class Model { route: Route }\n"
+              "pure function update(msg: Int, m: Model) -> Model { return m; }\n"
+              "===\n\n"
+              "::: props model: Model\n:::\n\n"
+              "::: match model.route\n\n"
+              "::: case Home\n\n# Welcome\n\n:::\n\n"
+              "::: case Post(id)\n\n# Post {{ to_string(id) }}\n\n:::\n\n"
+              ":::\n")
+    check("a match over a route compiles", "no errors" in compile_component(router),
+          compile_component(router))
+    check("a case PATTERN destructures, so `id` is in scope in its branch",
+          "Post(id) => {" in generate(router).stdout, generate(router).stdout)
+
+    # The whole point, and it is checked by REMOVING a branch rather than by adding a variant —
+    # same defect, and this way the fixture cannot pass because the compiler was lenient.
+    missing = compile_component(router.replace(
+        "::: case Post(id)\n\n# Post {{ to_string(id) }}\n\n:::\n\n", ""))
+    check("A VARIANT WITH NO BRANCH IS A COMPILE ERROR, naming it",
+          "does not handle `Post`" in missing, missing)
+
+    stray = generate("::: props n: Int\n:::\n\n::: case Home\nx\n:::\n").stderr
+    check("a `case` outside a `match` is refused", "STAR-E014" in stray, stray)
+    loose = generate("::: props n: Int\n:::\n\n::: match n\n\ntext, not a case\n\n:::\n").stderr
+    check("text between branches is refused — it has no branch to belong to",
+          "STAR-E011" in loose, loose)
+    empty = generate("::: props n: Int\n:::\n\n::: match n\n\n:::\n").stderr
+    check("a match with no cases decides nothing, and is refused",
+          "STAR-E013" in empty, empty)
+
+    # ---- `else` -------------------------------------------------------------------------------
+    branched = generate("::: props n: Int\n:::\n\n::: if n > 0\n\n::: p\nsome\n:::\n\n:::\n\n"
+                        "::: else\n\n::: p\nnone\n:::\n\n:::\n").stdout
+    check("an `else` becomes the other branch of the `if` above it",
+          "else {" in branched, branched)
+    orphaned = generate("::: props n: Int\n:::\n\nA paragraph.\n\n::: else\n\nx\n\n:::\n").stderr
+    check("an `else` with no `if` directly above it is refused",
+          "STAR-E016" in orphaned, orphaned)
+    conditioned = generate("::: props n: Int\n:::\n\n::: if n > 0\n\nx\n\n:::\n\n"
+                           "::: else n < 0\n\ny\n\n:::\n").stderr
+    check("an `else` carrying a condition is refused rather than silently ignored",
+          "STAR-E015" in conditioned, conditioned)
+
     # ---- positions: a refusal points AT the thing, in line:column -----------------------------
     #
     # These were byte offsets into the container until BMX 0.3 gave every node its own position.

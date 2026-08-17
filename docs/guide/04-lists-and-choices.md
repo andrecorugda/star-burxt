@@ -71,6 +71,78 @@ Everything is set.
 The body appears when the condition is true and is absent when it is not — not hidden with CSS,
 absent. There is no `else`; write a second `if` for the other case.
 
+## The other branch
+
+```
+::: if ready
+
+::: p
+Everything is set.
+:::
+
+:::
+
+::: else
+
+::: p
+Still waiting.
+:::
+
+:::
+```
+
+An `else` must come **directly after** its `if`, with nothing between them. It takes no condition —
+if you meant a different question, write a second `if`.
+
+## Choosing between many
+
+When there are more than two answers, `match` is the one to reach for — and it is the reason to
+build a screen this way rather than any other:
+
+```
+::: match model.route
+
+::: case Home
+
+# Welcome
+
+:::
+
+::: case Post(id)
+
+# Post {{ to_string(id) }}
+
+:::
+
+::: case Search(q)
+
+# Results for {{ q }}
+
+:::
+
+:::
+```
+
+`case Post(id)` binds `id` inside its branch, exactly as `for row in rows` binds `row`.
+
+**Now add a screen and forget to render it:**
+
+```
+enum Route { Home, Post(Int), Search(String), Archive }
+```
+
+```
+error: this `match` on `Route` does not handle `Archive`. Every variant must be
+handled — that is what makes adding a variant later a compile error instead of
+a silent fall-through.
+```
+
+**The build fails.** Not a blank page, not a bug report from somebody who clicked the wrong link
+three weeks later — the thing you forgot, named, before the page exists.
+
+This is the reason to write your routes as an `enum` rather than as strings, and it is the one
+thing on this site that no other front-end framework can do.
+
 ## Conditions can be expressions
 
 ```
