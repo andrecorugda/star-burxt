@@ -32,20 +32,21 @@ jobs:
           sudo install -m 755 target/release/burxt /usr/local/bin/burxt
           sudo install -m 644 lib/*.bx /usr/local/lib/burxt/
 
-      # A `sed` that rewrote a `dependency bmx …` line lived here, and **it matched nothing**:
-      # `burxt.package` has no such line, deliberately, for the reason written down in that file —
-      # a path dependency names a DIRECTORY, and `lib/` holds the whole standard library, so
-      # declaring it to be BMX made `os_arg` come back as "declared in the package `bmx`".
+      # A `sed` that rewrote a `dependency bmx …` line lived here, and **it matched nothing** —
+      # `burxt.package` had no such line at the time. A `sed -i` whose pattern misses exits 0, so the
+      # step was green and named after work it was not doing. Worse, it was DATED: the day BMX left
+      # `lib/` and the manifest gained a real dependency, that pattern would finally match and
+      # rewrite it to `/tmp/burxt/lib` — a directory that by then does not hold `bmx.bx`, so the move
+      # would have looked like the thing that broke star. Deleted rather than repointed.
       #
-      # A `sed -i` whose pattern misses exits 0. So the step was green, named after work it was not
-      # doing, and **it would have started doing damage on the day it became relevant**: when BMX
-      # leaves `lib/` and the manifest gains a real `dependency bmx …`, that pattern would finally
-      # match and rewrite it to `/tmp/burxt/lib` — a directory that by then does not hold `bmx.bx`.
-      # The move would have looked like the thing that broke star.
-      #
-      # Deleted rather than repointed. `use "std/bmx.bx"` is how BMX is reached today and the
-      # install step above genuinely carries it; when that changes, the manifest and the import
-      # change together and this file needs a step that describes what is then true.
+      # This is what replaces it, and it does the real thing: `burxt fetch` clones BMX at the commit
+      # `burxt.package` pins and writes `burxt.lock`. **No rewriting.** The manifest CI uses is the
+      # manifest a user gets, which is the only version of this step that can prove anything.
+      - name: Fetch the BMX dependency at its pinned commit
+        run: |
+          set -eux
+          burxt fetch
+          cat burxt.lock
 
       - name: A .bmx document becomes a component the compiler judges
         run: python3 test.py

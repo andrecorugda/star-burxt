@@ -99,6 +99,30 @@ use "star/star.bx";
 The first segment is the **dependency's name**, not a directory beside your file. Call it what you
 like — `dependency star-burxt …` gives you `use "star-burxt/star.bx"`.
 
+### star-burxt's own dependency is yours too
+
+**This is the one rough edge, and it is the package manager's rather than star-burxt's.** A package
+import is resolved against the **root** manifest only, so a dependency cannot bring its own
+dependencies with it. star-burxt uses BMX, and your project has to say so as well:
+
+```
+name        my-app
+version     0.1.0
+dependency  star  https://github.com/andrecorugda/star-burxt  v0.1.0
+dependency  bmx   https://github.com/andrecorugda/bmx         d06722a
+```
+
+The name must be **`bmx`**, because that is the first segment star-burxt's own imports use. Leave it
+out and the error names the file rather than the cause:
+
+```
+error: cannot read <star-burxt>/bmx/burxt/bmx.bx: No such file or directory
+  ...used by <star-burxt>/star.bx
+  ...used by app.bx
+```
+
+If you see that, you have not made a mistake in your own program — add the second line.
+
 ### Working against a checkout instead
 
 While you are changing star-burxt itself, point at the directory:
@@ -151,9 +175,9 @@ is that nothing in it is magic.
 Or call `star_generate` from your own program and skip the file, which is what a build step would
 do.
 
-## A trap on the first program, and it is not star-burxt's
+## There is no `main`
 
-**A Burxt program is its top-level statements.** There is no `main`, and the name is reserved:
+**A Burxt program is its top-level statements**, and `main` is a reserved name:
 
 ```burxt
 use "star/star.bx";
@@ -164,10 +188,19 @@ match star_generate(read_file("counter.bmx"), "counter") {
 }
 ```
 
-Writing `function main()` out of habit is refused — correctly, and with a clear message *if that is
-the only thing wrong*. In a program that also has a `use`, a different check reports first and you
-get an error pointing into the standard library at a function you never called. If you ever see
-that, delete your `main` and un-indent its body.
+Writing `function main()` out of habit is refused, and says so:
+
+```
+error: `main` is a name the language owns, so a program may not declare it
+```
+
+Delete it and un-indent the body.
+
+*(This page briefly warned that the message was worse than that — in a program with any `use`, a
+different check reported first and pointed into the standard library at a function you never called.
+That was a real defect and it is fixed; both compilers now give the sentence above. Recorded here
+only because a warning about a fixed problem is worse than no warning at all, and this one was
+removed rather than left to age.)*
 
 ## 4. Building for a browser
 

@@ -1,7 +1,8 @@
 // ============================================================================
-// lib/star.bx — star-burxt: what gives a BMX document life.
+// star.bx — star-burxt: what gives a BMX document life.
 //
-//     use "lib/star.bx";
+//     dependency  star  https://github.com/andrecorugda/star-burxt  v0.1.0
+//     use "star/star.bx";
 //
 // BMX describes where an expression goes. It does not know what `for` means, or
 // `if`, or `on:click` — `BOUNDARY.md` is the document that keeps it that way. This
@@ -15,7 +16,7 @@
 //     unchecked script on the page, which is the hole escaping exists to close
 //
 // That last one is the reason this file exists rather than a runtime `button()`
-// function. `lib/bmx.bx` hands a component block's head over as a **runtime
+// function. BMX's parser hands a component block's head over as a **runtime
 // String**, so `on:click=count + 1` would arrive as text that nothing compiles:
 // no typecheck, no unknown-name error, no `burxt review` surface. A handler that
 // is a string is a handler the language cannot judge, and judging it is the whole
@@ -31,7 +32,7 @@
 // A view is `pure`, so `burxt effects --allow ""` confirms it reaches nothing —
 // by construction rather than by inspection. A handler is an expression producing
 // the next state, which is the same architecture Elm arrived at, and it is not a
-// coincidence: **Burxt has no closures** (`lib/fn.bx` — "a closure needs an owner
+// coincidence: **Burxt has no closures** (Burxt's `lib/fn.bx` — "a closure needs an owner
 // for its captured state, which is a memory question in a language whose whole
 // memory model is regions"). With no closures there is nothing to capture a
 // mutable cell in, so state cannot hide inside a handler. It has to be threaded,
@@ -51,12 +52,13 @@
 // **`std/` is the standard library, wherever Burxt is installed** — the prefix that makes this a
 // package rather than a folder inside the compiler's repository.
 //
-// `bmx.bx` is reached through `std/` too, and only because it has not left Burxt's `lib/` yet. BMX
-// is a format with its own repository, its own version and its own conformance suite, and
-// star-burxt is one of its hosts rather than part of it — so on the day it moves, this line becomes
-// `use "bmx/burxt/bmx.bx"` and `burxt.package` gains the dependency that pins the version. The
-// reason it is not that today is written down in `burxt.package` rather than left to be
-// rediscovered.
+// **`bmx` is a package dependency**, declared in `burxt.package` and pinned to a commit. BMX is a
+// format with its own repository, its own version and its own conformance suite; star-burxt is one
+// of its hosts rather than part of it, and the manifest is where that stops being a claim and
+// becomes something a build has to satisfy. It reached here through `std/` until the day BMX left
+// Burxt's `lib/`, which is a sentence worth keeping only because the two are easy to confuse: a
+// dependency and the standard library are both "somewhere else", and only one of them is versioned
+// by somebody with their own release cadence.
 //
 // **The long path is the format's neutrality, not an accident.** In the format's repository
 // `reference/bmx.js` defines what BMX means and `burxt/bmx.bx` is one implementation of it; putting
@@ -66,7 +68,7 @@
 // exactly what it is.
 use "std/html.bx";
 use "std/option.bx";
-use "std/bmx.bx";
+use "bmx/burxt/bmx.bx";
 
 // ---- what this package supports, and it is three names ----------------------
 //
@@ -108,7 +110,7 @@ public class StarComponent {
 // ---- head parsing, which is the host's job and not the format's --------------
 //
 // Byte codes rather than character literals, and `byte_at`/`substring` rather than
-// building strings a byte at a time — the idiom `lib/bmx.bx` already uses, and the
+// building strings a byte at a time — the idiom BMX's own parser uses, and the
 // one that does not allocate per character.
 //
 //     111 'o'   110 'n'   58 ':'   61 '='   32 ' '

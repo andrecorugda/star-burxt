@@ -12,6 +12,17 @@ version     0.1.0
 # `bmx`" — the whole standard library had been declared to be BMX. The same file also arrives twice,
 # once through `std/` and once through the package, which is its own error.
 #
-# A path dependency wants a directory that is the package. Until BMX has one, `std/` is the honest
-# route, and this file gains its `dependency bmx https://github.com/andrecorugda/bmx <tag>` on the
-# day BMX moves — which is also the day it has a version worth pinning.
+# A path dependency wants a directory that is the package, and BMX now has one.
+#
+# **A COMMIT, NOT A TAG, and that is a decision rather than a gap.** `burxt.lock` pins commits
+# rather than tags for the reason that applies here one level up: a tag can be moved and a commit
+# cannot. BMX's Burxt half cannot be checked against any released compiler — `std/` is unreleased —
+# so there is no green run behind a version number yet, and minting one would name something nothing
+# has verified. It gets a tag when a run stands behind it.
+#
+# The import is `use "bmx/burxt/bmx.bx"` rather than `bmx/bmx.bx`: in the format's repository
+# `reference/bmx.js` defines what BMX means and `burxt/bmx.bx` is one implementation of it. Putting
+# the Burxt file at that repo's root would shorten this by seven characters and make a specification
+# repository look like a Burxt package, which is the one thing it must not look like. It needs no
+# manifest of its own — nothing reads a dependency's — so it stays exactly what it is.
+dependency  bmx  https://github.com/andrecorugda/bmx  d06722a
