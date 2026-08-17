@@ -22,36 +22,74 @@ jobs:
       - name: The documentation site is Liquid-safe
         run: python3 check.py
 
-      # **BUILT FROM `develop`, NOT FROM THE RELEASE, and this is not laziness.**
+      # **A RELEASED compiler, pinned — and this paragraph replaces one that had been true all day.**
       #
-      # A package should pin a released compiler: building against a moving branch silently consumes
-      # unreleased features, and a badge that goes red for somebody else's in-progress work is a badge
-      # people learn to ignore. star-burxt argues that on its own install page.
+      # A package should pin a release: building against a moving branch silently consumes unreleased
+      # features, and a badge that goes red for somebody else's in-progress work is a badge people
+      # learn to ignore. star-burxt argues that on its own install page, and until v1.3.0 it could not
+      # follow its own advice — v1.2.0 refused two things every component does:
       #
-      # It cannot follow it yet. **v1.2.0 cannot compile a star-burxt component**, measured against the
-      # released binary rather than inferred from a changelog:
+      #     update(msg, m) -> Model  holding a list      needed the relay fix
+      #     pure function … json_render(…)               needed the `pure` sweep on the library
       #
-      #     update(msg, m) -> Model  holding a list
-      #       error: cannot return Model, because its storage lives in a region
-      #       -> needs the relay fix, which landed AFTER the tag
+      # Both are in 1.3.0, **checked by compiling those two programs against the released binary**
+      # rather than by reading the notes — which is the same distinction that caught us at 1.2.0,
+      # where the fixes were on the branch and not in the tag. The whole suite was then run against
+      # the release before this step changed.
       #
-      #     pure function … json_render(…)
-      #       error: `json_render` is not declared `pure`
-      #       -> needs the marker sweep on the standard library, also after the tag
-      #
-      # A component's `update` returns a record holding a list, and its `to_text` is `pure` and calls
-      # the JSON encoder. Both are refused by 1.2.0. So this step stays on `develop` until a release
-      # contains both, and **the moment one does, this comment is the thing to delete** — checked by
-      # running the two programs above against the candidate, not by reading its notes.
+      # Raising this pin is a decision, not maintenance: it is what the badge is about.
       - name: Install Burxt
+        env:
+          BURXT_VERSION: "1.3.0"
         run: |
           set -eux
-          git clone --depth 1 --branch develop https://github.com/andrecorugda/burxt.git /tmp/burxt
-          sudo apt-get update -qq && sudo apt-get install -y llvm-18-dev libpolly-18-dev
-          cd /tmp/burxt && LLVM_SYS_181_PREFIX=/usr/lib/llvm-18 cargo build --release
+          curl -fsSL -o /tmp/burxt.tar.gz \
+            "https://github.com/andrecorugda/burxt/releases/download/v${BURXT_VERSION}/burxt-${BURXT_VERSION}-linux-x86_64.tar.gz"
+          mkdir -p /tmp/burxt && tar xzf /tmp/burxt.tar.gz -C /tmp/burxt --strip-components=1
           sudo install -d /usr/local/bin /usr/local/lib/burxt
-          sudo install -m 755 target/release/burxt /usr/local/bin/burxt
-          sudo install -m 644 lib/*.bx /usr/local/lib/burxt/
+          sudo install -m 755 /tmp/burxt/burxt /usr/local/bin/burxt
+          sudo install -m 644 /tmp/burxt/lib/*.bx /usr/local/lib/burxt/
+          burxt --version | head -1
+
+      # **The two programs that kept this project on a branch, run against the release that claims to
+      # compile them.** Kept as a step rather than deleted with the pin: the next version bump is
+      # exactly when someone wants to know whether these still pass, and a check that only ever ran
+      # once is a check nobody can repeat.
+      - name: The release compiles what a component needs
+        run: |
+          set -eux
+          cat > /tmp/gate-relay.bx <<'BX'
+          class Task  { id: Int, label: String }
+          class Model { tasks: [Task], count: Int }
+          enum Msg { Add }
+          pure function update(msg: Msg, m: Model) -> Model allocates {
+              match msg {
+                  Add => {
+                      let mutable out: [Task] = [];
+                      let mutable i: Int = 0;
+                      while i < len(m.tasks) { let k: Int = push(out, m.tasks[i]); i += 1; }
+                      let n: Int = push(out, Task { id: m.count, label: "new" });
+                      return Model { tasks: out, count: m.count + 1 };
+                  }
+              }
+          }
+          let mutable start: [Task] = [];
+          let a: Int = push(start, Task { id: 1, label: "one" });
+          let next: Model = update(Msg.Add, Model { tasks: start, count: 2 });
+          print("tasks: " + to_string(len(next.tasks)));
+          BX
+          cat > /tmp/gate-pure.bx <<'BX'
+          use "std/json.bx";
+          class Model { count: Int }
+          pure function to_text(m: Model) -> String allocates {
+              let mutable f: [Field] = [];
+              let a: Int = push(f, json_field("count", json_int(m.count)));
+              return json_render(json_object(f));
+          }
+          print(to_text(Model { count: 7 }));
+          BX
+          test "$(burxt run /tmp/gate-relay.bx)" = "tasks: 2"
+          test "$(burxt run /tmp/gate-pure.bx)" = '{"count":7}'
 
       # A `sed` that rewrote a `dependency bmx …` line lived here, and **it matched nothing** —
       # `burxt.package` had no such line at the time. A `sed -i` whose pattern misses exits 0, so the

@@ -62,10 +62,10 @@ pure function update(msg: Msg, m: Model) -> Model allocates {
             return Model { tasks: toggled(m.tasks, id), draft: m.draft, view: m.view, next_id: m.next_id };
         }
         Draft(text) => {
-            return Model { tasks: m.tasks, draft: text + "", view: m.view, next_id: m.next_id };
+            return Model { tasks: m.tasks, draft: text, view: m.view, next_id: m.next_id };
         }
         Show(which) => {
-            return Model { tasks: m.tasks, draft: m.draft, view: which + "", next_id: m.next_id };
+            return Model { tasks: m.tasks, draft: m.draft, view: which, next_id: m.next_id };
         }
         Clear => {
             return Model { tasks: kept(m.tasks, false), draft: m.draft, view: m.view, next_id: m.next_id };
@@ -75,7 +75,7 @@ pure function update(msg: Msg, m: Model) -> Model allocates {
             let mutable out: [Task] = [];
             let mutable i: Int = 0;
             while i < len(m.tasks) { let k: Int = push(out, m.tasks[i]); i += 1; }
-            let n: Int = push(out, Task { id: m.next_id, label: m.draft + "", done: false });
+            let n: Int = push(out, Task { id: m.next_id, label: m.draft, done: false });
             return Model { tasks: out, draft: "", view: m.view, next_id: m.next_id + 1 };
         }
     }
@@ -100,7 +100,6 @@ pure function to_text(m: Model) -> String allocates {
     return json_render(json_object(top));
 }
 
-// `+ ""` on every String pulled out of a `match` — see Todos.sbmx for why it is load-bearing.
 function from_text(text: String) -> Model allocates {
     let mutable out: [Task] = [];
     let mutable draft: String = "";
@@ -111,11 +110,11 @@ function from_text(text: String) -> Model allocates {
         Ok(value) => {
             match json_at(value, "draft") {
                 None => { }
-                Some(v) => { match json_as_text(v) { None => { } Some(t) => { draft = t + ""; } } }
+                Some(v) => { match json_as_text(v) { None => { } Some(t) => { draft = t; } } }
             }
             match json_at(value, "view") {
                 None => { }
-                Some(v) => { match json_as_text(v) { None => { } Some(t) => { view = t + ""; } } }
+                Some(v) => { match json_as_text(v) { None => { } Some(t) => { view = t; } } }
             }
             match json_at(value, "tasks") {
                 None => { }
@@ -139,7 +138,7 @@ function from_text(text: String) -> Model allocates {
                                 }
                                 match json_at(row, "label") {
                                     None => { }
-                                    Some(v) => { match json_as_text(v) { None => { } Some(t) => { label = t + ""; } } }
+                                    Some(v) => { match json_as_text(v) { None => { } Some(t) => { label = t; } } }
                                 }
                                 match json_at(row, "done") {
                                     None => { }

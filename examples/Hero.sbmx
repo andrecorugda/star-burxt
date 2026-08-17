@@ -41,7 +41,6 @@ pure function to_text(m: Model) -> String allocates {
     return json_render(json_object(top));
 }
 
-// `+ ""` on a String pulled out of a `match` — see examples/Todos.sbmx for why it is load-bearing.
 function from_text(text: String) -> Model allocates {
     let mutable out: [Task] = [];
     let mutable left: Int = 0;
@@ -65,7 +64,7 @@ function from_text(text: String) -> Model allocates {
                                 }
                                 match json_at(rows[i], "label") {
                                     None => { }
-                                    Some(v) => { match json_as_text(v) { None => { } Some(t) => { label = t + ""; } } }
+                                    Some(v) => { match json_as_text(v) { None => { } Some(t) => { label = t; } } }
                                 }
                                 match json_at(rows[i], "done") {
                                     None => { }

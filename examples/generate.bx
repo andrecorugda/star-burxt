@@ -173,19 +173,14 @@ match file_read_maybe(path) {
                         print("// has to know the handler indices star assigns.");
                         print("function " + name + "_arrived(tag: Int, value: String, state: String) -> Int \{");
                         print("    region frame \{");
-                        // Bound to a local before returning, not for style: returning the call
-                        // directly is refused — *cannot return this Int: it was built inside a
-                        // `region` block* — because the analysis reads the expression's origin
-                        // rather than its type. A scalar through a `let` is the spelling that says
-                        // what is meant.
-                        // **`return 0` rather than the length, and that is a WORKAROUND.**
-                        // Returning the settle call's `Int` is refused — *cannot return this Int: it
-                        // was built inside a `region` block* — because the rule taints the result of
-                        // an allocating call regardless of its type, and an `Int` has no storage to
-                        // outlive anything. Reported with a 17-line reproduction. The number is a
-                        // page length nobody reads, so the workaround costs nothing.
-                        print("        let shown: Int = " + name + "_settle(arrived(tag, value, from_text(state)));");
-                        print("        return 0;");
+                        // The page's length, returned out of the region it was built in.
+                        //
+                        // This was `return 0` until Burxt 1.3.0, because an `Int` produced by an
+                        // allocating call was refused on its way out of a `region` — the rule read
+                        // the expression's origin rather than its type, and an `Int` has no storage
+                        // to outlive anything. Reported with a 17-line reproduction, fixed in both
+                        // compilers, and checked against the RELEASE before this line changed.
+                        print("        return " + name + "_settle(arrived(tag, value, from_text(state)));");
                         print("    \}");
                         print("\}");
                     }

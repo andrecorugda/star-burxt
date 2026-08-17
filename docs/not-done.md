@@ -17,6 +17,10 @@ useful to you than a feature list.
 `from_text`, because nothing in Burxt holds state between two calls. That is a gap rather than a
 decision, and it is being worked on.
 
+**One event per element.** `on:input=…` and `on:keydown=…` on the same element is not supported yet —
+the head reads one `on:` binding and the rest of the line is the expression. Put the second event on
+a wrapper, or handle it in the one you have.
+
 ## Deliberately not planned
 
 **Two-way binding beyond `on:input`.** A value flows in and an event flows out, and that is the
@@ -34,7 +38,7 @@ plugin system. What the page does is what your document says.
 
 ## Where it is not, yet
 
-- anything needing fine-grained styling hooks on individual elements
+- a control that needs two different events on the same element
 
 ## When this changes
 

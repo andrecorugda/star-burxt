@@ -31,8 +31,8 @@ function from_text(text: String) -> Model {
     match json_parse(text) {
         Error(e) => { }
         Ok(v) => {
-            match json_at(v, "draft") { None => { } Some(x) => { match json_as_text(x) { None => { } Some(t) => { draft = t + ""; } } } }
-            match json_at(v, "saved") { None => { } Some(x) => { match json_as_text(x) { None => { } Some(t) => { saved = t + ""; } } } }
+            match json_at(v, "draft") { None => { } Some(x) => { match json_as_text(x) { None => { } Some(t) => { draft = t; } } } }
+            match json_at(v, "saved") { None => { } Some(x) => { match json_as_text(x) { None => { } Some(t) => { saved = t; } } } }
             match json_at(v, "hits") { None => { } Some(x) => { match json_as_int(x) { None => { } Some(n) => { hits = n; } } } }
         }
     }
