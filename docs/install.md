@@ -8,6 +8,33 @@ description: "star-burxt ships in the Burxt standard library. There is nothing s
 
 # Getting star-burxt
 
+## Requirements
+
+| | |
+|---|---|
+| **Burxt 1.2 or later** | earlier releases cannot express a `pure` view — see below |
+| a wasm linker | you already have one; `rust-lld -flavor wasm` **is** `wasm-ld` |
+| node, or any browser | to run what you build |
+
+**Why 1.2 and not 1.1.** Burxt 1.1.0 shipped a `lib/html.bx` whose element builders are not
+declared `pure`. Purity is transitive, so on that release a `pure function view -> Html` cannot be
+written at all — and star-burxt's whole guarantee is that a view is `pure`, so
+`burxt effects --allow ""` confirms it reaches nothing.
+
+The failure is worth showing, because it does not look like a version problem:
+
+```
+error: `pure function view` may not call `html_element`, which is not declared `pure`:
+the guarantee cannot rest on a function that does not make it.
+Declare `pure function html_element` too, or drop `pure` from `view`.
+```
+
+That error points at **your** file, names a rule you did not break, and its suggested fix — *drop
+`pure` from `view`* — would have you delete the property deliberately. If you see it, the answer is
+a newer Burxt, not a smaller guarantee.
+
+## Installing
+
 **There is nothing to install.** star-burxt is `lib/star.bx` in the Burxt standard library, so if
 you have Burxt you have it. That is deliberate: it cannot run without Burxt, so a separate
 distribution would buy nothing and cost a wiring step.

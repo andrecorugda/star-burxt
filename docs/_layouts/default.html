@@ -34,6 +34,28 @@
     {%- endif %}
   </a>
 
+
+  {%- comment -%}
+    The version picker. Shown on every documentation page, because on this site every page IS
+    version-scoped — there is no marketing page here for a dropdown to be meaningless on.
+
+    Driven from `site.versions` rather than hard-coded options: freezing a release is a directory
+    and one config line, with no template edit. `rest` is the current path with any version prefix
+    removed, so switching keeps the reader on the same page rather than dropping them at an index.
+  {%- endcomment -%}
+  {%- assign rest = page.url | remove_first: site.baseurl -%}
+  {%- for v in site.versions -%}
+    {%- unless v.path == "" -%}
+      {%- assign marker = v.path | append: "/" -%}
+      {%- if rest contains marker -%}{%- assign rest = rest | remove_first: v.path -%}{%- endif -%}
+    {%- endunless -%}
+  {%- endfor -%}
+  <select class="ver" aria-label="Documentation version" onchange="location.href=this.value">
+    {%- for v in site.versions %}
+    <option value="{{ site.baseurl }}{{ v.path }}{{ rest }}"{% if page.url contains v.path and v.path != "" %} selected{% elsif v.path == "" and forloop.first %} selected{% endif %}>{{ v.label }}</option>
+    {%- endfor %}
+  </select>
+
   <button class="burger" type="button" data-drawer aria-label="Open the menu" aria-expanded="false">
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
       <path d="M3 5.5h14M3 10h14M3 14.5h14"/>
@@ -124,8 +146,9 @@
 
 <footer>
   <p>
-    star-burxt — a front-end framework of the <a href="https://burxt-lang.org">Burxt</a> project,
-    built on <a href="https://bmx.burxt-lang.org">BMX</a>.
+    star-burxt {{ site.star_version }} — a front-end framework of the
+    <a href="https://burxt-lang.org">Burxt</a> project, built on
+    <a href="https://bmx.burxt-lang.org">BMX</a>. Requires Burxt {{ site.star_requires }} or later.
     <a href="https://github.com/andrecorugda/burxt">Open source</a>, MIT or Apache-2.0.
   </p>
 </footer>

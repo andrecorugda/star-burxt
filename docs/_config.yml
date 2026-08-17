@@ -11,6 +11,33 @@ baseurl: ""
 
 has_branding: true
 
+# ---- versioning -------------------------------------------------------------------------------
+#
+# star-burxt versions independently of Burxt. It is a framework with its own release cadence, and
+# tying its number to the language's would mean either a version bump with nothing in it or a fix
+# waiting for a language release — which is the cost that moved it out of `lib/` in the first place.
+#
+# `star_version` is what a reader is looking at. `star_requires` is the Burxt it needs, and it is
+# stated rather than implied: v1.1.0 shipped an `lib/html.bx` whose builders are not `pure`, and
+# purity is transitive, so on that release a `pure` view cannot be written at all.
+star_version:  "0.1.0"
+star_series:   "0.1"
+star_requires: "1.2"
+
+# **Every documented version, newest first. The first entry is the live one.**
+#
+# Driven from a list rather than hard-coded options in the layout, so freezing a version is a
+# directory and ONE line here. burxt-lang.org's picker names its two versions inside the template,
+# which means the layout has to be edited to publish a release -- the kind of step that gets missed
+# in the release nobody was worried about.
+#
+# To freeze 0.1 when 0.2 ships: copy the pages to `docs/0.1/`, add `- number: "0.1"` below, and
+# change `star_series` above. The picker follows.
+versions:
+  - number: "0.1"
+    label:  "0.1 (latest)"
+    path:   ""
+
 markdown: kramdown
 kramdown:
   input: GFM
