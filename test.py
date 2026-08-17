@@ -518,6 +518,23 @@ def main():
     check("`child={…}` is untouched — the one place single braces are star's",
           "html_text(to_string(n))" in still_child.stdout, still_child.stdout[-200:])
 
+    # ---- no refusal message teaches the old fence ----------------------------------------------
+    #
+    # **Four of them did, and a message is the compiler talking.** `Add \`::: props name: Type\`` told a
+    # reader to write syntax BMX now refuses — an error that instructs you to write something illegal
+    # is worse than an error that says nothing. They survived the 0.7 sweep because a message is a
+    # string inside `star.bx`, and I had scoped the sweep to documents and fixtures.
+    #
+    # Read out of the SOURCE rather than by triggering each refusal: there are twenty-odd and a test
+    # that fires only the ones somebody remembered is the shape that let these through.
+    messages = re.findall(r'Result\.Error\((.*?)\);', open(os.path.join(ROOT, "star.bx"),
+                                                            encoding="utf-8").read(), re.S)
+    stale = [m for m in messages if ":::" in m]
+    check("no refusal message teaches the 0.6 fence",
+          not stale, "\n".join(m.strip()[:110] for m in stale[:4]))
+    check("and there are messages to check, so the search can find something",
+          len(messages) > 15, "%d refusal messages found" % len(messages))
+
     shutil.rmtree(work, ignore_errors=True)
 
     if failures:

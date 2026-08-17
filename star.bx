@@ -492,7 +492,7 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                 if fenced.name == "match" {
                     if len(bmx_strip_end(fenced.head)) == 0 {
                         return Result.Error("STAR-E010 at " + star_at(source, fenced.offset)
-                            + ": a `match` needs something to match on — `::: match model.route`");
+                            + ": a `match` needs something to match on — `:match: model.route`");
                     }
                     let mutable arms: String = "";
                     let mutable c: Int = 0;
@@ -507,7 +507,7 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                                 }
                                 if len(bmx_strip_end(arm.head)) == 0 {
                                     return Result.Error("STAR-E012 at " + star_at(source, arm.offset)
-                                        + ": a `case` needs a pattern — `::: case Post(id)`");
+                                        + ": a `case` needs a pattern — `:case: Post(id)`");
                                 }
                                 match star_emit_stmts(source, known, marker, arm.children, target,
                                                       tag + "_" + to_string(i) + "_" + to_string(c),
@@ -700,7 +700,7 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                 if html_is_void(fenced.name) && len(fenced.children) > 0 {
                     return Result.Error("STAR-E004 at " + star_at(source, fenced.offset)
                         + ": `" + fenced.name + "` is a void element and cannot have a body."
-                        + " Write `::: " + fenced.name + " on:input=...` with nothing between"
+                        + " Write `:" + fenced.name + ": on:input=...` with nothing between"
                         + " the fences");
                 }
                 // A key becomes an attribute the reconciler can match on. It is emitted
@@ -2116,7 +2116,7 @@ public function star_generate(source: String, name: String, known: [StarKnown]) 
             let props: String = star_props(blocks);
             if len(props) == 0 {
                 return Result.Error("STAR-E003: this document declares no `props` block, so it has"
-                    + " no signature and nothing can invoke it. Add `::: props name: Type`");
+                    + " no signature and nothing can invoke it. Add `:props: name: Type`");
             }
             let mutable handlers: [StarHandler] = [];
             match star_emit_stmts(source, known, marker, blocks, "kids", "0", "    ", handlers, "", "") {
