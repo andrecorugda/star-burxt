@@ -19,8 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: The documentation site is Liquid-safe
-        run: python3 check.py
 
       # **A RELEASED compiler, pinned — and this paragraph replaces one that had been true all day.**
       #
@@ -90,6 +88,17 @@ jobs:
           BX
           test "$(burxt run /tmp/gate-relay.bx)" = "tasks: 2"
           test "$(burxt run /tmp/gate-pure.bx)" = '{"count":7}'
+
+      # **Third, not first, and the order is the point.** This guard was Python and ran before Burxt
+      # was installed; now that it IS Burxt it needs the compiler, so it moved below the install. That
+      # is the cost of using your own language for your own tooling, and it is worth paying: the
+      # replacement gets `file_walk` returning an `Option`, so a missing `docs/` and a `docs/` with no
+      # pages in it stop being the same answer — the Python reported "0 pages, all wrapped" for both.
+      - name: The documentation site is Liquid-safe
+        run: |
+          set -eux
+          burxt build tools/liquid.bx -o star-liquid
+          ./star-liquid
 
       # A `sed` that rewrote a `dependency bmx …` line lived here, and **it matched nothing** —
       # `burxt.package` had no such line at the time. A `sed -i` whose pattern misses exits 0, so the

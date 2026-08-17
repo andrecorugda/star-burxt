@@ -54,8 +54,10 @@ today, and the day one of those changes should not be the day somebody else's bu
 
 ```sh
 python3 test.py          # the guarantees. The ACCEPTING case runs first and its failure is fatal.
-python3 verify-docs.py   # every .bmx example on the site
-python3 check.py         # the site: front matter, raw blocks, CNAME
+python3 verify-docs.py   # every .sbmx example on the site — generated AND compiled
+node tools/paints.mjs    # the site colours burxt, bmx, sbmx and css
+
+burxt build tools/liquid.bx -o star-liquid && ./star-liquid   # the site: raw blocks, front matter, CNAME
 ```
 
 `test.py` is mostly refusals, and a suite of nothing but refusals is satisfied by a generator that
@@ -65,9 +67,18 @@ fails.
 `verify-docs.py` exists because the docs are a tutorial. It found chapter 1 teaching a document the
 generator refuses, on the day it was written.
 
-`check.py` exists because there is no Ruby here, so Jekyll only runs after a push and the first
-symptom of a bad page is a site that silently stops updating. A literal `{{` outside a `{% raw %}`
-block takes the whole build down, and these pages are full of `{{`.
+`tools/liquid.bx` exists because there is no Ruby here, so Jekyll only runs after a push and the
+first symptom of a bad page is a site that silently stops updating. A literal `{{` outside a
+`{% raw %}` block takes the whole build down, and these pages are full of `{{`.
+
+**It is a Burxt program, and it was Python.** A project arguing that a language can be strict enough
+to catch what a reviewer would miss should not do its own checking in one that cannot — and the
+rewrite paid for itself immediately: `file_walk` answers an `Option`, so a missing `docs/` and a
+`docs/` with no pages in it stopped being the same answer. The Python reported *0 pages, all wrapped*
+for both. `star-build` moved the same way, from a shell script that word-split `$exports` on purpose
+and left a path unquoted by accident.
+
+`test.py` and `verify-docs.py` are still Python and should not stay that way.
 
 `docs/assets/site.css` and `site.js` are byte copies of burxt-lang.org's — re-copy rather than edit.
 `docs/assets/star.css` is this site's own.

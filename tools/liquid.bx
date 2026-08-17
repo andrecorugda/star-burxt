@@ -1,0 +1,143 @@
+// The guard this repository would otherwise not have: every Liquid delimiter Jekyll would interpret.
+//
+//     burxt build tools/liquid.bx -o star-liquid
+//     ./star-liquid
+//
+// **There is no Ruby on the machines this site is written on, so Jekyll only runs after a push, and
+// the first symptom of a bad page is a site that silently stops updating.** That is the worst shape a
+// failure can have: nothing is red, nothing is logged where you are looking, and the page you are
+// reading is the last good build. `burxt-lang.org` went down for exactly one cause — a reference page
+// containing `{{` was read as a Liquid variable — and star-burxt shows slot syntax on nearly every
+// page, so this is not hypothetical here. It is the single most likely way to break this site.
+//
+// **This was Python, and Andre's objection was the right one**: a project whose argument is that a
+// language can be strict enough to catch what a reviewer would miss should not do its own checking in
+// a language that cannot. Two things this file gets for free that the Python did not have:
+// `file_walk` returning `Option` so "no such directory" and "zero pages" cannot be confused, and a
+// missing front-matter field being a type error rather than a `KeyError` at the end of a CI run.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+
+// Liquid this site MEANS to use. The guard exists for delimiters that arrive by ACCIDENT — slot
+// syntax in prose, `{{ total }}` in an example — and a page that includes a partial or asks for
+// `site.baseurl` is using Liquid on purpose. Narrow and explicit rather than a general escape: any
+// delimiter that is not one of these is still an error, which is the whole value of the check.
+pure function is_intended(line: String, at: Int) -> Bool {
+    let rest: String = substring(line, at, len(line) - at);
+    return string_starts_with(rest, "\{% include ")
+        || string_starts_with(rest, "\{\{ site.")
+        || string_starts_with(rest, "\{%- include ");
+}
+
+// `{% raw %}` and `{% endraw %}` are the two delimiters allowed outside a raw block, because they are
+// what opens and closes one.
+pure function opens_raw(line: String) -> Bool {
+    return string_contains(line, "\{% raw %\}") || string_contains(line, "\{%- raw -%\}");
+}
+
+pure function closes_raw(line: String) -> Bool {
+    return string_contains(line, "\{% endraw %\}") || string_contains(line, "\{%- endraw -%\}");
+}
+
+// Where an unprotected `{{` or `{%` sits on this line, or -1.
+//
+// **Walked rather than counted**, because a page may legitimately open and close several raw blocks
+// and a count cannot tell an unbalanced file from a balanced one.
+pure function unprotected_at(line: String) -> Int {
+    let mutable i: Int = 0;
+    while i + 1 < len(line) {
+        if byte_at(line, i) == 123 {
+            let next: Int = byte_at(line, i + 1);
+            if next == 123 || next == 37 {
+                // The raw tags themselves, and the Liquid this site means.
+                let rest: String = substring(line, i, len(line) - i);
+                let is_raw: Bool = string_starts_with(rest, "\{% raw %\}")
+                    || string_starts_with(rest, "\{% endraw %\}")
+                    || string_starts_with(rest, "\{%- raw -%\}")
+                    || string_starts_with(rest, "\{%- endraw -%\}");
+                if !is_raw && !is_intended(line, i) {
+                    return i;
+                }
+            }
+        }
+        i += 1;
+    }
+    return 0 - 1;
+}
+
+pure function line_at(text: String, from: Int) -> Int {
+    let mutable i: Int = from;
+    while i < len(text) && byte_at(text, i) != 10 { i += 1; }
+    return i;
+}
+
+let root: String = "docs";
+let mutable problems: [String] = [];
+let mutable pages: Int = 0;
+let mutable cname_ok: Bool = false;
+
+match file_read_maybe(root + "/CNAME") {
+    None => { let p: Int = push(problems, "docs/CNAME is missing — the custom domain needs it"); }
+    Some(text) => {
+        if string_trim(text) == "star.burxt-lang.org" { cname_ok = true; }
+        else { let p: Int = push(problems, "docs/CNAME says " + string_trim(text)); }
+    }
+}
+
+match file_walk(root) {
+    // **`Option`, and this arm is the reason it is one.** A missing `docs/` and a `docs/` with no
+    // pages in it are the same value in most languages, and they want opposite responses: one is a
+    // broken checkout and the other is a site with nothing on it. The Python this replaces could not
+    // tell them apart and reported "0 pages, all wrapped".
+    None => { print_error("cannot read " + root + " — is this the repository root?"); exit(2); }
+    Some(paths) => {
+        let mutable f: Int = 0;
+        while f < len(paths) {
+            let path: String = paths[f];
+            f += 1;
+            if !string_ends_with(path, ".md") { continue; }
+            match file_read_maybe(path) {
+                None => { let p: Int = push(problems, "cannot read " + path); }
+                Some(text) => {
+                    pages += 1;
+                    if !string_starts_with(text, "---\n") {
+                        let p: Int = push(problems, path + ": no front matter, so Jekyll will not render it");
+                    }
+                    let mutable in_raw: Bool = false;
+                    let mutable at: Int = 0;
+                    let mutable number: Int = 1;
+                    while at < len(text) {
+                        let stop: Int = line_at(text, at);
+                        let line: String = substring(text, at, stop - at);
+                        if opens_raw(line) { in_raw = true; }
+                        if closes_raw(line) { in_raw = false; }
+                        if !in_raw {
+                            let where: Int = unprotected_at(line);
+                            if where >= 0 {
+                                let p: Int = push(problems, path + ":" + to_string(number)
+                                    + ": Liquid delimiter outside a raw block — Jekyll will try to"
+                                    + " interpret it and the build will fail silently:\n    "
+                                    + string_trim(line));
+                            }
+                        }
+                        at = stop + 1;
+                        number += 1;
+                    }
+                }
+            }
+        }
+    }
+}
+
+if len(problems) > 0 {
+    print_error(to_string(len(problems)) + " problem(s) in " + to_string(pages) + " page(s):");
+    let mutable i: Int = 0;
+    while i < len(problems) {
+        print_error("  " + problems[i]);
+        i += 1;
+    }
+    exit(1);
+}
+
+print(to_string(pages) + " pages, all wrapped, front matter present, CNAME correct");
