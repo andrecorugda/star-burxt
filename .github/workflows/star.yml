@@ -22,6 +22,27 @@ jobs:
       - name: The documentation site is Liquid-safe
         run: python3 check.py
 
+      # **BUILT FROM `develop`, NOT FROM THE RELEASE, and this is not laziness.**
+      #
+      # A package should pin a released compiler: building against a moving branch silently consumes
+      # unreleased features, and a badge that goes red for somebody else's in-progress work is a badge
+      # people learn to ignore. star-burxt argues that on its own install page.
+      #
+      # It cannot follow it yet. **v1.2.0 cannot compile a star-burxt component**, measured against the
+      # released binary rather than inferred from a changelog:
+      #
+      #     update(msg, m) -> Model  holding a list
+      #       error: cannot return Model, because its storage lives in a region
+      #       -> needs the relay fix, which landed AFTER the tag
+      #
+      #     pure function … json_render(…)
+      #       error: `json_render` is not declared `pure`
+      #       -> needs the marker sweep on the standard library, also after the tag
+      #
+      # A component's `update` returns a record holding a list, and its `to_text` is `pure` and calls
+      # the JSON encoder. Both are refused by 1.2.0. So this step stays on `develop` until a release
+      # contains both, and **the moment one does, this comment is the thing to delete** — checked by
+      # running the two programs above against the candidate, not by reading its notes.
       - name: Install Burxt
         run: |
           set -eux
