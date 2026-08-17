@@ -214,6 +214,16 @@ badge, a cell — where a three-line block is all closer and no content.
 **Braces mean an expression**, so the compiler judges what is inside them: `child={task.labl}` is an
 error naming the field. Spaces need no quotes, because the braces say where the value ends.
 
+**Keep a one-liner short.** `child=` and BMX's one-line form together let a leaf be a single line —
+
+```sbmx
+:p: child={to_string(model.left) + " left"} :!p:
+```
+
+— which is worth it for a label or a cell, and not worth it once the head carries three things. A long
+one-liner wraps, and a wrapped line loses the indentation that made the nesting readable in the first
+place. When the head grows, put the body back between the fences.
+
 | you write | you get |
 |---|---|
 | `child={task.label}` | the value of that expression |

@@ -113,6 +113,8 @@ pure function mark(done: Bool) -> String {
     # Today
     :p: child={to_string(model.left) + " left"} :!p:
     :for: task in model.tasks key to_string(task.id)
-        :button: class={{ mark(task.done) }} child={task.label} on:click=Msg.Toggle(string_to_int(key, 0)) :!button:
+        :button: class={{ mark(task.done) }} on:click=Msg.Toggle(string_to_int(key, 0))
+            {{ task.label }}
+        :!button:
     :!for:
 :!section:

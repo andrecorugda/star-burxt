@@ -21,7 +21,9 @@
     # Today
     :p: child=&#123;to_string(model.left) + " left"&#125; :!p:
     :for: task in model.tasks key to_string(task.id)
-        :button: class=&#123;&#123; mark(task.done) &#125;&#125; child=&#123;task.label&#125; on:click=Msg.Toggle(string_to_int(key, 0)) :!button:
+        :button: class=&#123;&#123; mark(task.done) &#125;&#125; on:click=Msg.Toggle(string_to_int(key, 0))
+            &#123;&#123; task.label &#125;&#125;
+        :!button:
     :!for:
 :!section:</code></pre>
   </figure>
