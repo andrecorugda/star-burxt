@@ -527,13 +527,53 @@ def main():
     #
     # Read out of the SOURCE rather than by triggering each refusal: there are twenty-odd and a test
     # that fires only the ones somebody remembered is the shape that let these through.
-    messages = re.findall(r'Result\.Error\((.*?)\);', open(os.path.join(ROOT, "star.bx"),
-                                                            encoding="utf-8").read(), re.S)
+    source = open(os.path.join(ROOT, "star.bx"), encoding="utf-8").read()
+
+    # Read forward from each call to its BALANCED close, rather than matching the shape of the string.
+    #
+    # **A scan built around the syntax it is hunting cannot be wrong about a form nobody taught it.**
+    # BMX built the same guard with a regex over quoted strings, and it captured 1 of 3 known positives
+    # because the other two were template literals — its boolean control passed and its zero was over
+    # incomplete text. A message here is a chain of concatenations with nested calls in it, which is the
+    # same hazard wearing different clothes.
+    def message_at(text, start):
+        open_paren = text.index("(", start)
+        depth, i = 0, open_paren
+        while i < len(text):
+            if text[i] == "(":
+                depth += 1
+            elif text[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    return text[open_paren + 1:i]
+            i += 1
+        return text[open_paren + 1:]
+
+    sites = [m.start() for m in re.finditer(r"Result\.Error\(", source)]
+    messages = [message_at(source, at) for at in sites]
+
     stale = [m for m in messages if ":::" in m]
     check("no refusal message teaches the 0.6 fence",
           not stale, "\n".join(m.strip()[:110] for m in stale[:4]))
-    check("and there are messages to check, so the search can find something",
-          len(messages) > 15, "%d refusal messages found" % len(messages))
+
+    # **A QUANTITATIVE control, not a floor.** The floor here was `> 15` while the real number is 48 —
+    # loose enough that a scan silently capturing a third of the messages would still pass, which is
+    # precisely the failure BMX hit. So the two extractions are required to AGREE: a cheap regex and
+    # the balanced read must see the same number of sites, and any drift means one of them is blind.
+    cheap = re.findall(r"Result\.Error\((.*?)\);", source, re.S)
+    check("every refusal site is captured — two extractions, same count",
+          len(cheap) == len(messages) == len(sites),
+          "regex %d, balanced %d, call sites %d" % (len(cheap), len(messages), len(sites)))
+    check("and there are enough of them that a zero means something",
+          len(messages) >= 40, "%d refusal messages found" % len(messages))
+    # The positive control is a COUNT, not an existence: some messages must show the 0.7 fence, and
+    # both methods must agree about how many.
+    fence = re.compile(r":[A-Za-z][\w-]*:")
+    check("the scan sees the messages that DO show a fence, and both methods agree",
+          len([m for m in messages if fence.search(m)])
+          == len([c for c in cheap if fence.search(c)]) > 0,
+          "balanced %d, regex %d" % (len([m for m in messages if fence.search(m)]),
+                                     len([c for c in cheap if fence.search(c)])))
 
     shutil.rmtree(work, ignore_errors=True)
 
