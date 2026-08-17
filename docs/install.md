@@ -21,9 +21,21 @@ Follow [burxt-lang.org/install](https://burxt-lang.org/install.html). Then check
 burxt --version
 ```
 
-> **Right now you need a newer Burxt than the one that has been released.** star-burxt needs 1.2 and
-> the newest release is 1.1.0, so today you build it from source — the install page shows how, and
-> it takes a few minutes. This note disappears when 1.2 ships.
+> **Right now you need a newer Burxt than the one that has been released**, and v1.2.0 shipping did
+> not change that. Two things star-burxt needs landed after that tag: an update function may return a
+> record that holds a list, and a `pure` function may call the JSON encoder. A component needs both,
+> so 1.2.0 refuses every one.
+>
+> So today you build the compiler from source — the install page shows how, and it takes a few
+> minutes:
+>
+> ```sh
+> git clone https://github.com/andrecorugda/burxt && cd burxt
+> sh scripts/release.sh && sudo sh scripts/install.sh
+> ```
+>
+> This note goes away when a release contains both, which is a thing to check by compiling rather
+> than by reading release notes.
 
 ## 2. Make a project
 
