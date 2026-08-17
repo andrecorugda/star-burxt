@@ -48,6 +48,13 @@ jobs:
           burxt fetch
           cat burxt.lock
 
+      # **Built ONCE, here, because four later steps run it.** It used to be built inside the
+      # documentation step — which sat last, so the three wasm steps added above it failed with
+      # `./star-generate: No such file or directory`. A tool built as a side effect of the step that
+      # happened to need it first is a tool whose availability depends on step order.
+      - name: Build the generator
+        run: burxt build examples/generate.bx -o star-generate
+
       - name: A .bmx document becomes a component the compiler judges
         run: python3 test.py
 
@@ -105,7 +112,4 @@ jobs:
           node examples/prove-partition.mjs /tmp/page.o /tmp/page.wasm
 
       - name: Every example in the documentation actually works
-        run: |
-          set -eux
-          burxt build examples/generate.bx -o star-generate
-          python3 verify-docs.py
+        run: python3 verify-docs.py
