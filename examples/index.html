@@ -98,7 +98,18 @@ root.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-star-h]');
   if (!el) return;
   const handler = BigInt(el.getAttribute('data-star-h'));
-  count = Number(instance.exports['bx.counter_dispatch'](handler, BigInt(count)));
+
+  // WHICH ROW was clicked, for a handler inside a `for`. The nearest enclosing
+  // `data-star-key` is the row's identity — the same expression the document
+  // gave the loop — and it crosses as TEXT because a DOM attribute is text.
+  //
+  // Read from the DOM rather than tracked in JS: the reconciler moves rows, and
+  // anything the driver remembered about position would be wrong after a splice.
+  // The key is on the element, so it moves with it.
+  const keyed = el.closest('[data-star-key]');
+  const key = keyed ? keyed.getAttribute('data-star-key') : '';
+
+  count = Number(instance.exports['bx.counter_dispatch'](handler, key, BigInt(count)));
   paint();
 });
 

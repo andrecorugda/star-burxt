@@ -176,11 +176,47 @@ more
 :::
 ```
 
-## …delete one row from a list?
+## …put a button on each row?
 
-Not yet — a button inside a `for` is refused, and
-[chapter 4 explains why](guide/04-lists-and-choices.html). Today, drive the change from the whole
-list: a "clear completed" button outside the loop works.
+Key the loop, and let the handler use `key`:
+
+```
+::: for todo in model.todos key to_string(todo.id)
+
+::: li
+
+::: button on:click=Msg.Toggle(string_to_int(key, 0))
+{{ todo.label }}
+:::
+
+:::
+
+:::
+```
+
+**`key` is the row's identity, as text.** A DOM attribute is text, so it arrives as a `String` and
+you convert — `string_to_int(key, 0)` for a number.
+
+**What you cannot do is name the loop variable in the handler:**
+
+```
+::: for todo in model.todos key to_string(todo.id)
+
+::: button on:click=Msg.Toggle(todo.id)
+{{ todo.label }}
+:::
+
+:::
+```
+
+```
+STAR-E007: this handler names `todo`, which does not exist where handlers run —
+a handler is a function of (handler, key, state), and `todo` was bound while
+drawing the page. Use `key`
+```
+
+`todo` existed while the page was being drawn. By the time somebody clicks, it is gone — so the row
+is identified by its key and `update` finds it in the state it is given.
 
 ## …split a screen into several components?
 

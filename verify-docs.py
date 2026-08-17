@@ -60,6 +60,7 @@ def main():
         "# Click me": "STAR-E005",
         "if ready key": "STAR-E006",
         "remove": "STAR-E007",
+        "Msg.Toggle(todo.id)": "STAR-E007",
         "::: props name: Type": "STAR-E003",
     }
 

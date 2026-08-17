@@ -434,7 +434,7 @@ pure function star_head_without_key(head: String) -> String {
 // and cannot be wrong.
 function star_emit_stmts(source: String, known: [StarKnown], marker: String, blocks: [Block], target: String, tag: String, indent: String,
                          mutable handlers: [StarHandler], key_here: String,
-                         in_loop: Bool) -> Result<String, String> {
+                         loop_var: String) -> Result<String, String> {
     let mutable out: String = "";
     let mutable i: Int = 0;
     while i < len(blocks) {
@@ -483,7 +483,7 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                                 }
                                 match star_emit_stmts(source, known, marker, arm.children, target,
                                                       tag + "_" + to_string(i) + "_" + to_string(c),
-                                                      indent + "        ", handlers, key_here, in_loop) {
+                                                      indent + "        ", handlers, key_here, loop_var) {
                                     Error(e) => { return Result.Error(e); }
                                     Ok(body) => {
                                         arms = arms + indent + "    " + bmx_strip_end(arm.head)
@@ -559,11 +559,26 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                         None => { }
                         Some(expr) => { keyed = expr; }
                     }
+                    // How many handlers existed before the body was walked. If the body added
+                    // one and the loop has no `key`, the page has no way to say WHICH row was
+                    // clicked — every row would dispatch identically, which is worse than a
+                    // refusal because it looks like it works.
+                    //
+                    // Counted rather than searched for: the walk already records every handler it
+                    // finds, so asking whether the count moved is exact, and a search would be a
+                    // second implementation of the same question.
+                    let before: Int = len(handlers);
                     match star_emit_stmts(source, known, marker, fenced.children, target, tag + "_" + to_string(i),
                                           indent + "    ", handlers, keyed,
-                                          in_loop || fenced.name == "for") {
+                                          star_binds(fenced.name, loop_head, loop_var)) {
                         Error(e) => { return Result.Error(e); }
                         Ok(body) => {
+                            if fenced.name == "for" && len(keyed) == 0 && len(handlers) > before {
+                                return Result.Error("STAR-E018 at " + star_at(source, fenced.offset)
+                                    + ": this `for` has a handler inside it, so the page has to be"
+                                    + " able to say which row was clicked. Add `key <expression>`"
+                                    + " to the `for`");
+                            }
                             out = out + indent + fenced.name + " " + loop_head + " \{\n"
                                 + body + indent + "\}\n";
                         }
@@ -585,7 +600,7 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                                     }
                                     match star_emit_stmts(source, known, marker, next.children, target,
                                                           tag + "_" + to_string(i) + "e",
-                                                          indent + "    ", handlers, keyed, in_loop) {
+                                                          indent + "    ", handlers, keyed, loop_var) {
                                         Error(e) => { return Result.Error(e); }
                                         Ok(otherwise) => {
                                             out = out + indent + "else \{\n" + otherwise
@@ -699,13 +714,22 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                         // from the state it is given. That is designed and not built, and
                         // it is why `key` landed first: a path through a positional index
                         // is ABA, since `items[3]` is not the same item after a splice.
-                        if in_loop {
+                        // **A handler inside a `for` works now, and what it may NOT do is name
+                        // the loop variable.** A handler runs in `dispatch`, a function of
+                        // (handler, key, state); the loop variable was bound in the VIEW and is
+                        // gone by then. So the row's identity crosses as its `key`, which is on
+                        // the page as `data-star-key` and arrives as the `key` parameter.
+                        //
+                        // Refused HERE, naming the variable, rather than left to the compiler —
+                        // which would say `unknown variable: row` inside a `dispatch` the author
+                        // never wrote, about a binding they did write, in a file they did not.
+                        if len(loop_var) > 0 && star_mentions(star_event_expression(part), loop_var) {
                             return Result.Error("STAR-E007 at " + star_at(source, fenced.offset)
-                                + ": an `on:` handler inside a `for` is not supported yet."
-                                + " A handler runs in `dispatch`, where the loop variable does"
-                                + " not exist — it needs an identity to re-derive the row from"
-                                + " state, which is designed and unbuilt. Move the handler"
-                                + " outside the loop, or drive the row from the whole state");
+                                + ": this handler names `" + loop_var + "`, which does not exist"
+                                + " where handlers run — a handler is a function of (handler, key,"
+                                + " state), and `" + loop_var + "` was bound while drawing the"
+                                + " page. Use `key`, which carries this row's `key` expression as"
+                                + " text: `string_to_int(key, 0)` for a number");
                         }
                         let index: Int = len(handlers);
                         let added: Int = push(handlers, StarHandler {
@@ -803,7 +827,7 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                     }
                 }
                 match star_emit_stmts(source, known, marker, fenced.children, inner, tag + "_" + to_string(i),
-                                      indent, handlers, "", in_loop) {
+                                      indent, handlers, "", loop_var) {
                     Error(e) => { return Result.Error(e); }
                     Ok(body) => {
                         if attrs == "[]" { attrs = star_attr_list(key_attr, star_two(written, mark_attr)); }
@@ -1277,6 +1301,28 @@ pure function star_joined(term: String) -> String {
     return ", " + term;
 }
 
+// The name a `for` binds, or the empty String for anything else. `for row in rows` -> `row`.
+//
+// Threaded down instead of a boolean, because the refusal below names it — *this handler names
+// `row`* is a sentence an author can act on, and *handlers do not work in loops* was not.
+pure function star_binds(name: String, head: String, outer: String) -> String {
+    if name != "for" {
+        return outer;
+    }
+    let mutable i: Int = 0;
+    while i < len(head) && byte_at(head, i) == 32 {
+        i += 1;
+    }
+    let from: Int = i;
+    while i < len(head) && byte_at(head, i) != 32 {
+        i += 1;
+    }
+    if i > from {
+        return substring(head, from, i - from);
+    }
+    return outer;
+}
+
 pure function star_marker_attr(marker: String) -> String {
     if len(marker) == 0 {
         return "";
@@ -1453,7 +1499,7 @@ public function star_generate(source: String, name: String, known: [StarKnown]) 
                     + " no signature and nothing can invoke it. Add `::: props name: Type`");
             }
             let mutable handlers: [StarHandler] = [];
-            match star_emit_stmts(source, known, marker, blocks, "kids", "0", "    ", handlers, "", false) {
+            match star_emit_stmts(source, known, marker, blocks, "kids", "0", "    ", handlers, "", "") {
                 Error(e) => { return Result.Error(e); }
                 Ok(body) => {
                     let mutable view: String = "pure function " + name + "(" + props + ") -> Html allocates \{\n";
@@ -1480,8 +1526,12 @@ public function star_generate(source: String, name: String, known: [StarKnown]) 
                         trimmed = substring(trimmed, 1, len(trimmed) - 1);
                     }
 
+                    // `key` is the SECOND parameter, and it is a String because a DOM attribute
+                    // is text. That is the boundary being visible rather than a wart: a row's
+                    // identity round-trips through the page, so the author converts —
+                    // `string_to_int(key, 0)` for a number.
                     let mutable dispatch: String = "pure function " + name + "_dispatch(handler: Int, "
-                        + props + ") -> " + trimmed + " \{\n";
+                        + "key: String, " + props + ") -> " + trimmed + " \{\n";
                     let mutable h: Int = 0;
                     while h < len(handlers) {
                         // Expression mode returns the expression. Component mode hands it to

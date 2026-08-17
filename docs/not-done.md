@@ -13,10 +13,6 @@ useful to you than a feature list.
 
 ## Not there yet
 
-**A button inside a list row.** A per-row delete or checkbox is refused.
-[Chapter 4](guide/04-lists-and-choices.html) explains why and what to do instead. This is the
-limitation you are most likely to hit.
-
 **Anything asynchronous.** No fetching, no timers, no loading states. A component is given its data
 and draws it.
 
@@ -37,7 +33,6 @@ plugin system. What the page does is what your document says.
 
 ## Where it is not, yet
 
-- an app whose rows have their own buttons
 - anything that fetches while you look at it
 - anything needing fine-grained styling hooks on individual elements
 

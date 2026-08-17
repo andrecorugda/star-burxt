@@ -1,0 +1,55 @@
+===bx
+use "std/string.bx";
+
+class Todo { id: Int, label: String, done: Bool }
+class Model { todos: [Todo], added: Int }
+
+enum Msg { Toggle(Int), ClearDone }
+
+pure function toggled(todos: [Todo], id: Int) -> [Todo] allocates {
+    let mutable out: [Todo] = [];
+    let mutable i: Int = 0;
+    while i < len(todos) {
+        let t: Todo = todos[i];
+        if t.id == id {
+            let a: Int = push(out, Todo { id: t.id, label: t.label, done: !t.done });
+        } else {
+            let b: Int = push(out, t);
+        }
+        i += 1;
+    }
+    return out;
+}
+
+pure function update(msg: Msg, m: Model) -> Model allocates {
+    match msg {
+        Toggle(id) => { return Model { todos: toggled(m.todos, id), added: m.added }; }
+        ClearDone => { return Model { todos: m.todos, added: m.added }; }
+    }
+}
+===
+
+::: props model: Model
+:::
+
+# Todos
+
+::: ul
+
+::: for todo in model.todos key to_string(todo.id)
+
+::: li
+
+::: button on:click=Msg.Toggle(string_to_int(key, 0))
+{{ todo.label }}
+:::
+
+:::
+
+:::
+
+:::
+
+::: button on:click=Msg.ClearDone
+clear done
+:::

@@ -164,6 +164,42 @@ def main():
     check("without a ===bx section a handler is still an EXPRESSION",
           "if handler == 0 { return count + 1; }" in generate(good).stdout, generate(good).stdout)
 
+    # ---- per-row handlers: identity crosses the page as the key -------------------------------
+    #
+    # This was refused outright until now — STAR-E007 said a handler inside a `for` was "designed
+    # and unbuilt". What it was waiting for is structured state, which the language allowed this
+    # morning: a row's identity crosses as its `key`, and `update` re-derives the row from the
+    # state it is given rather than from a value captured while drawing the page.
+    rows = ("===bx\nuse \"std/string.bx\";\n"
+            "class Todo { id: Int, label: String }\n"
+            "class Model { todos: [Todo] }\n"
+            "enum Msg { Toggle(Int) }\n"
+            "pure function update(msg: Msg, m: Model) -> Model { return m; }\n===\n\n"
+            "::: props model: Model\n:::\n\n"
+            "::: for todo in model.todos key to_string(todo.id)\n\n"
+            "::: li\n\n::: button on:click=Msg.Toggle(string_to_int(key, 0))\n"
+            "{{ todo.label }}\n:::\n\n:::\n\n:::\n")
+    check("a handler inside a `for` compiles", "no errors" in compile_component(rows),
+          compile_component(rows))
+    made = generate(rows).stdout
+    check("`dispatch` takes the row's KEY as its second parameter",
+          "_dispatch(handler: Int, key: String, model: Model)" in made, made)
+    check("the row carries its key on the page, which is what the driver sends",
+          'html_attr("data-star-key", to_string(todo.id))' in made, made)
+
+    # The loop variable is gone by the time a handler runs. Refused HERE naming it, rather than
+    # left to the compiler — which would say `unknown variable: todo` inside a `dispatch` the
+    # author never wrote, about a binding they did.
+    captured = generate(rows.replace("Msg.Toggle(string_to_int(key, 0))", "Msg.Toggle(todo.id)")).stderr
+    check("A HANDLER NAMING THE LOOP VARIABLE IS REFUSED, naming it and pointing at `key`",
+          "STAR-E007" in captured and "todo" in captured and "key" in captured, captured)
+
+    # Without a key the page cannot say which row was clicked, and every row would dispatch
+    # identically — which looks like it works, so it is refused.
+    unkeyed = generate(rows.replace(" key to_string(todo.id)", "")).stderr
+    check("an unkeyed `for` containing a handler is refused",
+          "STAR-E018" in unkeyed, unkeyed)
+
     # ---- styles: `local` scopes, `global` does not, and neither is the default -----------------
     styled = ("===style.global\nbody { font-family: system-ui; }\n===\n\n"
               "===style.local\n.card { border: 1px solid #ddd; }\n"
