@@ -110,13 +110,13 @@ pure function mark(done: Bool) -> String {
 :::
 
 ::: section class=card
-# Today
-::: p
-{{ to_string(model.left) }} left
-:::
-::: for task in model.tasks key to_string(task.id)
-::: button class={{ mark(task.done) }} on:click=Msg.Toggle(string_to_int(key, 0))
-{{ task.label }}
-:::
-:::
+    # Today
+    ::: p
+        {{ to_string(model.left) }} left
+    :::
+    ::: for task in model.tasks key to_string(task.id)
+        ::: button class={{ mark(task.done) }} on:click=Msg.Toggle(string_to_int(key, 0))
+            {{ task.label }}
+        :::
+    :::
 :::

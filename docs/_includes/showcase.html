@@ -18,15 +18,15 @@
          comment is no shelter: Liquid reads one, so naming the tag here would OPEN a raw block that
          nothing closes, and everything after it on the page would render as source. -->
     <pre><code class="language-sbmx">::: section class=card
-# Today
-::: p
-&#123;&#123; to_string(model.left) &#125;&#125; left
-:::
-::: for task in model.tasks key to_string(task.id)
-::: button class=&#123;&#123; mark(task.done) &#125;&#125; on:click=Msg.Toggle(string_to_int(key, 0))
-&#123;&#123; task.label &#125;&#125;
-:::
-:::
+    # Today
+    ::: p
+        &#123;&#123; to_string(model.left) &#125;&#125; left
+    :::
+    ::: for task in model.tasks key to_string(task.id)
+        ::: button class=&#123;&#123; mark(task.done) &#125;&#125; on:click=Msg.Toggle(string_to_int(key, 0))
+            &#123;&#123; task.label &#125;&#125;
+        :::
+    :::
 :::</code></pre>
   </figure>
 </div>

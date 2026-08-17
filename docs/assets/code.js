@@ -259,6 +259,12 @@
       const opens = /^(\s*)(`{3,}|~{3,})/.exec(line);
       if (opens) { fence = opens[2]; return html; }
 
+      // **A document that indents ITSELF gets no padding.** BMX 0.6 made leading whitespace
+      // insignificant, so an author can write the nesting out — and then real spaces plus this
+      // padding would indent every line twice. The author's columns win; this only fills in for a
+      // flat document, which is what every `.bmx` was before 0.6.
+      if (/^\s/.test(line)) return html;
+
       const block = /^\s*(:{3,})\s*(\S*)/.exec(line);
       let at = depth;
       if (block) {
