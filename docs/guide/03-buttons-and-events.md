@@ -144,7 +144,7 @@ runs out quickly — there is nowhere to put a helper, a `match`, or a name for 
 
 **So a real component has two halves.** Add a `===bx` section and your own Burxt goes in it:
 
-````
+```sbmx
 ===bx
 class Model { count: Int, step: Int }
 enum Msg { Increment, Decrement, Reset }
@@ -166,7 +166,7 @@ The count is {{ to_string(model.count) }}.
 ::: button on:click=Msg.Increment
 more
 :::
-````
+```
 
 **`on:click=Msg.Increment` names a message.** It no longer says what the next state *is* — it says
 what *happened*, and `update` decides what that means.

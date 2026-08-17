@@ -53,6 +53,31 @@ def examples():
                 yield (os.path.relpath(path, ROOT), text[:m.start()].count("\n") + 1, body)
 
 
+def hidden_fences():
+    """Code blocks the extractor above cannot see, which is worse than a block that fails.
+
+    A four-backtick fence is invisible to `examples()` — the pattern needs a newline right after the
+    optional word — so two component examples on the landing page were never generated and never
+    compiled, and nothing said so. They happened to be correct. **A block that escapes the checker
+    reads exactly like a block that passed it**, so finding them is worth its own failure.
+    """
+    bad = []
+    for base, _, names in os.walk(os.path.join(ROOT, "docs")):
+        for n in sorted(names):
+            if not n.endswith(".md"):
+                continue
+            path = os.path.join(base, n)
+            text = open(path, encoding="utf-8").read()
+            for m in re.finditer(r"^(`{4,})(\w*)\n(.*?)^\1", text, re.S | re.M):
+                body = m.group(3)
+                if ":::" in body or "{{" in body or re.search(r"^===\w", body, re.M):
+                    bad.append("%s:%d is a %d-backtick fence holding an example, which the checker "
+                               "cannot see — use ```sbmx"
+                               % (os.path.relpath(path, ROOT), text[:m.start()].count("\n") + 1,
+                                  len(m.group(1))))
+    return bad
+
+
 def main():
     if not os.path.exists(GEN):
         print("build the generator first:\n  burxt build examples/generate.bx -o star-generate")
@@ -80,7 +105,7 @@ def main():
     open(os.path.join(work, "Badge.sbmx"), "w").write(
         "::: props amount: Int, tone: String\n:::\n\n"
         "::: span class=badge\n{{ tone }}: {{ to_string(amount) }}\n:::\n")
-    wrong, checked, refuted, typechecked = [], 0, 0, [0]
+    wrong, checked, refuted, typechecked = list(hidden_fences()), 0, 0, [0]
 
     for path, line, body in examples():
         if "::: props" in body:

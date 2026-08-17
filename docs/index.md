@@ -43,7 +43,7 @@ No build config. No component library. No JavaScript to write. **The document *i
 For anything past a counter, a component has two halves — the markup, and a `===bx` section holding
 your own Burxt:
 
-````
+```sbmx
 ===bx
 class Item  { id: Int, name: String }
 class Model { count: Int, items: [Item] }
@@ -67,7 +67,7 @@ The count is {{ to_string(model.count) }}.
 ::: button on:click=Msg.Increment
 increment
 :::
-````
+```
 
 `on:click=Msg.Increment` names a **message**, and your `update` decides what it does. That's one
 function you can read, test, and diff — not a closure that re-runs.
