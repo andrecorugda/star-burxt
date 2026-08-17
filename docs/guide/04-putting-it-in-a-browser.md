@@ -19,7 +19,7 @@ burxt build counter.bx --target wasm32-unknown-unknown -o counter.o
   counter.o -o counter.wasm
 ```
 
-Copy `examples/star/index.html` and `examples/star/reconcile.js` beside it, serve the directory over
+Copy `examples/index.html` and `examples/reconcile.js` beside it, serve the directory over
 HTTP — a `file://` page cannot instantiate WebAssembly — and open it.
 
 Clicking works.

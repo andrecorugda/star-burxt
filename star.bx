@@ -49,22 +49,52 @@
 // star-burxt page carries no executable markup at all, which is §4a.5 satisfied
 // literally rather than approximately.
 // **`std/` is the standard library, wherever Burxt is installed** — the prefix that makes this a
-// package rather than a folder inside the compiler's repository. `bmx` is a package dependency
-// declared in `burxt.package`; BMX is a format with its own repository, its own version and its own
-// conformance suite, and star-burxt is one of its hosts rather than part of it.
+// package rather than a folder inside the compiler's repository.
+//
+// `bmx.bx` is reached through `std/` too, and only because it has not left Burxt's `lib/` yet. BMX
+// is a format with its own repository, its own version and its own conformance suite, and
+// star-burxt is one of its hosts rather than part of it — so on the day it moves, this line becomes
+// `use "bmx/burxt/bmx.bx"` and `burxt.package` gains the dependency that pins the version. The
+// reason it is not that today is written down in `burxt.package` rather than left to be
+// rediscovered.
+//
+// **The long path is the format's neutrality, not an accident.** In the format's repository
+// `reference/bmx.js` defines what BMX means and `burxt/bmx.bx` is one implementation of it; putting
+// `bmx.bx` at that repo's root instead would shorten this line by seven characters and make the
+// spec repository look like a Burxt package, which is the one thing it must not look like. A
+// dependency needs no `burxt.package` of its own — nothing reads it — so the format repo can stay
+// exactly what it is.
 use "std/html.bx";
 use "std/option.bx";
 use "std/bmx.bx";
+
+// ---- what this package supports, and it is three names ----------------------
+//
+// `public` is what a dependent package may reach. Without it every name here is
+// hidden, and an application declaring `dependency star …` is told so by name:
+//
+//     error: `star_generate` is declared in the package `star` but not `public`,
+//     so this package cannot reach it.
+//
+// That is the difference between a framework and a folder, and it is a decision
+// rather than an omission: THREE names are supported — `star_generate`, and the
+// two classes it answers with. `star_event_part`, `star_emit_stmts` and the rest
+// of this file are how it is done today, and the day one of them changes should
+// not be a day anybody else's build breaks.
+//
+// Fields need no `public` of their own. A class that is reachable is reachable
+// with its shape, because a `StarComponent` whose `view` could not be read would
+// be a value with nothing to do.
 
 // A handler found while walking the document: its index, and the expression the
 // author wrote. The expression is emitted into `dispatch` verbatim, where the
 // compiler judges it — a typo is `unknown variable`, a wrong type is a type
 // error, and both name the thing the author wrote.
-class StarHandler { event: String, expression: String }
+public class StarHandler { event: String, expression: String }
 
 // What a generated component is: the view, the dispatch, and the handler table
 // that ties an index on the page to an expression in the source.
-class StarComponent {
+public class StarComponent {
     view: String,
     dispatch: String,
     handlers: [StarHandler],
@@ -517,7 +547,7 @@ pure function star_props(blocks: [Block]) -> String {
 //
 // Both functions are `pure`, so `burxt effects --allow ""` confirms a component
 // reaches nothing — a confirmation by construction rather than a discovery.
-function star_generate(source: String, name: String) -> Result<StarComponent, String> {
+public function star_generate(source: String, name: String) -> Result<StarComponent, String> {
     match bmx_parse(source) {
         Error(e) => { return Result.Error(e); }
         Ok(blocks) => {

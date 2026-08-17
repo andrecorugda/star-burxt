@@ -11,6 +11,7 @@
      same site. Unused rules (the version picker, the search panel, the mascot) cost nothing and
      keep the diff against upstream readable when it is updated. -->
 <link rel="stylesheet" href="{{ site.baseurl }}/assets/site.css">
+<link rel="stylesheet" href="{{ site.baseurl }}/assets/star.css">
 {%- if site.has_branding %}
 <link rel="icon" href="{{ site.baseurl }}/assets/favicon.ico">
 {%- endif %}
@@ -63,11 +64,12 @@
   </button>
 
   <span class="links">
+    <a href="{{ site.baseurl }}/install.html" class="{% if page.title == 'Getting star-burxt' %}here{% endif %}">Install</a>
     <a href="{{ site.baseurl }}/guide/01-your-first-component.html" class="{% if page.section == 'guide' %}here{% endif %}">Guide</a>
     <a href="{{ site.baseurl }}/components.html" class="{% if page.title == 'Writing a component' %}here{% endif %}">Components</a>
     <a href="{{ site.baseurl }}/events.html"     class="{% if page.title == 'Events and state' %}here{% endif %}">Events</a>
     <a href="{{ site.baseurl }}/refusals.html"   class="{% if page.title == 'When it refuses' %}here{% endif %}">Refusals</a>
-    <a href="https://github.com/andrecorugda/burxt">GitHub</a>
+    <a href="https://github.com/andrecorugda/star-burxt">GitHub</a>
     <a class="burxt" href="https://burxt-lang.org">Burxt</a>
   </span>
 </nav>
@@ -117,8 +119,9 @@
     <div class="group">
       <h2>Source</h2>
       <ul>
-        <li class="topic"><a href="https://github.com/andrecorugda/burxt/blob/main/lib/star.bx"><span>lib/star.bx</span></a></li>
-        <li class="topic"><a href="https://github.com/andrecorugda/burxt/tree/main/examples/star"><span>examples/star/</span></a></li>
+        <li class="topic"><a href="https://github.com/andrecorugda/star-burxt/blob/main/star.bx"><span>star.bx</span></a></li>
+        <li class="topic"><a href="https://github.com/andrecorugda/star-burxt/tree/main/examples"><span>examples/</span></a></li>
+        <li class="topic"><a href="https://github.com/andrecorugda/star-burxt/blob/main/test.py"><span>test.py — the guarantees</span></a></li>
       </ul>
     </div>
 
@@ -127,7 +130,7 @@
       <ul>
         <li class="topic"><a class="burxt" href="https://burxt-lang.org"><span>Burxt — the language</span></a></li>
         <li class="topic"><a class="burxt" href="https://bmx.burxt-lang.org"><span>BMX — the format</span></a></li>
-        <li class="topic"><a class="burxt" href="https://burxt-lang.org/reference/star.html"><span>lib/star.bx reference</span></a></li>
+        <li class="topic"><a class="burxt" href="https://burxt-lang.org/install.html"><span>Installing Burxt {{ site.star_requires }}+</span></a></li>
       </ul>
     </div>
   </nav>

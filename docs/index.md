@@ -28,6 +28,13 @@ That is the whole component. It becomes a `pure function counter(count: Int) -> 
 `pure function counter_dispatch(handler: Int, count: Int) -> Int`, compiles to WebAssembly, and
 runs in a browser.
 
+<figure class="shot">
+  <img src="assets/examples/counter-running.png"
+       alt="counter.bmx on the left; on the right the same component running in a browser, reading 'The count is 3.' after three clicks of its increment button">
+  <figcaption>Not a mockup — the right-hand panel is that document compiled to WebAssembly and
+  clicked three times.</figcaption>
+</figure>
+
 ## What makes it different
 
 **The compiler judges your event handlers.** Not a lint, not a runtime check — the ordinary rules
@@ -46,6 +53,13 @@ Decimal<2, RoundHalfEven> — or take the exact answer with Decimal<4>.
 **Narrowing money inside a click handler is a compile error.** No framework whose handlers are
 closures can see that, and not through carelessness — a closure's captured state is invisible to
 the signature.
+
+<figure class="shot">
+  <img src="assets/examples/money-refused.png"
+       alt="receipt.bmx on the left; on the right burxt check refusing the multiplication in its on:click handler, pointing at line 16 of the generated component">
+  <figcaption>The refusal points into the <em>generated</em> component, because the handler is
+  ordinary code by the time it is judged.</figcaption>
+</figure>
 
 ## Three properties, and none of them were designed
 
@@ -82,7 +96,7 @@ limits, which include the cases where star-burxt is currently the slower of the 
 
 ## Start here
 
-- **[Getting star-burxt](install.html)** — it ships in the Burxt standard library
+- **[Getting star-burxt](install.html)** — one line in `burxt.package`, and the Burxt it needs
 - **[Your first component](guide/01-your-first-component.html)** — the four-chapter guide
 - **[When it refuses](refusals.html)** — every refusal, with the reason
 - **[What is not done](not-done.html)** — read this before choosing it for anything real

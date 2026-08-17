@@ -1,0 +1,50 @@
+/* star-burxt-only styling, loaded after site.css.
+ *
+ * site.css and site.js are BYTE COPIES of burxt-lang.org's, so the three sites are one site and an
+ * upstream change is a re-copy rather than a merge. Nothing star-burxt-specific belongs in them —
+ * it belongs here. BMX's site does the same, from the same source. */
+
+/* The lockup. Taller than a wordmark would be because it IS a lockup: a comet, "star-", and the
+ * burxt mark. At the default rule inherited from site.css it rendered small enough to read as a
+ * favicon that had wandered into the topbar. */
+.bar .mark img {
+  height: 30px;
+  width: auto;
+  display: block;
+}
+@media (max-width: 640px) {
+  .bar .mark img { height: 26px; }
+}
+
+.bar .mark .wordmark {
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+/* The links back to the things underneath, in the Burxt ember red-orange (#E8502A — the wordmark's
+ * own colour, and the "star-" in the lockup). Last in the topbar and last in the sidebar:
+ * star-burxt is what you came for, Burxt and BMX are where you go next. Colour rather than position
+ * alone, because a link that leaves the site should look like it does. */
+.bar .links a.burxt,
+.side a.burxt {
+  color: #E8502A;
+}
+.bar .links a.burxt:hover,
+.side a.burxt:hover {
+  color: #c33d1b;
+}
+.side a.burxt span { color: inherit; }
+
+/* Rendered examples. Every one is a real screenshot of a real browser running the real compiled
+ * component — never a mock-up, because a picture of something that does not run is the one kind of
+ * documentation that cannot be wrong out loud. The frame is deliberately plain. */
+.doc-body figure.shot { margin: 1.6rem 0 2rem; }
+.doc-body figure.shot img {
+  width: 100%; height: auto; display: block;
+  border-radius: 8px; border: 1px solid #e3e6ea;
+}
+.doc-body figure.shot figcaption {
+  margin-top: .7rem; font-size: .875rem; line-height: 1.5; color: #5b6270;
+}
