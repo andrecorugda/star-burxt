@@ -164,6 +164,24 @@ def main():
     check("without a ===bx section a handler is still an EXPRESSION",
           "if handler == 0 { return count + 1; }" in generate(good).stdout, generate(good).stdout)
 
+    # ---- positions: a refusal points AT the thing, in line:column -----------------------------
+    #
+    # These were byte offsets into the container until BMX 0.3 gave every node its own position.
+    # `STAR-E005` said "at 112" — the button — when the heading was at 127, so a reader with a long
+    # document was sent to the block and left to find the line themselves.
+    located = generate("::: props n: Int\n:::\n\n# A page\n\nSome introduction\nover two lines.\n\n"
+                       "::: div\n\n::: button on:click=n + 1\n# nope\n:::\n\n:::\n").stderr
+    check("a refusal points at the OFFENDING construct, in line:column",
+          "STAR-E005 at 12:1" in located, located)
+
+    # `column` counts CHARACTERS, not bytes. A hand-rolled conversion is right on every ASCII line
+    # and one place wrong on the first line with an accent in it — which is why this uses BMX's
+    # `bmx_where` rather than star's own arithmetic, and why this fixture has an `å` in it.
+    accented = generate("::: props n: Int\n:::\n\nA line with an å in it, then:\n\n"
+                        "::: button on:click=n + 1\n# nope\n:::\n").stderr
+    check("a line with a multi-byte character does not move the caret",
+          "STAR-E005 at 7:1" in accented, accented)
+
     # ---- attributes, and the element vocabulary as a content model ---------------------------
     attrs = ("::: props post: Post\n:::\n\n"
              "::: div class=card\n\n"

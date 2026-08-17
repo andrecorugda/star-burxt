@@ -423,7 +423,12 @@ pure function star_head_without_key(head: String) -> String {
 // `key_here` is the key expression that applies to elements emitted at THIS level —
 // the immediate body of a keyed `for`. It is not passed down: a key identifies the
 // row, and a grandchild of the row is identified by being inside it.
-function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: String,
+// `source` is threaded through for ONE reason: an error's position. It could have been rewritten
+// afterwards by finding "at <n>" in the message and substituting — and that is string surgery on a
+// diagnostic, which is the kind of remedy that quietly damages the thing it is fixing the moment a
+// message legitimately contains those characters. One parameter through four call sites is cheaper
+// and cannot be wrong.
+function star_emit_stmts(source: String, blocks: [Block], target: String, tag: String, indent: String,
                          mutable handlers: [StarHandler], key_here: String,
                          in_loop: Bool) -> Result<String, String> {
     let mutable out: String = "";
@@ -450,7 +455,7 @@ function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: S
                     // field — a key nobody checked would be worse than no key at all.
                     let loop_head: String = star_head_without_key(fenced.head);
                     if fenced.name == "if" && len(loop_head) < len(fenced.head) {
-                        return Result.Error("STAR-E006 at " + to_string(fenced.offset)
+                        return Result.Error("STAR-E006 at " + star_at(source, fenced.offset)
                             + ": `key` belongs on a `for`, not on an `if` — there is one branch"
                             + " and nothing to tell apart");
                     }
@@ -459,7 +464,7 @@ function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: S
                         None => { }
                         Some(expr) => { keyed = expr; }
                     }
-                    match star_emit_stmts(fenced.children, target, tag + "_" + to_string(i),
+                    match star_emit_stmts(source, fenced.children, target, tag + "_" + to_string(i),
                                           indent + "    ", handlers, keyed,
                                           in_loop || fenced.name == "for") {
                         Error(e) => { return Result.Error(e); }
@@ -472,7 +477,7 @@ function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: S
                     continue;
                 }
                 if !star_is_element(fenced.name) {
-                    return Result.Error("STAR-E001 at " + to_string(fenced.offset)
+                    return Result.Error("STAR-E001 at " + star_at(source, fenced.offset)
                         + ": this host does not declare a block named `" + fenced.name
                         + "`. Elements and `for`/`if`/`props` are declared; a component"
                         + " needs cross-file resolution, which does not exist yet");
@@ -483,7 +488,7 @@ function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: S
                 // the page exists, and the contract is what makes the generator's
                 // refusal provably complete rather than a list somebody maintains.
                 if html_is_void(fenced.name) && len(fenced.children) > 0 {
-                    return Result.Error("STAR-E004 at " + to_string(fenced.offset)
+                    return Result.Error("STAR-E004 at " + star_at(source, fenced.offset)
                         + ": `" + fenced.name + "` is a void element and cannot have a body."
                         + " Write `::: " + fenced.name + " on:input=...` with nothing between"
                         + " the fences");
@@ -502,7 +507,7 @@ function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: S
                 let mutable written: String = "";
                 match star_attrs_of(bare_head) {
                     Error(e) => {
-                        return Result.Error(e + " (at " + to_string(fenced.offset) + ")");
+                        return Result.Error(e + " (at " + star_at(source, fenced.offset) + ")");
                     }
                     Ok(list) => { written = list; }
                 }
@@ -514,7 +519,7 @@ function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: S
                             // §4a.5: refuse an event we cannot wire, rather than
                             // emit something plausible. The driver installs a
                             // delegated listener per wired event and no others.
-                            return Result.Error("STAR-E002 at " + to_string(fenced.offset)
+                            return Result.Error("STAR-E002 at " + star_at(source, fenced.offset)
                                 + ": `on:" + event + "` is not an event this host can wire."
                                 + " Wired events are click, input, change, submit");
                         }
@@ -532,7 +537,7 @@ function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: S
                         // it is why `key` landed first: a path through a positional index
                         // is ABA, since `items[3]` is not the same item after a splice.
                         if in_loop {
-                            return Result.Error("STAR-E007 at " + to_string(fenced.offset)
+                            return Result.Error("STAR-E007 at " + star_at(source, fenced.offset)
                                 + ": an `on:` handler inside a `for` is not supported yet."
                                 + " A handler runs in `dispatch`, where the loop variable does"
                                 + " not exist — it needs an identity to re-derive the row from"
@@ -578,27 +583,27 @@ function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: S
                                 }
                             }
                             Heading(h) => {
-                                return Result.Error("STAR-E005 at " + to_string(fenced.offset)
+                                return Result.Error("STAR-E005 at " + star_at(source, h.offset)
                                     + ": `" + fenced.name + "` takes phrasing content, so it cannot"
                                     + " contain a heading");
                             }
                             Quote(q) => {
-                                return Result.Error("STAR-E005 at " + to_string(fenced.offset)
+                                return Result.Error("STAR-E005 at " + star_at(source, q.offset)
                                     + ": `" + fenced.name + "` takes phrasing content, so it cannot"
                                     + " contain a quote");
                             }
                             List(l) => {
-                                return Result.Error("STAR-E005 at " + to_string(fenced.offset)
+                                return Result.Error("STAR-E005 at " + star_at(source, l.offset)
                                     + ": `" + fenced.name + "` takes phrasing content, so it cannot"
                                     + " contain a list");
                             }
                             Code(cd) => {
-                                return Result.Error("STAR-E005 at " + to_string(fenced.offset)
+                                return Result.Error("STAR-E005 at " + star_at(source, cd.offset)
                                     + ": `" + fenced.name + "` takes phrasing content, so it cannot"
                                     + " contain a code block");
                             }
                             Fenced(f) => {
-                                return Result.Error("STAR-E005 at " + to_string(fenced.offset)
+                                return Result.Error("STAR-E005 at " + star_at(source, f.offset)
                                     + ": `" + fenced.name + "` takes phrasing content, so it cannot"
                                     + " contain a `" + f.name + "` block");
                             }
@@ -633,7 +638,7 @@ function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: S
                         Fenced(f) => { }
                     }
                 }
-                match star_emit_stmts(fenced.children, inner, tag + "_" + to_string(i),
+                match star_emit_stmts(source, fenced.children, inner, tag + "_" + to_string(i),
                                       indent, handlers, "", in_loop) {
                     Error(e) => { return Result.Error(e); }
                     Ok(body) => {
@@ -758,6 +763,19 @@ pure function star_is_use_line(line: String) -> Bool {
     }
     return byte_at(line, i) == 117 && byte_at(line, i + 1) == 115
         && byte_at(line, i + 2) == 101 && byte_at(line, i + 3) == 32;
+}
+
+// A byte offset as `line:column`, which is what every other tool in this project prints and what an
+// editor can jump to. `bmx_where` does the conversion and star does NOT write its own: **column
+// counts CHARACTERS, not bytes**, so a hand-rolled version is correct on every ASCII line and puts
+// the caret one place wrong on the first line with an accent in it — and whoever writes it tests
+// with ASCII. BMX measured that on a line containing `å` before shipping it.
+//
+// One-based, matching `burxt` and matching what an editor shows. LSP is zero-based; that
+// subtraction belongs to whoever speaks LSP.
+pure function star_at(source: String, offset: Int) -> String {
+    let w: BmxWhere = bmx_where(source, offset);
+    return to_string(w.line) + ":" + to_string(w.column);
 }
 
 // ---- attributes ---------------------------------------------------------------------------
@@ -934,7 +952,7 @@ public function star_generate(source: String, name: String) -> Result<StarCompon
                     + " no signature and nothing can invoke it. Add `::: props name: Type`");
             }
             let mutable handlers: [StarHandler] = [];
-            match star_emit_stmts(blocks, "kids", "0", "    ", handlers, "", false) {
+            match star_emit_stmts(source, blocks, "kids", "0", "    ", handlers, "", false) {
                 Error(e) => { return Result.Error(e); }
                 Ok(body) => {
                     let mutable view: String = "pure function " + name + "(" + props + ") -> Html allocates \{\n";
