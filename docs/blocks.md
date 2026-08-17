@@ -201,6 +201,41 @@ Any condition that answers true or false. No `else` — write a second `if`.
 
 ---
 
+## A body written in the head — `child=`
+
+```sbmx
+::: span class=total child={{ to_string(amount) }}
+:::
+```
+
+The same element with its text between the fences, in one fewer line. Use it for a leaf — a label, a
+badge, a cell — where a three-line block is all closer and no content.
+
+- it is an ordinary attribute, so a quoted value keeps its spaces: `child="two words"`
+- it takes a slot, so the text can come from state
+- **a `child=` and a body between the fences is refused**, not silently merged
+- a bare word is still a boolean attribute, exactly as in HTML: `::: input disabled`
+
+**`child`, not `value`.** `value` is a real HTML attribute — `::: input value={{ model.draft }}` is
+how a field is driven — so that is the one name it could not have been.
+
+## Every attribute goes BEFORE `on:`
+
+```sbmx
+::: button class=danger on:click=Msg.Delete
+delete
+:::
+```
+
+An `on:` binding runs to the end of the line, because a handler is an expression and an expression has
+no end marker. So anything after it would be part of the handler — and star **refuses** that rather
+than quietly dropping it:
+
+```
+STAR-E022: `on:click` runs to the end of the head, so `class=` after it becomes part of
+the handler instead of an attribute. Put every attribute BEFORE the `on:` binding
+```
+
 ## A component — a capitalised name
 
 ```sbmx

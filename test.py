@@ -523,6 +523,53 @@ def main():
     # A descendant selector stamps its LAST part, or a parent's rule would reach into a child.
     check("a descendant selector stamps its last part", "h1[data-s-c]" in sheet, interesting)
 
+    # ---- `child=` — a body written in the head -------------------------------------------------
+    #
+    # BMX's heads are opaque bytes, so a one-line block has no delimiter between head and body and
+    # BMX reads it as ALL head. Andre's answer is to name the body: `child=hello` is an ordinary
+    # `name=value` pair, so the format changes not at all and there is nothing to guess.
+    #
+    # **It also closes a defect that predates one-liners.** `::: span class=text hello` read `hello`
+    # as a boolean attribute and emitted `<span class="text" hidden></span>` — the text silently gone.
+    kid = generate("::: props label: String\n:::\n\n::: span class=text child=hello\n:::\n")
+    check("`child=` becomes the element's text, not an attribute",
+          'html_attr("class", "text")], [html_text("hello")]' in kid.stdout, kid.stdout[-200:])
+    quoted = generate('::: props label: String\n:::\n\n::: span child="two words"\n:::\n')
+    check("a quoted `child=` keeps its spaces and loses its quotes",
+          'html_text("two words")' in quoted.stdout, quoted.stdout[-200:])
+    slot = generate("::: props label: String\n:::\n\n::: span child={{ label }}\n:::\n")
+    check("`child=` takes a slot, so a body can come from state",
+          "html_text((label))" in slot.stdout, slot.stdout[-200:])
+    both = generate("::: props label: String\n:::\n\n::: div child=one\ntwo\n:::\n")
+    check("a `child=` AND a body is refused rather than one being picked",
+          "STAR-E021" in (both.stderr + both.stdout), (both.stderr or both.stdout)[:160])
+    void_child = generate("::: props label: String\n:::\n\n::: input child=nope\n:::\n")
+    check("`child=` on a void element is refused",
+          "STAR-E004" in (void_child.stderr + void_child.stdout),
+          (void_child.stderr or void_child.stdout)[:160])
+    bare = generate("::: props label: String\n:::\n\n::: span class=text hidden\n:::\n")
+    check("and a bare word is STILL a boolean attribute, as in HTML",
+          'html_attr("hidden", "")' in bare.stdout, bare.stdout[-200:])
+
+    # ---- an attribute after `on:` is refused ---------------------------------------------------
+    #
+    # `on:` runs to the end of the head by design, so anything after it is eaten. Measured before the
+    # refusal existed: `::: button on:click=n + 1 class=danger` emitted a button with NO class and
+    # folded `class=danger` into the dispatch expression, which then failed to compile in generated
+    # code with a message about a name the author never wrote there.
+    after = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1 class=danger\nhi\n:::\n")
+    check("an attribute written after `on:` is refused, naming it",
+          "STAR-E022" in (after.stderr + after.stdout)
+          and "class=" in (after.stderr + after.stdout), (after.stderr or after.stdout)[:200])
+    ok_order = generate("::: props n: Int\n:::\n\n::: button class=danger on:click=n + 1\nhi\n:::\n")
+    check("and the same head with the attribute BEFORE it is accepted",
+          ok_order.returncode == 0 and 'html_attr("class", "danger")' in ok_order.stdout,
+          (ok_order.stderr or ok_order.stdout)[:200])
+    # A handler with `==` or a quoted `=` inside it is not a trailing attribute.
+    compare = generate("::: props n: Int\n:::\n\n::: button on:click=n + 1\nhi\n:::\n")
+    check("a plain handler is not mistaken for one", compare.returncode == 0,
+          (compare.stderr or compare.stdout)[:200])
+
     shutil.rmtree(work, ignore_errors=True)
 
     if failures:
