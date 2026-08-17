@@ -21,6 +21,10 @@ decision, and it is being worked on.
 the head reads one `on:` binding and the rest of the line is the expression. Put the second event on
 a wrapper, or handle it in the one you have.
 
+**A document cannot be indented.** Nesting is by containment, so a block's contents start at column
+one however deep the block is. That reads worse than it should for anything with three levels in it,
+and it is BMX's decision rather than star's — the request is with them, measured.
+
 ## Deliberately not planned
 
 **Two-way binding beyond `on:input`.** A value flows in and an event flows out, and that is the
