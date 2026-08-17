@@ -146,6 +146,13 @@ jobs:
       # server whose protocol handling is a guess — and the last assertion, that a clean document
       # reports nothing, comes after three that prove it can find things. A server that answered
       # nothing to everything would pass that one alone.
+      # **The file that decides how the editor BEHAVES had no test across four releases.** The grammar
+      # had one, the server had one; `language-configuration.json` keyed folding on `:::` and BMX
+      # respelled the fence in 0.7, so folding a block was silently dead in the shipped extension. A
+      # fold that does not appear looks like a feature that was never there, so nobody reports it.
+      - name: The editor configuration behaves
+        run: node editors/vscode/config.mjs
+
       - name: The language server speaks the protocol
         run: STAR_CHECK=./star-check node editors/lsp/drive-lsp.mjs
 

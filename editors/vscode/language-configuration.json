@@ -9,11 +9,13 @@
     { "open": "{{ ", "close": " }}" }
   ],
   "surroundingPairs": [["{", "}"], ["[", "]"], ["(", ")"], ["\"", "\""]],
-  "//": "A block and a section both open and close with a marker on its own line, so folding is by pattern rather than by indentation — a `.sbmx` has none, because BMX 0.4 still refuses an indented line.",
+  "//": "A block opens with `:name:` and closes with `:!name:`; a section opens and closes with `===`. Folding is by pattern rather than by indentation, because indentation is INSIGNIFICANT as of BMX 0.6 — a correct document may have none, and folding that depended on it would work on some correct files and not others.",
+  "//2": "This keyed on `:::` until BMX 0.7 respelled the fence, so folding was silently dead in the shipped extension. A fold that does not appear looks like a feature that was never there, which is why nobody reports it. Found because BMX hit the same defect in their own config and said so.",
+  "//3": "A one-liner — `:span: class=box :!span:` — must NOT start a fold, or it opens one that never closes and everything below it folds into it. The `[^:]*$` tail is what excludes a line that closes itself.",
   "folding": {
     "markers": {
-      "start": "^\\s*(:::\\s*\\S|===\\S)",
-      "end": "^\\s*(:::|===)\\s*$"
+      "start": "^\\s*(:[A-Za-z][A-Za-z0-9_-]*:(?![^\\n]*:!)|===\\S)",
+      "end": "^\\s*(:![A-Za-z][A-Za-z0-9_-]*:|===)\\s*$"
     }
   }
 }
