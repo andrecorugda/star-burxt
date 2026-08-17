@@ -1,0 +1,111 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>star-burxt milestone 1</title>
+<div id="root">not mounted</div>
+<script type="module">
+import { reconcile } from './reconcile.js';
+// The driver. It fetches the module, writes bytes into a node, and forwards a
+// click. It holds no state it decides anything with, formats nothing, escapes
+// nothing. Everything else happened inside the wasm.
+const STACK_SIZE = 1 << 20;
+let mem = null, brk = 0;
+const u8 = () => new Uint8Array(mem.buffer);
+const dv = () => new DataView(mem.buffer);
+const cstr = (p) => { const b = u8(); let e = p; while (b[e] !== 0) e++;
+  return new TextDecoder().decode(b.subarray(p, e)); };
+
+const malloc = (n) => {
+  n = Number(n);
+  if (!brk) brk = mem.buffer.byteLength;
+  const need = brk + n;
+  if (need > mem.buffer.byteLength) {
+    try { mem.grow(Math.ceil((need - mem.buffer.byteLength) / 65536)); } catch { return 0; }
+  }
+  const p = brk; brk = (brk + n + 15) & ~15; return p;
+};
+
+const format = (f, va) => {
+  const d = dv(); let a = va, s = '';
+  for (let i = 0; i < f.length; i++) {
+    if (f[i] !== '%') { s += f[i]; continue; }
+    i++;
+    let flags = ''; while ('-+ #0'.includes(f[i])) flags += f[i++];
+    let width = ''; while (f[i] >= '0' && f[i] <= '9') width += f[i++];
+    let length = ''; while ('hlLzjt'.includes(f[i])) length += f[i++];
+    const c = f[i];
+    if (c === '%') { s += '%'; continue; }
+    let text;
+    if (c === 's') { text = cstr(d.getUint32(a, true)); a += 4; }
+    else {
+      let v;
+      if (length.includes('l') || length.includes('z')) {
+        a = (a + 7) & ~7; v = c === 'u' ? d.getBigUint64(a, true) : d.getBigInt64(a, true); a += 8;
+      } else { v = c === 'u' ? BigInt(d.getUint32(a, true)) : BigInt(d.getInt32(a, true)); a += 4; }
+      text = v.toString();
+    }
+    const n = width ? parseInt(width, 10) : 0;
+    if (text.length < n) {
+      if (flags.includes('0') && c !== 's') {
+        const neg = text.startsWith('-'), body = neg ? text.slice(1) : text;
+        text = (neg ? '-' : '') + body.padStart(n - (neg ? 1 : 0), '0');
+      } else text = text.padStart(n, ' ');
+    }
+    s += text;
+  }
+  return s;
+};
+
+const root = document.getElementById('root');
+let mounts = 0;
+
+const imports = { env: {
+  malloc,
+  memcpy: (d, s, n) => { u8().copyWithin(d, s, s + Number(n)); return d; },
+  snprintf: (buf, n, fmt, va) => {
+    n = Number(n);
+    const b = new TextEncoder().encode(format(cstr(fmt), va));
+    const k = Math.min(b.length, n - 1);
+    u8().set(b.subarray(0, k), buf); u8()[buf + k] = 0; return b.length;
+  },
+  getrlimit: (_r, p) => {
+    dv().setBigUint64(p, BigInt(STACK_SIZE), true);
+    dv().setBigUint64(p + 8, BigInt(STACK_SIZE), true); return 0;
+  },
+  // THE ONE NEW IMPORT. Called from inside the frame region, because the
+  // compiler refuses to let a region-built String outlive the block.
+  host_mount: (p) => {
+    const len = Number(dv().getBigUint64(p - 8, true));
+    // Reconcile rather than replace: node identity, focus and caret survive.
+    reconcile(root, new TextDecoder().decode(u8().subarray(p, p + len)));
+    mounts++;
+    return 0;
+  },
+  // panic path only
+  exit: (c) => { throw new Error('burxt exit ' + c); },
+  fwrite: () => 0, fprintf: () => 0, stderr: 0,
+}};
+
+const { instance } = await WebAssembly.instantiateStreaming(fetch('star.wasm'), imports);
+mem = instance.exports.memory;
+
+// State is a scalar held by the driver for v1 — see the plan's named limitation.
+let count = 0;
+const paint = () => instance.exports['bx.counter_render'](BigInt(count));
+
+// ONE delegated listener. No inline handler is ever emitted; the page carries
+// `data-star-h` indices and nothing executable.
+root.addEventListener('click', (ev) => {
+  const el = ev.target.closest('[data-star-h]');
+  if (!el) return;
+  const handler = BigInt(el.getAttribute('data-star-h'));
+  count = Number(instance.exports['bx.counter_dispatch'](handler, BigInt(count)));
+  paint();
+});
+
+paint();
+window.__star = {
+  get count() { return count; },
+  get mounts() { return mounts; },
+  get pages() { return mem.buffer.byteLength / 65536; },
+};
+</script>

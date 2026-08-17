@@ -1,0 +1,42 @@
+# star-burxt's own CI.
+#
+# The guarantee test used to live in Burxt's `tests/runner.rs`, because star-burxt lived in Burxt's
+# `lib/`. It moves with the code: a suite that tests a package the repository no longer contains is
+# testing something it cannot see change.
+#
+# **This INSTALLS Burxt rather than building it, and that is deliberate.** Since the standard library
+# is found by the compiler's installation and never beside the program, a build directory has no
+# library at all — so a CI that built the compiler would have to pin BURXT_LIB and would then be
+# exercising a path no user takes. Installing exercises the path they do.
+name: star-burxt
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The documentation site is Liquid-safe
+        run: python3 check.py
+
+      - name: Install Burxt
+        run: |
+          set -eux
+          git clone --depth 1 --branch develop https://github.com/andrecorugda/burxt.git /tmp/burxt
+          sudo apt-get update -qq && sudo apt-get install -y llvm-18-dev libpolly-18-dev
+          cd /tmp/burxt && LLVM_SYS_181_PREFIX=/usr/lib/llvm-18 cargo build --release
+          sudo install -d /usr/local/bin /usr/local/lib/burxt
+          sudo install -m 755 target/release/burxt /usr/local/bin/burxt
+          sudo install -m 644 lib/*.bx /usr/local/lib/burxt/
+
+      - name: BMX is a dependency, by path until it has its own repo
+        run: |
+          set -eux
+          sed -i "s|^dependency  bmx .*|dependency  bmx  /tmp/burxt/lib|" burxt.package
+          cat burxt.package
+
+      - name: A .bmx document becomes a component the compiler judges
+        run: python3 test.py

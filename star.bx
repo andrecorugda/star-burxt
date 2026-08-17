@@ -1,0 +1,613 @@
+// ============================================================================
+// lib/star.bx — star-burxt: what gives a BMX document life.
+//
+//     use "lib/star.bx";
+//
+// BMX describes where an expression goes. It does not know what `for` means, or
+// `if`, or `on:click` — `BOUNDARY.md` is the document that keeps it that way. This
+// file is the host that decides, and `SPEC.md` §4a.5 is its specification:
+//
+//   - refuse an unknown block name, never render it and never skip it silently
+//   - refuse an unknown attribute on a block it declares
+//   - decide what a head means, including whether it binds names inside the body
+//   - **refuse an event attribute it cannot wire.** A host with no runtime must
+//     refuse `on:*` rather than emit an inline handler — emitting one puts
+//     unchecked script on the page, which is the hole escaping exists to close
+//
+// That last one is the reason this file exists rather than a runtime `button()`
+// function. `lib/bmx.bx` hands a component block's head over as a **runtime
+// String**, so `on:click=count + 1` would arrive as text that nothing compiles:
+// no typecheck, no unknown-name error, no `burxt review` surface. A handler that
+// is a string is a handler the language cannot judge, and judging it is the whole
+// case for writing a framework in this language rather than another one.
+//
+// ---- the shape, and why it is the one Burxt was going to force anyway --------
+//
+//     props count: Int          the state
+//     on:click=count + 1        an event yields the NEXT state
+//     view                      a pure function of the state
+//     dispatch                  a pure function of (handler, state) -> state
+//
+// A view is `pure`, so `burxt effects --allow ""` confirms it reaches nothing —
+// by construction rather than by inspection. A handler is an expression producing
+// the next state, which is the same architecture Elm arrived at, and it is not a
+// coincidence: **Burxt has no closures** (`lib/fn.bx` — "a closure needs an owner
+// for its captured state, which is a memory question in a language whose whole
+// memory model is regions"). With no closures there is nothing to capture a
+// mutable cell in, so state cannot hide inside a handler. It has to be threaded,
+// and threading it is what makes the update inspectable.
+//
+// The consequence worth stating: **an event handler's effect on the program is a
+// value you can print.** `dispatch(0, 41)` is `42`. No framework whose handlers
+// are closures can say that, and `burxt review` can diff what a handler promises
+// between versions.
+//
+// ---- what reaches the page ---------------------------------------------------
+//
+// A handler becomes `data-star-h="0"` — an INDEX, never an inline handler. The
+// driver installs one delegated listener and calls the exported `dispatch`. So a
+// star-burxt page carries no executable markup at all, which is §4a.5 satisfied
+// literally rather than approximately.
+// **`std/` is the standard library, wherever Burxt is installed** — the prefix that makes this a
+// package rather than a folder inside the compiler's repository. `bmx` is a package dependency
+// declared in `burxt.package`; BMX is a format with its own repository, its own version and its own
+// conformance suite, and star-burxt is one of its hosts rather than part of it.
+use "std/html.bx";
+use "std/option.bx";
+use "std/bmx.bx";
+
+// A handler found while walking the document: its index, and the expression the
+// author wrote. The expression is emitted into `dispatch` verbatim, where the
+// compiler judges it — a typo is `unknown variable`, a wrong type is a type
+// error, and both name the thing the author wrote.
+class StarHandler { event: String, expression: String }
+
+// What a generated component is: the view, the dispatch, and the handler table
+// that ties an index on the page to an expression in the source.
+class StarComponent {
+    view: String,
+    dispatch: String,
+    handlers: [StarHandler],
+    // The declaration verbatim (`count: Int`) and the names alone (`count`), so the
+    // emitted entry point can both DECLARE and PASS the props without the caller
+    // re-deriving either.
+    props: String,
+    argument_list: String,
+}
+
+// ---- head parsing, which is the host's job and not the format's --------------
+//
+// Byte codes rather than character literals, and `byte_at`/`substring` rather than
+// building strings a byte at a time — the idiom `lib/bmx.bx` already uses, and the
+// one that does not allocate per character.
+//
+//     111 'o'   110 'n'   58 ':'   61 '='   32 ' '
+
+// `button on:click=count + 1` -> Some("click=count + 1"). The format captured the
+// head as opaque text; splitting it is ours, and so is refusing what we cannot wire.
+pure function star_event_part(head: String) -> Option<String> {
+    let mutable i: Int = 0;
+    while i + 3 <= len(head) {
+        if byte_at(head, i) == 111 && byte_at(head, i + 1) == 110 && byte_at(head, i + 2) == 58 {
+            // Only at a token boundary, so `button on:click=x` matches and a
+            // component legitimately named `weapon:click` does not.
+            if i == 0 || byte_at(head, i - 1) == 32 {
+                return Option.Some(substring(head, i + 3, len(head) - (i + 3)));
+            }
+        }
+        i += 1;
+    }
+    return Option.None;
+}
+
+// `click=count + 1` -> the event name, and the expression after the FIRST `=`.
+// The expression runs to the end of the head, so an `on:` binding is written last:
+// expressions contain spaces and equals signs, and a format that does not parse
+// heads cannot tell us where one ends.
+pure function star_event_name(part: String) -> String {
+    let mutable i: Int = 0;
+    while i < len(part) {
+        if byte_at(part, i) == 61 { return substring(part, 0, i); }
+        i += 1;
+    }
+    return part;
+}
+
+pure function star_event_expression(part: String) -> String {
+    let mutable i: Int = 0;
+    while i < len(part) {
+        if byte_at(part, i) == 61 { return substring(part, i + 1, len(part) - (i + 1)); }
+        i += 1;
+    }
+    return "";
+}
+
+// The head with its `on:` binding removed — what is left is the element's own
+// business. Trailing space trimmed, so `button on:click=x` leaves `button`.
+pure function star_head_without_event(head: String) -> String {
+    let mutable i: Int = 0;
+    while i + 3 <= len(head) {
+        if byte_at(head, i) == 111 && byte_at(head, i + 1) == 110 && byte_at(head, i + 2) == 58 {
+            if i == 0 || byte_at(head, i - 1) == 32 {
+                return bmx_strip_end(substring(head, 0, i));
+            }
+        }
+        i += 1;
+    }
+    return head;
+}
+
+// ---- the events this host can wire, and the refusal for the rest -------------
+
+// §4a.5: refuse an event attribute we cannot wire. The list is short on purpose —
+// every entry is one the driver installs a delegated listener for, and adding to
+// it means adding to the driver. A host that accepts an event it does not deliver
+// has told the author a lie the compiler cannot catch.
+pure function star_event_is_wired(name: String) -> Bool {
+    return name == "click" || name == "input" || name == "change" || name == "submit";
+}
+
+// The block names this host declares, and the refusal for the rest.
+//
+// §4a.5 first line: *refuse an unknown block name, never render it and never skip
+// it silently.* So star-burxt says what it knows: `for` and `if` are control flow,
+// `props` is the signature, and these are elements. Anything else is a component,
+// and until cross-file resolution exists there is nothing to resolve it against —
+// so it is refused BY NAME rather than rendered as something plausible.
+// Elements whose content model is PHRASING rather than flow. A `<p>` inside one of
+// these is invalid HTML, not merely unwanted, which is why the unwrapping above is
+// required rather than a preference. The list is short because it is the set this
+// host declares — adding to it is a decision, not a convenience.
+pure function star_takes_phrasing(name: String) -> Bool {
+    return name == "button" || name == "label" || name == "strong" || name == "em"
+        || name == "span" || name == "h1" || name == "h2" || name == "h3"
+        || name == "h4" || name == "h5" || name == "h6";
+}
+
+pure function star_is_element(name: String) -> Bool {
+    return name == "div" || name == "span" || name == "p" || name == "button"
+        || name == "ul" || name == "ol" || name == "li" || name == "section"
+        || name == "article" || name == "header" || name == "footer" || name == "nav"
+        || name == "form" || name == "label" || name == "strong" || name == "em"
+        || name == "h1" || name == "h2" || name == "h3" || name == "h4"
+        || name == "h5" || name == "h6"
+        // Void elements. `html_element` carries `requires !html_is_void(tag) ||
+        // len(children) == 0`, so one of these with a body is a CONTRACT violation —
+        // which is why star_emit_stmts refuses it at generate time rather than
+        // emitting code that trips the contract when the page is already open.
+        || name == "input" || name == "br" || name == "hr" || name == "img";
+}
+
+
+// ---- keys, which are a prerequisite rather than an optimisation ---------------
+//
+//     ::: for line in order.lines key line.id
+//
+// The trailing `key <expr>` is star-burxt's, parsed out of a head BMX captured and
+// refused to interpret — the same move as `props` and `on:`, and again needing
+// nothing from the format.
+//
+// **Why this is not a list optimisation.** Without a key, children are matched by
+// POSITION, and `items[3]` is not the same item after a splice. That is silent ABA:
+// a row's handler, its focus, and anything it owns quietly transfer to whatever
+// slid into its index. It is merely wasteful until something is async or something
+// is owned; then it is corruption. So keys have to exist before a component can own
+// a resource, not after.
+
+// `line in order.lines key line.id` -> Some("line.id"). The keyword must stand at a
+// token boundary, so a collection named `monkey` does not match.
+pure function star_key_part(head: String) -> Option<String> {
+    let mutable i: Int = 0;
+    while i + 4 <= len(head) {
+        if byte_at(head, i) == 107 && byte_at(head, i + 1) == 101
+            && byte_at(head, i + 2) == 121 && byte_at(head, i + 3) == 32 {
+            if i > 0 && byte_at(head, i - 1) == 32 {
+                return Option.Some(bmx_strip_end(substring(head, i + 4, len(head) - (i + 4))));
+            }
+        }
+        i += 1;
+    }
+    return Option.None;
+}
+
+// The head with the `key` clause removed — what `for` itself gets.
+pure function star_head_without_key(head: String) -> String {
+    let mutable i: Int = 0;
+    while i + 4 <= len(head) {
+        if byte_at(head, i) == 107 && byte_at(head, i + 1) == 101
+            && byte_at(head, i + 2) == 121 && byte_at(head, i + 3) == 32 {
+            if i > 0 && byte_at(head, i - 1) == 32 {
+                return bmx_strip_end(substring(head, 0, i));
+            }
+        }
+        i += 1;
+    }
+    return head;
+}
+
+// ---- emission ----------------------------------------------------------------
+
+// The document's blocks become statements pushing into `target`. This mirrors
+// `bmx_emit_stmts` and diverges in exactly one place: a block carrying an `on:*`
+// binding becomes an element with `data-star-h="N"` and its expression is put
+// aside for `dispatch`, where the COMPILER judges it. That divergence is the
+// whole file.
+// `key_here` is the key expression that applies to elements emitted at THIS level —
+// the immediate body of a keyed `for`. It is not passed down: a key identifies the
+// row, and a grandchild of the row is identified by being inside it.
+function star_emit_stmts(blocks: [Block], target: String, tag: String, indent: String,
+                         mutable handlers: [StarHandler], key_here: String,
+                         in_loop: Bool) -> Result<String, String> {
+    let mutable out: String = "";
+    let mutable i: Int = 0;
+    while i < len(blocks) {
+        let label: String = "s_" + tag + "_" + to_string(i);
+        match blocks[i] {
+            Fenced(fenced) => {
+                let inner: String = "k_" + tag + "_" + to_string(i);
+                if fenced.name == "props" {
+                    // Consumed by star_generate for the signature; emits nothing.
+                    i += 1;
+                    continue;
+                }
+                if fenced.name == "for" || fenced.name == "if" {
+                    // The head is host CODE and goes through verbatim. Neither
+                    // construct produces an element, so the body pushes into the
+                    // same list — and the compiler resolves what the head binds.
+                    //
+                    // A `key` clause is stripped off first and becomes an attribute on
+                    // whatever the body pushes, so the reconciler can match a row to a
+                    // row rather than to an index. The key EXPRESSION goes through
+                    // verbatim too, so `key line.idd` is a compile error naming the
+                    // field — a key nobody checked would be worse than no key at all.
+                    let loop_head: String = star_head_without_key(fenced.head);
+                    if fenced.name == "if" && len(loop_head) < len(fenced.head) {
+                        return Result.Error("STAR-E006 at " + to_string(fenced.offset)
+                            + ": `key` belongs on a `for`, not on an `if` — there is one branch"
+                            + " and nothing to tell apart");
+                    }
+                    let mutable keyed: String = "";
+                    match star_key_part(fenced.head) {
+                        None => { }
+                        Some(expr) => { keyed = expr; }
+                    }
+                    match star_emit_stmts(fenced.children, target, tag + "_" + to_string(i),
+                                          indent + "    ", handlers, keyed,
+                                          in_loop || fenced.name == "for") {
+                        Error(e) => { return Result.Error(e); }
+                        Ok(body) => {
+                            out = out + indent + fenced.name + " " + loop_head + " \{\n"
+                                + body + indent + "\}\n";
+                        }
+                    }
+                    i += 1;
+                    continue;
+                }
+                if !star_is_element(fenced.name) {
+                    return Result.Error("STAR-E001 at " + to_string(fenced.offset)
+                        + ": this host does not declare a block named `" + fenced.name
+                        + "`. Elements and `for`/`if`/`props` are declared; a component"
+                        + " needs cross-file resolution, which does not exist yet");
+                }
+                // A void element with a body is refused HERE, with the author's
+                // offset, rather than emitted and left to `html_element`'s `requires`
+                // to catch at run time. Both refuse; only one of them refuses before
+                // the page exists, and the contract is what makes the generator's
+                // refusal provably complete rather than a list somebody maintains.
+                if html_is_void(fenced.name) && len(fenced.children) > 0 {
+                    return Result.Error("STAR-E004 at " + to_string(fenced.offset)
+                        + ": `" + fenced.name + "` is a void element and cannot have a body."
+                        + " Write `::: " + fenced.name + " on:input=...` with nothing between"
+                        + " the fences");
+                }
+                // A key becomes an attribute the reconciler can match on. It is emitted
+                // as a real expression, so `key line.idd` is a compile error naming the
+                // field — an unchecked key would be worse than none, because it would
+                // move a row's identity somewhere silently wrong.
+                let mutable attrs: String = "[]";
+                let mutable key_attr: String = "";
+                if len(key_here) > 0 {
+                    key_attr = "html_attr(\"data-star-key\", " + key_here + ")";
+                }
+                match star_event_part(fenced.head) {
+                    None => { }
+                    Some(part) => {
+                        let event: String = star_event_name(part);
+                        if !star_event_is_wired(event) {
+                            // §4a.5: refuse an event we cannot wire, rather than
+                            // emit something plausible. The driver installs a
+                            // delegated listener per wired event and no others.
+                            return Result.Error("STAR-E002 at " + to_string(fenced.offset)
+                                + ": `on:" + event + "` is not an event this host can wire."
+                                + " Wired events are click, input, change, submit");
+                        }
+                        // **A handler inside a `for` is refused, and refusing is the
+                        // honest answer rather than a gap.** `dispatch` is a function of
+                        // (handler, state); the loop variable is bound in the VIEW and does
+                        // not exist there, so emitting the expression produces code that
+                        // names something out of scope. The compiler would catch it — with
+                        // an error about a variable the author never wrote in a function
+                        // they never saw. Refusing here says the true thing instead.
+                        //
+                        // What it needs is for a handler id to carry a PATH INTO STATE
+                        // rather than a captured value, so `dispatch` can re-derive the row
+                        // from the state it is given. That is designed and not built, and
+                        // it is why `key` landed first: a path through a positional index
+                        // is ABA, since `items[3]` is not the same item after a splice.
+                        if in_loop {
+                            return Result.Error("STAR-E007 at " + to_string(fenced.offset)
+                                + ": an `on:` handler inside a `for` is not supported yet."
+                                + " A handler runs in `dispatch`, where the loop variable does"
+                                + " not exist — it needs an identity to re-derive the row from"
+                                + " state, which is designed and unbuilt. Move the handler"
+                                + " outside the loop, or drive the row from the whole state");
+                        }
+                        let index: Int = len(handlers);
+                        let added: Int = push(handlers, StarHandler {
+                            event: event,
+                            expression: star_event_expression(part),
+                        });
+                        attrs = "[html_attr(\"data-star-h\", \"" + to_string(index) + "\")]";
+                        if len(key_attr) > 0 {
+                            attrs = "[html_attr(\"data-star-h\", \"" + to_string(index) + "\"), "
+                                + key_attr + "]";
+                        }
+                    }
+                }
+                // **An element that takes phrasing content unwraps its paragraphs**, and
+                // this is required rather than preferred: `<p>` is FLOW content and
+                // `<button>` takes PHRASING, so `<button><p>x</p></button>` is invalid
+                // HTML. BMX is right to parse `increment` as a paragraph — it is one —
+                // and deciding what that means inside a button is the host's job.
+                //
+                // The first version of this rule said "a LONE paragraph becomes text",
+                // which had a discontinuity in it: one paragraph became text and two
+                // became two `<p>`, so adding a second line to a button changed the
+                // output in KIND rather than in quantity. The content model has no such
+                // seam — a phrasing element unwraps however many there are, and a flow
+                // element keeps them, because in a `<div>` a `<p>` is correct and wanted.
+                if star_takes_phrasing(fenced.name) {
+                    let mutable phrasing: String = "";
+                    let mutable c: Int = 0;
+                    while c < len(fenced.children) {
+                        match fenced.children[c] {
+                            Paragraph(words) => {
+                                match bmx_emit_inline(words.children) {
+                                    Error(e) => { return Result.Error(e); }
+                                    Ok(kids) => {
+                                        // `bmx_emit_inline` yields a bracketed list; splice
+                                        // the lists together rather than nesting them.
+                                        let body: String = substring(kids, 1, len(kids) - 2);
+                                        if len(phrasing) > 0 && len(body) > 0 { phrasing = phrasing + ", "; }
+                                        phrasing = phrasing + body;
+                                    }
+                                }
+                            }
+                            Heading(h) => {
+                                return Result.Error("STAR-E005 at " + to_string(fenced.offset)
+                                    + ": `" + fenced.name + "` takes phrasing content, so it cannot"
+                                    + " contain a heading");
+                            }
+                            Quote(q) => {
+                                return Result.Error("STAR-E005 at " + to_string(fenced.offset)
+                                    + ": `" + fenced.name + "` takes phrasing content, so it cannot"
+                                    + " contain a quote");
+                            }
+                            List(l) => {
+                                return Result.Error("STAR-E005 at " + to_string(fenced.offset)
+                                    + ": `" + fenced.name + "` takes phrasing content, so it cannot"
+                                    + " contain a list");
+                            }
+                            Code(cd) => {
+                                return Result.Error("STAR-E005 at " + to_string(fenced.offset)
+                                    + ": `" + fenced.name + "` takes phrasing content, so it cannot"
+                                    + " contain a code block");
+                            }
+                            Fenced(f) => {
+                                return Result.Error("STAR-E005 at " + to_string(fenced.offset)
+                                    + ": `" + fenced.name + "` takes phrasing content, so it cannot"
+                                    + " contain a `" + f.name + "` block");
+                            }
+                        }
+                        c += 1;
+                    }
+                    if len(key_attr) > 0 && attrs == "[]" { attrs = "[" + key_attr + "]"; }
+                    out = out + indent + "let " + label + ": Int = push(" + target
+                        + ", html_element(\"" + fenced.name + "\", " + attrs
+                        + ", [" + phrasing + "]));\n";
+                    i += 1;
+                    continue;
+                }
+                if false {
+                    match fenced.children[0] {
+                        Paragraph(words) => {
+                            match bmx_emit_inline(words.children) {
+                                Error(e) => { return Result.Error(e); }
+                                Ok(kids) => {
+                                    out = out + indent + "let " + label + ": Int = push(" + target
+                                        + ", html_element(\"" + fenced.name + "\", " + attrs
+                                        + ", " + kids + "));\n";
+                                    i += 1;
+                                    continue;
+                                }
+                            }
+                        }
+                        Heading(h) => { }
+                        Quote(q) => { }
+                        List(l) => { }
+                        Code(c) => { }
+                        Fenced(f) => { }
+                    }
+                }
+                match star_emit_stmts(fenced.children, inner, tag + "_" + to_string(i),
+                                      indent, handlers, "", in_loop) {
+                    Error(e) => { return Result.Error(e); }
+                    Ok(body) => {
+                        if len(key_attr) > 0 && attrs == "[]" { attrs = "[" + key_attr + "]"; }
+                        out = out + indent + "let mutable " + inner + ": [Html] = [];\n" + body;
+                        out = out + indent + "let " + label + ": Int = push(" + target
+                            + ", html_element(\"" + fenced.name + "\", " + attrs
+                            + ", " + inner + "));\n";
+                    }
+                }
+            }
+            Heading(heading) => {
+                match bmx_emit_one(blocks[i]) {
+                    Error(e) => { return Result.Error(e); }
+                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target + ", " + expr + ");\n"; }
+                }
+            }
+            Paragraph(words) => {
+                match bmx_emit_one(blocks[i]) {
+                    Error(e) => { return Result.Error(e); }
+                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target + ", " + expr + ");\n"; }
+                }
+            }
+            Quote(words) => {
+                match bmx_emit_one(blocks[i]) {
+                    Error(e) => { return Result.Error(e); }
+                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target + ", " + expr + ");\n"; }
+                }
+            }
+            List(list) => {
+                match bmx_emit_one(blocks[i]) {
+                    Error(e) => { return Result.Error(e); }
+                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target + ", " + expr + ");\n"; }
+                }
+            }
+            Code(code) => {
+                match bmx_emit_one(blocks[i]) {
+                    Error(e) => { return Result.Error(e); }
+                    Ok(expr) => { out = out + indent + "let " + label + ": Int = push(" + target + ", " + expr + ");\n"; }
+                }
+            }
+        }
+        i += 1;
+    }
+    return Result.Ok(out);
+}
+
+// The `props` head is the component's signature — declared by the component, so an
+// invoker never needs an out-of-band list. BMX captured it opaquely; reading it is
+// ours, and it goes through verbatim into the function's parameter list, where the
+// compiler judges every name and type in it.
+pure function star_props(blocks: [Block]) -> String {
+    let mutable i: Int = 0;
+    while i < len(blocks) {
+        match blocks[i] {
+            Fenced(fenced) => { if fenced.name == "props" { return fenced.head; } }
+            Heading(h) => { }
+            Paragraph(p) => { }
+            Quote(q) => { }
+            List(l) => { }
+            Code(c) => { }
+        }
+        i += 1;
+    }
+    return "";
+}
+
+// The whole of it: a document becomes a `pure function ... -> Html` and a
+// `pure function ..._dispatch(handler: Int, <props>) -> <state>`.
+//
+// **`state` is the FIRST prop's type**, which is the v1 rule and is stated here
+// rather than inferred: a handler yields the next state, and with one prop that is
+// unambiguous. Structured state is the open v2 question — regions are LIFO and
+// nested regions do not exist, so nothing built inside a frame can outlive it.
+//
+// Both functions are `pure`, so `burxt effects --allow ""` confirms a component
+// reaches nothing — a confirmation by construction rather than a discovery.
+function star_generate(source: String, name: String) -> Result<StarComponent, String> {
+    match bmx_parse(source) {
+        Error(e) => { return Result.Error(e); }
+        Ok(blocks) => {
+            let props: String = star_props(blocks);
+            if len(props) == 0 {
+                return Result.Error("STAR-E003: this document declares no `props` block, so it has"
+                    + " no signature and nothing can invoke it. Add `::: props name: Type`");
+            }
+            let mutable handlers: [StarHandler] = [];
+            match star_emit_stmts(blocks, "kids", "0", "    ", handlers, "", false) {
+                Error(e) => { return Result.Error(e); }
+                Ok(body) => {
+                    let mutable view: String = "pure function " + name + "(" + props + ") -> Html allocates \{\n";
+                    view = view + "    let mutable kids: [Html] = [];\n" + body;
+                    view = view + "    return html_element(\"div\", [html_attr(\"class\", \"star\")], kids);\n\}\n";
+
+                    // The state type is the first prop's, read off the declaration
+                    // the author wrote rather than guessed at.
+                    let mutable state_type: String = "";
+                    let mutable seen_colon: Bool = false;
+                    let mutable k: Int = 0;
+                    while k < len(props) {
+                        let b: Int = byte_at(props, k);
+                        if b == 44 { k = len(props); }
+                        else {
+                            if seen_colon { state_type = state_type + byte_as_string(b); }
+                            if b == 58 { seen_colon = true; }
+                            k += 1;
+                        }
+                    }
+                    state_type = bmx_strip_end(state_type);
+                    let mutable trimmed: String = state_type;
+                    while len(trimmed) > 0 && byte_at(trimmed, 0) == 32 {
+                        trimmed = substring(trimmed, 1, len(trimmed) - 1);
+                    }
+
+                    let mutable dispatch: String = "pure function " + name + "_dispatch(handler: Int, "
+                        + props + ") -> " + trimmed + " \{\n";
+                    let mutable h: Int = 0;
+                    while h < len(handlers) {
+                        dispatch = dispatch + "    if handler == " + to_string(h) + " \{ return "
+                            + handlers[h].expression + "; \}\n";
+                        h += 1;
+                    }
+                    // An index the page could not have produced is a bug in the
+                    // driver, not in the document — so it holds state rather than
+                    // inventing one.
+                    dispatch = dispatch + "    return " + star_first_prop_name(props) + ";\n\}\n";
+
+                    return Result.Ok(StarComponent {
+                        view: view, dispatch: dispatch, handlers: handlers,
+                        props: props, argument_list: star_argument_list(props),
+                    });
+                }
+            }
+        }
+    }
+}
+
+pure function star_first_prop_name(props: String) -> String {
+    let mutable i: Int = 0;
+    while i < len(props) {
+        if byte_at(props, i) == 58 { return bmx_strip_end(substring(props, 0, i)); }
+        i += 1;
+    }
+    return props;
+}
+
+// `count: Int, label: String` -> `count, label`. What the entry point passes on.
+pure function star_argument_list(props: String) -> String {
+    let mutable out: String = "";
+    let mutable name: String = "";
+    let mutable seen_colon: Bool = false;
+    let mutable i: Int = 0;
+    while i < len(props) {
+        let b: Int = byte_at(props, i);
+        if b == 44 {
+            if len(out) > 0 { out = out + ", "; }
+            out = out + name;
+            name = "";
+            seen_colon = false;
+        } else {
+            if b == 58 { seen_colon = true; }
+            if !seen_colon && b != 32 { name = name + byte_as_string(b); }
+        }
+        i += 1;
+    }
+    if len(name) > 0 {
+        if len(out) > 0 { out = out + ", "; }
+        out = out + name;
+    }
+    return out;
+}

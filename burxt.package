@@ -1,0 +1,17 @@
+name        star-burxt
+version     0.1.0
+
+# **No package dependency on BMX yet, and the reason is worth recording rather than rediscovering.**
+#
+# While `bmx.bx` still lives in Burxt's `lib/`, it IS part of the installed standard library, so
+# `use "std/bmx.bx"` reaches it — no manifest entry required.
+#
+# The first attempt declared `dependency bmx <path-to-lib>`, which fails in a way that looks like a
+# permissions problem and is not: a path dependency names a DIRECTORY, and `lib/` holds all
+# twenty-seven modules. So `os_arg` and `file_read_maybe` were reported as "declared in the package
+# `bmx`" — the whole standard library had been declared to be BMX. The same file also arrives twice,
+# once through `std/` and once through the package, which is its own error.
+#
+# A path dependency wants a directory that is the package. Until BMX has one, `std/` is the honest
+# route, and this file gains its `dependency bmx https://github.com/andrecorugda/bmx <tag>` on the
+# day BMX moves — which is also the day it has a version worth pinning.

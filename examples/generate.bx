@@ -1,0 +1,59 @@
+// examples/star/generate.bx — a BMX document becomes a star-burxt component.
+//
+//     burxt build examples/star/generate.bx -o star-generate
+//     ./star-generate counter.bmx counter > counter.bx
+//
+// Emits a `pure function <name>(<props>) -> Html` and a
+// `pure function <name>_dispatch(handler: Int, <props>) -> <state>`, then the
+// COMPILER judges both — a typo in a slot, a wrong type in a handler, or an event
+// this host cannot wire are all refused before anything reaches a page.
+// A package's own module by relative path; the standard library through `std/`.
+use "../star.bx";
+use "std/os.bx";
+use "std/files.bx";
+
+if os_arg_count() < 3 {
+    print_error("usage: star-generate <document.bmx> <component-name>");
+    exit(2);
+}
+
+let path: String = os_arg(1);
+let name: String = os_arg(2);
+
+match file_read_maybe(path) {
+    None => { print_error("cannot read " + path); exit(2); }
+    Some(source) => {
+        match star_generate(source, name) {
+            Error(message) => { print_error(message); exit(1); }
+            Ok(component) => {
+                print("// GENERATED from " + path + " by star-burxt. Do not edit.");
+                print("//");
+                print("// The view and the dispatch are both `pure`, so `burxt effects --allow \"\"`");
+                print("// confirms this component reaches nothing. A handler is an expression");
+                print("// producing the next state — there are no closures to hide it in.");
+                print("use \"lib/html.bx\";");
+                print("");
+                print(component.view);
+                print(component.dispatch);
+                // The runtime entry point, emitted rather than hand-written so the
+                // per-frame region and the host call cannot be got wrong by a user.
+                print("// ---- the runtime entry point, emitted -------------------------------");
+                print("//");
+                print("// `host_mount` is called INSIDE the frame region, and that is not a style");
+                print("// choice: the compiler refuses to let a String built in a region outlive");
+                print("// the block, so the host must take the bytes before the close. One region");
+                print("// per frame is what keeps a long-lived page inside a 16 MB linear memory —");
+                print("// measured at 1,000,000 frames, where a flat render died at 50,000.");
+                print("external function host_mount(html: String) -> CInt;");
+                print("");
+                print("function " + name + "_render(" + component.props + ") -> Int \{");
+                print("    region frame \{");
+                print("        let html: String = html_render(" + name + "(" + component.argument_list + "));");
+                print("        let sent: Int = host_mount(html);");
+                print("        return len(html);");
+                print("    \}");
+                print("\}");
+            }
+        }
+    }
+}
