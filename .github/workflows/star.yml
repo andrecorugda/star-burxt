@@ -32,11 +32,20 @@ jobs:
           sudo install -m 755 target/release/burxt /usr/local/bin/burxt
           sudo install -m 644 lib/*.bx /usr/local/lib/burxt/
 
-      - name: BMX is a dependency, by path until it has its own repo
-        run: |
-          set -eux
-          sed -i "s|^dependency  bmx .*|dependency  bmx  /tmp/burxt/lib|" burxt.package
-          cat burxt.package
+      # A `sed` that rewrote a `dependency bmx …` line lived here, and **it matched nothing**:
+      # `burxt.package` has no such line, deliberately, for the reason written down in that file —
+      # a path dependency names a DIRECTORY, and `lib/` holds the whole standard library, so
+      # declaring it to be BMX made `os_arg` come back as "declared in the package `bmx`".
+      #
+      # A `sed -i` whose pattern misses exits 0. So the step was green, named after work it was not
+      # doing, and **it would have started doing damage on the day it became relevant**: when BMX
+      # leaves `lib/` and the manifest gains a real `dependency bmx …`, that pattern would finally
+      # match and rewrite it to `/tmp/burxt/lib` — a directory that by then does not hold `bmx.bx`.
+      # The move would have looked like the thing that broke star.
+      #
+      # Deleted rather than repointed. `use "std/bmx.bx"` is how BMX is reached today and the
+      # install step above genuinely carries it; when that changes, the manifest and the import
+      # change together and this file needs a step that describes what is then true.
 
       - name: A .bmx document becomes a component the compiler judges
         run: python3 test.py
