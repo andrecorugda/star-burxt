@@ -496,6 +496,28 @@ def main():
     check("a plain handler is not mistaken for one", compare.returncode == 0,
           (compare.stderr or compare.stdout)[:200])
 
+    # ---- a single-brace ATTRIBUTE value is refused ---------------------------------------------
+    #
+    # `class={mark(x)}` reaches Burxt as the string literal `"{mark(x)}"` and produces the right class
+    # only because Burxt interpolates braces inside its own string literals. A value holding a literal
+    # brace would ship `{mark(x)}` to a browser and nothing would say so.
+    #
+    # **This is the check the day's last lesson asked for.** I shipped that spelling and two
+    # screenshots agreed — an equality test says nothing about whether either side is right, and the
+    # thing that caught it was reading the emitted attribute. So the emitted attribute is what is
+    # asserted here, and the accident is a refusal rather than a documented footgun.
+    one_brace = generate(":props: n: Int\n:!props:\n\n:span: class={to_string(n)}\nx\n:!span:\n")
+    said = one_brace.stderr + one_brace.stdout
+    check("a single-brace attribute value is refused, with the fix in the message",
+          "STAR-E023" in said and "{{" in said, said[:200])
+    two_brace = generate(":props: n: Int\n:!props:\n\n:span: class={{ to_string(n) }}\nx\n:!span:\n")
+    check("and `{{ … }}` compiles to an EXPRESSION, not a string holding braces",
+          'html_attr("class", (to_string(n)))' in two_brace.stdout, two_brace.stdout[-200:])
+    # `child=` is the one place single braces are star's, and it must not be caught by this.
+    still_child = generate(":props: n: Int\n:!props:\n\n:span: child={to_string(n)}\n:!span:\n")
+    check("`child={…}` is untouched — the one place single braces are star's",
+          "html_text(to_string(n))" in still_child.stdout, still_child.stdout[-200:])
+
     shutil.rmtree(work, ignore_errors=True)
 
     if failures:

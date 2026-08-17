@@ -21,11 +21,6 @@ decision, and it is being worked on.
 the head reads one `on:` binding and the rest of the line is the expression. Put the second event on
 a wrapper, or handle it in the one you have.
 
-**A single-brace value in an ATTRIBUTE is not star's.** `child={expr}` is star's, and it is checked.
-But `class={expr}` reaches Burxt as the string `"{expr}"` and works only because Burxt interpolates
-braces inside its own string literals — so a value holding a literal brace breaks, and nothing says
-so. Write `class={{ expr }}` in an attribute; keep `{ }` for `child=`.
-
 **A block that only wraps something is still worth avoiding.** A `span` holding nothing but a square
 is three tokens of markup for a shape CSS can draw — `===style.local` with a `::before` is usually the
 better answer, and it keeps the document about content.

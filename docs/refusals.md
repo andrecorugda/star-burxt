@@ -100,6 +100,23 @@ is nothing to render *from*:
 
 ---
 
+## "`class={…}` is a single-brace value"
+
+Single braces are for `child=`. In any other attribute, write the interpolation you use everywhere
+else:
+
+```sbmx
+:span: class={{ mark(task.done) }} child={task.label}
+:!span:
+```
+
+**Why it is refused rather than allowed.** `class={mark(x)}` reaches the compiler as the *text*
+`"{mark(x)}"`, and it happens to produce the right class because Burxt interpolates braces inside its
+own string literals. It works by accident — and a value holding a literal brace would put
+`{mark(x)}` straight into the page with nothing to say so.
+
+---
+
 ## "`on:hover` is not an event this host can wire"
 
 **There is no `hover` event.** Hovering is CSS, not something that happens once. So this is refused:

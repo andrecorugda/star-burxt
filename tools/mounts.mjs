@@ -51,6 +51,22 @@ check('the component paints', first.length > 0 && first.includes('Read the tour'
 check('its own styles reach it', first.includes('class="card"'), first);
 check('a markdown heading is inside the output', first.includes('<h1'), first);
 
+// **NO UNRESOLVED INTERPOLATION REACHES THE PAGE, and this exists because a matching hash did not
+// catch one.** `class={mark(task.done)}` emitted the Burxt string `"{mark(task.done)}"`, which works
+// only because the compiler interpolates braces inside its own string literals — so a value holding a
+// literal brace would have shipped a class of `{mark(...)}` to a browser. Two screenshots agreed and
+// both would have been wrong.
+//
+// The lesson generalises past that one spelling: an equality test says nothing about whether either
+// side is RIGHT, so it needs a companion that asserts CONTENT. Then the check can fail in two ways
+// that have different causes — *the pages differ* and *the pages agree about something false* — and a
+// check that cannot tell those apart sends you to the wrong one.
+const leaked = [...first.matchAll(/(?:class|href|value|id|data-[\w-]+)="([^"]*[{}][^"]*)"/g)];
+check('no attribute carries an unresolved interpolation',
+      leaked.length === 0, leaked.map((m) => m[0]).join('  '));
+check('a state-chosen class is the COMPUTED value, not the expression',
+      /class="row(?: done)?"/.test(first), first);
+
 // Click the third row — the one that is not done — by its key. `fire` is the fake DOM's way of
 // delivering a real delegated event, so this goes through the driver's own listener rather than
 // around it.

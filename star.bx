@@ -1897,7 +1897,24 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
                     }
                     i += 1;
                 }
-                value = star_attr_value(substring(head, from, i - from));
+                let written_value: String = substring(head, from, i - from);
+                // **A single-brace value in an attribute WORKS BY ACCIDENT, so it is refused.**
+                // `class={mark(x)}` reaches Burxt as the string literal `"{mark(x)}"` and produces
+                // the right class only because Burxt interpolates braces inside its own string
+                // literals. A value holding a literal brace would then ship `{mark(x)}` to a browser,
+                // and nothing would say so — I shipped that spelling for ten minutes and found it by
+                // grepping the emitted attribute, because two screenshots agreed and both were right
+                // for the wrong reason.
+                //
+                // `child={…}` is star's own and is compiled as an expression; an attribute wants
+                // `{{ … }}`, which is the interpolation every other attribute uses.
+                if star_is_braced(written_value) && !star_mentions(written_value, "\{\{") {
+                    return Result.Error("STAR-E023: `" + name + "=\{" + star_unbraced(written_value)
+                        + "\}` is a single-brace value, which reaches the compiler as text and works"
+                        + " only by accident. Write `" + name + "=\{\{ " + star_unbraced(written_value)
+                        + " \}\}` — or `child=\{…\}`, which is the one place single braces are star's");
+                }
+                value = star_attr_value(written_value);
             }
         }
         if len(name) > 0 {
