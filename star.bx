@@ -314,8 +314,36 @@ pure function star_head_without_event(head: String) -> String {
 // every entry is one the driver installs a delegated listener for, and adding to
 // it means adding to the driver. A host that accepts an event it does not deliver
 // has told the author a lie the compiler cannot catch.
+// ---- the events this host can wire -----------------------------------------------------------
+//
+// **This list and the driver's must agree or the framework lies.** star refuses `on:hover` because
+// the driver installs no listener for it; accepting an event nothing delivers would be a handler
+// that silently never runs, which is the worst shape a failure can have on a page. `test.py`
+// generates every event named in `examples/app.js` and requires each to be accepted, so the two
+// cannot drift apart without something going red.
+//
+// Every event carries a VALUE, and what it is depends on the event — the typed text for `input`, the
+// key for `keydown`, the coordinates for a pointer, the animation's name for `animationend`. It
+// arrives as text, like the row key, because the DOM boundary is text.
 pure function star_event_is_wired(name: String) -> Bool {
-    return name == "click" || name == "input" || name == "change" || name == "submit";
+    return star_in_set(name,
+        // pointer and mouse
+        " click dblclick contextmenu pointerdown pointerup pointermove pointerenter pointerleave"
+        + " mousedown mouseup mouseenter mouseleave mouseover mouseout"
+        // keyboard
+        + " keydown keyup"
+        // forms
+        + " input change submit reset focus blur focusin focusout"
+        // dragging
+        + " dragstart dragover dragleave drop dragend"
+        // touch
+        + " touchstart touchmove touchend"
+        // scrolling
+        + " wheel scroll"
+        // **animation, which is why a transition can drive state.** `animationend` and
+        // `transitionend` are what let a component know its own animation finished, so a leaving
+        // element can be removed after it has faded rather than during.
+        + " animationend animationstart animationiteration transitionend transitionstart ");
 }
 
 // The block names this host declares, and the refusal for the rest.
@@ -1458,6 +1486,92 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
     return Result.Ok(out);
 }
 
+// ---- commands and subscriptions: async, in a language with no async ---------------------------
+//
+// The browser is already an event loop, and a wasm module that blocks freezes the tab. So Burxt
+// never waits — it ANSWERS. An update says what the next state is; a separate function says what the
+// driver should go and do about it; and whatever comes back arrives as an ordinary event.
+//
+//     pure function commands(msg: Msg, m: Model) -> [StarCmd]     what to go and do
+//     pure function watch(m: Model) -> [StarWatch]                what to keep listening to
+//     pure function arrived(tag: Int, value: String, m: Model) -> Model    one inbox
+//
+// **THE AUTHOR CHOOSES THE TAGS, and that is the design decision that makes the rest simple.** A
+// reply has to become a message, and a message cannot cross to JavaScript. The obvious route is for
+// a command to name the handler index that should receive it — and handler indices are assigned by
+// star from the order `on:` attributes appear, so the author would be writing a number they cannot
+// see and that moves when they add a button. Instead a command carries a tag the author picked, and
+// every reply lands in `arrived`, where they switch on their own number.
+//
+// One inbox for commands and subscriptions both: a fetch completing and a timer firing are the same
+// kind of event as far as the program is concerned, and giving them two doors would mean two
+// functions that differ only in which of the author's numbers they see.
+//
+// `StarCmd` and `StarWatch` are emitted INTO the component rather than imported, because they are
+// the contract between a document and this driver — a component that used a different set would
+// compile and then do nothing, and a shared library would let that happen quietly.
+pure function star_runtime_types() -> String {
+    return "// ---- what a component may ask the driver to do ----------------------\n"
+        + "//\n"
+        + "// Emitted, not imported: this is the contract between the document and the driver, and a\n"
+        + "// component holding a different set would compile and then silently do nothing.\n"
+        + "//\n"
+        + "// The Int in each is a TAG THE AUTHOR CHOSE. Whatever comes back arrives at `arrived`\n"
+        + "// carrying it, so nothing has to know the handler indices star assigns.\n"
+        + "enum StarCmd \{\n"
+        + "    // Fetch a URL. The reply's body arrives as `value`.\n"
+        + "    Fetch(Int, String),\n"
+        + "    // Send a body to a URL. The reply's body arrives as `value`.\n"
+        + "    Send(Int, String, String),\n"
+        + "    // Put the caret in an element. Nothing arrives.\n"
+        + "    Focus(String),\n"
+        + "    // Remember something across reloads, and read it back. `Load` arrives with the\n"
+        + "    // stored text, or the empty String when there is none.\n"
+        + "    Store(String, String),\n"
+        + "    Load(Int, String),\n"
+        + "    // Change the address without reloading. Nothing arrives.\n"
+        + "    Go(String),\n"
+        + "    // Stop whatever was started under this tag. Nothing arrives.\n"
+        + "    Cancel(Int),\n"
+        + "\}\n"
+        + "\n"
+        + "// **What to listen to is a function of the state**, exactly as the view is. The driver\n"
+        + "// diffs this between frames and adds or removes listeners — so there is no `onMounted`,\n"
+        + "// no cleanup function to forget, and stopping is a state change rather than a call.\n"
+        + "enum StarWatch \{\n"
+        + "    // Every so many milliseconds.\n"
+        + "    Every(Int, Int),\n"
+        + "    // A key, anywhere on the page. `value` is the key's name.\n"
+        + "    Key(Int, String),\n"
+        + "    // A websocket. Each message arrives as `value`.\n"
+        + "    Socket(Int, String),\n"
+        + "\}\n";
+}
+
+// A command as one line of text for the driver. Emitted as Burxt so the ENCODING lives with the
+// types it encodes, rather than in a JavaScript file that could disagree with them.
+pure function star_runtime_encoders() -> String {
+    return "pure function star_cmd_text(c: StarCmd) -> String \{\n"
+        + "    match c \{\n"
+        + "        Fetch(tag, url) => \{ return \"fetch\\t\" + to_string(tag) + \"\\t\" + url; \}\n"
+        + "        Send(tag, url, body) => \{ return \"send\\t\" + to_string(tag) + \"\\t\" + url + \"\\t\" + body; \}\n"
+        + "        Focus(selector) => \{ return \"focus\\t0\\t\" + selector; \}\n"
+        + "        Store(name, text) => \{ return \"store\\t0\\t\" + name + \"\\t\" + text; \}\n"
+        + "        Load(tag, name) => \{ return \"load\\t\" + to_string(tag) + \"\\t\" + name; \}\n"
+        + "        Go(path) => \{ return \"go\\t0\\t\" + path; \}\n"
+        + "        Cancel(tag) => \{ return \"cancel\\t\" + to_string(tag); \}\n"
+        + "    \}\n"
+        + "\}\n"
+        + "\n"
+        + "pure function star_watch_text(w: StarWatch) -> String \{\n"
+        + "    match w \{\n"
+        + "        Every(tag, ms) => \{ return \"every\\t\" + to_string(tag) + \"\\t\" + to_string(ms); \}\n"
+        + "        Key(tag, name) => \{ return \"key\\t\" + to_string(tag) + \"\\t\" + name; \}\n"
+        + "        Socket(tag, url) => \{ return \"socket\\t\" + to_string(tag) + \"\\t\" + url; \}\n"
+        + "    \}\n"
+        + "\}\n";
+}
+
 // ---- the two modes, and the `===bx` section is what chooses between them ----------------------
 //
 // **Expression mode** — no `===bx`. `on:click=count + 1` says what the next state IS, and a handler
@@ -1531,7 +1645,7 @@ public function star_generate(source: String, name: String, known: [StarKnown]) 
                     // identity round-trips through the page, so the author converts —
                     // `string_to_int(key, 0)` for a number.
                     let mutable dispatch: String = "pure function " + name + "_dispatch(handler: Int, "
-                        + "key: String, " + props + ") -> " + trimmed + " \{\n";
+                        + "key: String, value: String, " + props + ") -> " + trimmed + " \{\n";
                     let mutable h: Int = 0;
                     while h < len(handlers) {
                         // Expression mode returns the expression. Component mode hands it to

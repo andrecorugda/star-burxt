@@ -109,7 +109,17 @@ match file_read_maybe(path) {
                 print("");
                 // The author's own code, verbatim and before the generated halves, so `update`,
                 // `Model` and `Msg` exist by the time the view and the dispatch name them.
+                // The command and subscription vocabulary, emitted only when the component asks
+                // for it — a document that uses neither carries neither.
+                if star_mentions(component.code, "StarCmd")
+                    || star_mentions(component.code, "StarWatch") {
+                    print(star_runtime_types());
+                }
                 print(star_code_without_imports(component.code));
+                if star_mentions(component.code, "StarCmd")
+                    || star_mentions(component.code, "StarWatch") {
+                    print(star_runtime_encoders());
+                }
                 print(component.view);
                 print(component.dispatch);
                 // The runtime entry point, emitted rather than hand-written so the
@@ -161,14 +171,110 @@ match file_read_maybe(path) {
                     print("    \}");
                     print("\}");
                     print("");
+                    // ---- commands, subscriptions and the one inbox ------------------------
+                    //
+                    // Each is emitted only if the component declared the function it needs, so a
+                    // document that does not fetch carries no fetching code and the driver finds no
+                    // export to call.
+                    //
+                    // **The step is PER HANDLER, and that is not a style choice.** The obvious shape
+                    // is a `handler -> Msg` function the other entry points share — and it cannot be
+                    // written, because it would need a `Msg` to return for an index that does not
+                    // exist, and no such message exists in the author's enum. So the handler table
+                    // produces the message where it already knows it, and everything downstream
+                    // takes a `Msg` rather than a number.
+                    let has_commands: Bool = star_mentions(component.code, "function commands(");
+                    let has_watch: Bool = star_mentions(component.code, "function watch(");
+                    let has_arrived: Bool = star_mentions(component.code, "function arrived(");
+                    if has_commands {
+                        print("");
+                        print("external function host_command(line: String) -> CInt;");
+                    }
+                    if has_watch {
+                        print("");
+                        print("external function host_watch(line: String) -> CInt;");
+                    }
+                    print("");
+                    print("// The state out and the page out, which every path ends with.");
+                    print("function " + name + "_settle(next: Model) -> Int \{");
+                    print("    let kept: Int = host_state(to_text(next));");
+                    print("    let html: String = html_render(" + name + "(next));");
+                    print("    let sent: Int = host_mount(html);");
+                    print("    return len(html);");
+                    print("\}");
+                    print("");
+                    print("// One message: the next state, then whatever the driver should go and do.");
+                    print("function " + name + "_step(msg: Msg, m: Model) -> Int \{");
+                    print("    let next: Model = update(msg, m);");
+                    print("    let shown: Int = " + name + "_settle(next);");
+                    if has_commands {
+                        print("    let list: [StarCmd] = commands(msg, next);");
+                        print("    let mutable i: Int = 0;");
+                        print("    while i < len(list) \{");
+                        print("        let asked: Int = host_command(star_cmd_text(list[i]));");
+                        print("        i += 1;");
+                        print("    \}");
+                    }
+                    if has_watch {
+                        print("    let watched: [StarWatch] = watch(next);");
+                        print("    let mutable w: Int = 0;");
+                        print("    while w < len(watched) \{");
+                        print("        let asked: Int = host_watch(star_watch_text(watched[w]));");
+                        print("        w += 1;");
+                        print("    \}");
+                    }
+                    print("    return shown;");
+                    print("\}");
+                    if has_arrived {
+                        print("");
+                        print("// THE ONE INBOX. A fetch completing and a timer firing are the same");
+                        print("// kind of event, and the tag is the one the author chose — so nothing");
+                        print("// has to know the handler indices star assigns.");
+                        print("function " + name + "_arrived(tag: Int, value: String, state: String) -> Int \{");
+                        print("    region frame \{");
+                        // Bound to a local before returning, not for style: returning the call
+                        // directly is refused — *cannot return this Int: it was built inside a
+                        // `region` block* — because the analysis reads the expression's origin
+                        // rather than its type. A scalar through a `let` is the spelling that says
+                        // what is meant.
+                        // **`return 0` rather than the length, and that is a WORKAROUND.**
+                        // Returning the settle call's `Int` is refused — *cannot return this Int: it
+                        // was built inside a `region` block* — because the rule taints the result of
+                        // an allocating call regardless of its type, and an `Int` has no storage to
+                        // outlive anything. Reported with a 17-line reproduction. The number is a
+                        // page length nobody reads, so the workaround costs nothing.
+                        print("        let shown: Int = " + name + "_settle(arrived(tag, value, from_text(state)));");
+                        print("        return 0;");
+                        print("    \}");
+                        print("\}");
+                    }
+                    if has_watch {
+                        print("");
+                        print("// What to listen to, asked without an event — the driver calls this");
+                        print("// once at startup so the first frame's subscriptions exist.");
+                        print("function " + name + "_watch(state: String) -> Int \{");
+                        print("    region frame \{");
+                        print("        let list: [StarWatch] = watch(from_text(state));");
+                        print("        let mutable i: Int = 0;");
+                        print("        while i < len(list) \{");
+                        print("            let asked: Int = host_watch(star_watch_text(list[i]));");
+                        print("            i += 1;");
+                        print("        \}");
+                        print("        return len(list);");
+                        print("    \}");
+                        print("\}");
+                    }
                     print("// One event: the state in as text, the next state and the page out.");
-                    print("function " + name + "_frame(handler: Int, key: String, state: String) -> Int \{");
+                    print("function " + name + "_frame(handler: Int, key: String, value: String, state: String) -> Int \{");
                     print("    region frame \{");
-                    print("        let next: Model = " + name + "_dispatch(handler, key, from_text(state));");
-                    print("        let kept: Int = host_state(to_text(next));");
-                    print("        let html: String = html_render(" + name + "(next));");
-                    print("        let sent: Int = host_mount(html);");
-                    print("        return len(html);");
+                    print("        let m: Model = from_text(state);");
+                    let mutable hi: Int = 0;
+                    while hi < len(component.handlers) {
+                        print("        if handler == " + to_string(hi) + " \{ let shown: Int = " + name
+                            + "_step(" + component.handlers[hi].expression + ", m); return 0; \}");
+                        hi += 1;
+                    }
+                    print("        return 0;");
                     print("    \}");
                     print("\}");
                 }

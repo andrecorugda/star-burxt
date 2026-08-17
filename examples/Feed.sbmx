@@ -1,0 +1,73 @@
+===bx
+use "std/string.bx";
+use "std/json.bx";
+
+class Model { items: Int, status: String, polling: Bool }
+enum Msg { Refresh, TogglePolling }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Refresh => { return Model { items: m.items, status: "loading", polling: m.polling }; }
+        TogglePolling => { return Model { items: m.items, status: m.status, polling: !m.polling }; }
+    }
+}
+
+// What to go and do. The tag is mine — 7 means "this is the feed reply".
+pure function commands(msg: Msg, m: Model) -> [StarCmd] allocates {
+    let mutable out: [StarCmd] = [];
+    match msg {
+        Refresh => { let a: Int = push(out, StarCmd.Fetch(7, "/api/feed")); }
+        TogglePolling => { }
+    }
+    return out;
+}
+
+// What to keep listening to, as a function of the state.
+pure function watch(m: Model) -> [StarWatch] allocates {
+    let mutable out: [StarWatch] = [];
+    if m.polling { let a: Int = push(out, StarWatch.Every(7, 5000)); }
+    let b: Int = push(out, StarWatch.Key(9, "Escape"));
+    return out;
+}
+
+// One inbox. Tag 7 is the feed, tag 9 is Escape.
+pure function arrived(tag: Int, value: String, m: Model) -> Model {
+    if tag == 7 { return Model { items: string_to_int(value, 0), status: "ready", polling: m.polling }; }
+    if tag == 9 { return Model { items: m.items, status: "closed", polling: false }; }
+    return m;
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable f: [Field] = [];
+    let a: Int = push(f, json_field("items", json_int(m.items)));
+    let b: Int = push(f, json_field("status", json_text(m.status)));
+    let c: Int = push(f, json_field("polling", json_truth(m.polling)));
+    return json_render(json_object(f));
+}
+
+function from_text(text: String) -> Model {
+    let mutable items: Int = 0;
+    let mutable polling: Bool = false;
+    match json_parse(text) {
+        Error(e) => { }
+        Ok(v) => {
+            match json_at(v, "items") { None => { } Some(x) => { match json_as_int(x) { None => { } Some(n) => { items = n; } } } }
+            match json_at(v, "polling") { None => { } Some(x) => { match json_as_truth(x) { None => { } Some(b) => { polling = b; } } } }
+        }
+    }
+    return Model { items: items, status: "idle", polling: polling };
+}
+===
+
+::: props model: Model
+:::
+
+# Feed — {{ to_string(model.items) }} items
+
+::: button on:click=Msg.Refresh
+refresh
+:::
+
+::: button on:click=Msg.TogglePolling
+toggle polling
+:::

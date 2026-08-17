@@ -276,6 +276,62 @@ declares them, so two props of the same type cannot swap by accident.
 
 It prints the component. Reading it is encouraged — there is nothing in there you did not write.
 
+## …fetch something?
+
+Two functions. One says what to go and do, the other receives whatever comes back:
+
+```
+===bx
+pure function commands(msg: Msg, m: Model) -> [StarCmd] allocates {
+    let mutable out: [StarCmd] = [];
+    match msg {
+        Refresh => { let a: Int = push(out, StarCmd.Fetch(7, "/api/feed")); }
+        Other => { }
+    }
+    return out;
+}
+
+pure function arrived(tag: Int, value: String, m: Model) -> Model {
+    if tag == 7 { return Model { items: string_to_int(value, 0), status: "ready" }; }
+    return m;
+}
+===
+```
+
+**The `7` is yours.** You pick the tags, so nothing has to know the handler numbers star assigns —
+and they move when you add a button.
+
+There is no `await`, and you do not need one: the browser is already the event loop. An update says
+what the next state is, `commands` says what to go and do about it, and the reply is an ordinary
+event. **A failed fetch is still an answer**, delivered with an empty body, so a page cannot get
+stuck in `loading` with nothing ever arriving.
+
+You can also `Send` a body, `Focus` an element, `Store` and `Load` across reloads, `Go` to a path,
+and `Cancel` anything in flight.
+
+## …run something on a timer, or watch for a key?
+
+Say what you want to be listening to, as a function of your state:
+
+```
+===bx
+pure function watch(m: Model) -> [StarWatch] allocates {
+    let mutable out: [StarWatch] = [];
+    if m.polling { let a: Int = push(out, StarWatch.Every(7, 5000)); }
+    let b: Int = push(out, StarWatch.Key(9, "Escape"));
+    return out;
+}
+===
+```
+
+The driver compares this with what is already running and starts or stops the difference. **So
+stopping a timer is a state change** — set `polling` to false and it stops.
+
+There is no `onMounted`, no cleanup function to forget, and no way to leak a listener: what is
+running is whatever your current state asks for.
+
+Timers, keys and websockets all arrive at `arrived`, under your tag.
+
 ## …run a real app in a browser?
 
 Give your component a way to carry its state as text, and the driver does the rest:

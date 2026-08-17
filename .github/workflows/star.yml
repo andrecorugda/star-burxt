@@ -73,6 +73,21 @@ jobs:
             /tmp/todos.o -o /tmp/todos.wasm
           node examples/drive.mjs /tmp/todos.wasm
 
+      - name: Commands and subscriptions, in real wasm
+        run: |
+          set -eux
+          ./star-generate examples/Feed.sbmx feed > /tmp/feed.bx
+          burxt build /tmp/feed.bx --target wasm32-unknown-unknown -o /tmp/feed.o
+          LLD=$(ls ~/.rustup/toolchains/*/lib/rustlib/*/bin/rust-lld 2>/dev/null | head -1)
+          if [ -z "$LLD" ]; then LLD=$(command -v wasm-ld); fi
+          "$LLD" -flavor wasm --no-entry --allow-undefined \
+            --export=main --export='bx.feed_first' --export='bx.feed_frame' \
+            --export='bx.feed_arrived' --export='bx.feed_watch' \
+            --export='burxt.alloc' --export=memory \
+            -z stack-size=1048576 --initial-memory=4194304 --max-memory=268435456 \
+            /tmp/feed.o -o /tmp/feed.wasm
+          node examples/drive-feed.mjs /tmp/feed.wasm
+
       - name: Every example in the documentation actually works
         run: |
           set -eux
