@@ -53,6 +53,14 @@ pure function to_text(m: Model) -> String allocates {
     return json_render(json_object(top));
 }
 
+// **`+ ""` ON EVERY STRING PULLED OUT OF A MATCH, and it is load-bearing rather than noise.**
+// A String bound by a `match` arm and stored is not seen as escaping the block it was matched in, so
+// the region releases the parse tree underneath it and the next allocation lands on top — silently,
+// with a plausible value of the wrong length. Diagnosed in Burxt: the walk that follows a relayed
+// value resolves parameters and stops at a pattern binding.
+//
+// Concatenation allocates, so the result is genuinely a different value and the taint fires. It is a
+// correct workaround rather than a hack, and it keeps working after the fix.
 function from_text(text: String) -> Model allocates {
     let mutable out: [Todo] = [];
     let mutable most: Int = 1;
@@ -81,7 +89,7 @@ function from_text(text: String) -> Model allocates {
                                 }
                                 match json_at(row, "label") {
                                     None => { }
-                                    Some(v) => { match json_as_text(v) { None => { } Some(t) => { label = t; } } }
+                                    Some(v) => { match json_as_text(v) { None => { } Some(t) => { label = t + ""; } } }
                                 }
                                 match json_at(row, "done") {
                                     None => { }

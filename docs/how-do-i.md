@@ -332,6 +332,41 @@ running is whatever your current state asks for.
 
 Timers, keys and websockets all arrive at `arrived`, under your tag.
 
+## …render on the server?
+
+Give your component a `load`, and its **signature** is what makes it server-only:
+
+```
+===bx
+function load(request: String) -> Model touches network, files {
+    // …reach a database, read a file, call an API…
+}
+===
+```
+
+Generating emits a `page_serve(request) -> String` that returns the whole page with the state
+embedded in it, so the browser picks up **the same value** rather than fetching it again:
+
+```html
+<div id="root">…your rendered page…</div>
+<script type="application/json" id="star-state">{"user":"ada","unread":3}</script>
+```
+
+**A view cannot fetch, and that is checked rather than promised.** A view is `pure`, and a `pure`
+function may not call anything impure — so this does not compile:
+
+```
+error: `pure function view` may not call `db_lookup`, which crosses into C:
+a pure function's result must depend only on its arguments.
+```
+
+That is the single largest bug class in server-rendered React, refused by the compiler.
+
+**And server code does not reach the browser.** Not by a bundler rule — the client's entry points
+never call `load`, so the linker drops it, its string data and the network import it made. Measured:
+a password inside `load` is present in the wasm object file and absent from the linked module. It is
+checked on every push, with a control that proves the check can find things.
+
 ## …run a real app in a browser?
 
 Give your component a way to carry its state as text, and the driver does the rest:

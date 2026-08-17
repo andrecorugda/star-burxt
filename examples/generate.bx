@@ -264,6 +264,33 @@ match file_read_maybe(path) {
                         print("    \}");
                         print("\}");
                     }
+                    // ---- the server half ---------------------------------------------------
+                    //
+                    // A component that declares `load` gets a native entry point: a request in, a
+                    // whole page out, with the state embedded so the client picks up the SAME value
+                    // rather than fetching it again.
+                    //
+                    // **`load` may reach the network and the view may not**, and that is a signature
+                    // rather than a convention. `pure function view` cannot call anything impure —
+                    // the compiler refuses it — so a page cannot fetch while it renders, which is
+                    // the bug class every server-rendering framework has.
+                    if star_mentions(component.code, "function load(") {
+                        print("");
+                        print("// ---- served on the server, where `load` may reach things --------");
+                        print("//");
+                        print("// The state travels WITH the page. A client that had to fetch it again");
+                        print("// would render twice and could render differently the second time —");
+                        print("// which is the hydration mismatch this design does not have, because");
+                        print("// both sides run the same compiled component over the same value.");
+                        print("function " + name + "_serve(request: String) -> String touches network, files, clock \{");
+                        print("    let m: Model = load(request);");
+                        print("    let state: String = to_text(m);");
+                        print("    let body: String = html_render(" + name + "(m));");
+                        print("    return \"<div id=\\\"root\\\">\" + body + \"</div>\"");
+                        print("        + \"<script type=\\\"application/json\\\" id=\\\"star-state\\\">\"");
+                        print("        + state + \"</script>\";");
+                        print("\}");
+                    }
                     print("// One event: the state in as text, the next state and the page out.");
                     print("function " + name + "_frame(handler: Int, key: String, value: String, state: String) -> Int \{");
                     print("    region frame \{");

@@ -1,0 +1,59 @@
+===bx
+use "std/string.bx";
+use "std/json.bx";
+
+class Model { draft: String, saved: String, hits: Int }
+enum Msg { Typed(String), Save, Pressed(String) }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Typed(text) => { return Model { draft: text, saved: m.saved, hits: m.hits }; }
+        Save => { return Model { draft: "", saved: m.draft, hits: m.hits + 1 }; }
+        Pressed(k) => {
+            if k == "Enter" { return Model { draft: "", saved: m.draft, hits: m.hits + 1 }; }
+            return m;
+        }
+    }
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable f: [Field] = [];
+    let a: Int = push(f, json_field("draft", json_text(m.draft)));
+    let b: Int = push(f, json_field("saved", json_text(m.saved)));
+    let c: Int = push(f, json_field("hits", json_int(m.hits)));
+    return json_render(json_object(f));
+}
+
+function from_text(text: String) -> Model {
+    let mutable draft: String = "";
+    let mutable saved: String = "";
+    let mutable hits: Int = 0;
+    match json_parse(text) {
+        Error(e) => { }
+        Ok(v) => {
+            match json_at(v, "draft") { None => { } Some(x) => { match json_as_text(x) { None => { } Some(t) => { draft = t + ""; } } } }
+            match json_at(v, "saved") { None => { } Some(x) => { match json_as_text(x) { None => { } Some(t) => { saved = t + ""; } } } }
+            match json_at(v, "hits") { None => { } Some(x) => { match json_as_int(x) { None => { } Some(n) => { hits = n; } } } }
+        }
+    }
+    return Model { draft: draft, saved: saved, hits: hits };
+}
+===
+
+::: props model: Model
+:::
+
+::: form on:submit=Msg.Save
+
+::: input value={{ model.draft }} on:input=Msg.Typed(value)
+:::
+
+::: button
+save
+:::
+
+:::
+
+::: p
+draft: {{ model.draft }} — saved: {{ model.saved }} ({{ to_string(model.hits) }})
+:::

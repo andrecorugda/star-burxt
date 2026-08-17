@@ -1,0 +1,63 @@
+===bx
+use "std/string.bx";
+use "std/json.bx";
+
+class Model { user: String, unread: Int }
+enum Msg { Clear }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Clear => { return Model { user: m.user, unread: 0 }; }
+    }
+}
+
+// **Server only, and its SIGNATURE says so.** A view is `pure` and cannot call this; the compiler
+// refuses it. So a page cannot fetch while it renders.
+external function db_lookup(who: String) -> CInt touches network;
+
+function load(request: String) -> Model touches network, files, clock {
+    let SECRET_DB_PASSWORD_DO_NOT_SHIP: String = "hunter2-should-never-reach-a-browser";
+    let n: Int = db_lookup(SECRET_DB_PASSWORD_DO_NOT_SHIP);
+    return Model { user: request, unread: n };
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable f: [Field] = [];
+    let a: Int = push(f, json_field("user", json_text(m.user)));
+    let b: Int = push(f, json_field("unread", json_int(m.unread)));
+    return json_render(json_object(f));
+}
+
+// **`+ ""` ON EVERY STRING PULLED OUT OF A MATCH, and it is load-bearing rather than noise.**
+// A String bound by a `match` arm and stored is not seen as escaping the block it was matched in, so
+// the region releases the parse tree underneath it and the next allocation lands on top — silently,
+// with a plausible value of the wrong length. Diagnosed in Burxt: the walk that follows a relayed
+// value resolves parameters and stops at a pattern binding.
+//
+// Concatenation allocates, so the result is genuinely a different value and the taint fires. It is a
+// correct workaround rather than a hack, and it keeps working after the fix.
+function from_text(text: String) -> Model {
+    let mutable user: String = "";
+    let mutable unread: Int = 0;
+    match json_parse(text) {
+        Error(e) => { }
+        Ok(v) => {
+            match json_at(v, "unread") { None => { } Some(x) => { match json_as_int(x) { None => { } Some(n) => { unread = n; } } } }
+        }
+    }
+    return Model { user: user, unread: unread };
+}
+===
+
+::: props model: Model
+:::
+
+# Hello {{ model.user }}
+
+::: p
+{{ to_string(model.unread) }} unread
+:::
+
+::: button on:click=Msg.Clear
+clear
+:::

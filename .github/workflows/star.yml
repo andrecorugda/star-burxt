@@ -88,6 +88,22 @@ jobs:
             /tmp/feed.o -o /tmp/feed.wasm
           node examples/drive-feed.mjs /tmp/feed.wasm
 
+      # The strongest claim star makes, checked rather than asserted — WITH its control, so the
+      # grep cannot pass by being unable to find anything.
+      - name: Server code cannot reach the browser
+        run: |
+          set -eux
+          ./star-generate examples/Served.sbmx page > /tmp/page.bx
+          burxt build /tmp/page.bx --target wasm32-unknown-unknown -o /tmp/page.o
+          LLD=$(ls ~/.rustup/toolchains/*/lib/rustlib/*/bin/rust-lld 2>/dev/null | head -1)
+          if [ -z "$LLD" ]; then LLD=$(command -v wasm-ld); fi
+          "$LLD" -flavor wasm --no-entry --allow-undefined --gc-sections \
+            --export=main --export='bx.page_first' --export='bx.page_frame' \
+            --export='burxt.alloc' --export=memory \
+            -z stack-size=1048576 --initial-memory=4194304 --max-memory=268435456 \
+            /tmp/page.o -o /tmp/page.wasm
+          node examples/prove-partition.mjs /tmp/page.o /tmp/page.wasm
+
       - name: Every example in the documentation actually works
         run: |
           set -eux
