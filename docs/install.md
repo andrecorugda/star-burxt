@@ -58,12 +58,13 @@ sh scripts/release.sh               # builds, then writes dist/burxt-<version>-<
 sudo sh scripts/install.sh          # installs from dist/; PREFIX=~/.local works too
 ```
 
-That needs Rust and LLVM 18, which the release tarball exists precisely to spare you.
+That needs Rust and LLVM 18 — which is what the release tarball exists to spare you, so it is worth
+checking whether 1.2 has shipped before doing it.
 
-That is stated here rather than left for you to discover, because the failure otherwise arrives as
-a `pure` error inside a file you did not write — the one shown just above. **Nothing on this site
-requires a version that does not exist except this one line, and it will stop being true on the day
-1.2 is published.**
+**This is stated rather than left for you to find**, because otherwise the missing version arrives
+as the `pure` error above: inside a file you did not write, about a rule you did not break. It is
+the only place on this site that asks for something not yet published, and it stops being true on
+the day 1.2 ships.
 
 ## 2. Declare star-burxt in your manifest
 
