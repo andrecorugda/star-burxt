@@ -35,6 +35,19 @@ And a short block fits on one line:
 :name: head :!name:
 ```
 
+**A head can be delimited, and then the body is content.** Put it in brackets after an arrow:
+
+```text
+:button: -> [class=row, on:click=Msg.Save] Save it :!button:
+```
+
+Everything after the `]` is the body — **parsed**, so a slot is a slot and `**bold**` is bold. That is
+the difference from `child=`, whose value is a string nothing looks inside. Use `child=` for a value;
+use the brackets when the body is content.
+
+Separate head tokens with a space or a comma, whichever reads better. A comma inside a handler is an
+argument — `on:click=Msg.Toggle(string_to_int(key, 0))` is one token, not three.
+
 ---
 
 ## `props` — what the component is given

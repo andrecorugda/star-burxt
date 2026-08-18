@@ -575,6 +575,41 @@ def main():
           "balanced %d, regex %d" % (len([m for m in messages if fence.search(m)]),
                                      len([c for c in cheap if fence.search(c)])))
 
+    # ---- a comma separates head tokens ---------------------------------------------------------
+    #
+    # BMX 0.9 delimits a head — `:button: -> [on:click=save(id), .featured] Save :!button:` — and a
+    # comma is the natural separator inside brackets, which is how Andre writes them. Until this
+    # existed `class=card, id=main` produced **`class="card,"`**: the comma swallowed into the value,
+    # silently, with no refusal.
+    #
+    # BMX found the identical shape in `BMX-E033`, where asking whether a `#` followed *whitespace*
+    # let `#one,#two` evade the one-id rule in both implementations at once — 70 of 70 fixtures
+    # agreeing while both were wrong.
+    commas = generate(":props: n: Int\n:!props:\n\n:div: class=card, id=main\nhi\n:!div:\n")
+    check("a comma separates head tokens, and is not part of the value",
+          'html_attr("class", "card"), html_attr("id", "main")' in commas.stdout,
+          commas.stdout[-220:])
+    spaced = generate(":props: n: Int\n:!props:\n\n:div: class=card id=main\nhi\n:!div:\n")
+    check("and a space still does, unchanged",
+          'html_attr("class", "card"), html_attr("id", "main")' in spaced.stdout, spaced.stdout[-220:])
+
+    # **The qualifier is the whole of it: a comma ends a value only at DEPTH ZERO.** A handler is full
+    # of commas that separate ARGUMENTS, and a comma rule that could not see parentheses would cut
+    # every keyed handler in this repository in half at the first one.
+    handler = generate(":props: n: Int\n:!props:\n\n"
+                       ":button: class=row, on:click=Msg.Toggle(string_to_int(key, 0))\nhi\n:!button:\n")
+    check("a handler's own commas are arguments, not separators",
+          "Msg.Toggle(string_to_int(key, 0))" in handler.stdout
+          and 'html_attr("class", "row")' in handler.stdout, handler.stdout[-260:])
+    # `child=` is found after a comma too — it used to test whether the PREVIOUS BYTE was a space.
+    kid = generate(":props: n: Int\n:!props:\n\n:span: class=box, child={to_string(n)}\n:!span:\n")
+    check("`child=` is still found when a comma precedes it",
+          "html_text(to_string(n))" in kid.stdout, kid.stdout[-220:])
+    # And an interpolation may still hold a comma without being cut.
+    interp = generate(":props: n: Int\n:!props:\n\n:div: class={{ pick(n, 2) }}\nhi\n:!div:\n")
+    check("an interpolated value may hold a comma",
+          "pick(n, 2)" in interp.stdout, interp.stdout[-220:])
+
     shutil.rmtree(work, ignore_errors=True)
 
     if failures:

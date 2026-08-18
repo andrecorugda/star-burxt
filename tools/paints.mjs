@@ -136,6 +136,17 @@ check('the text still has the author\'s spaces, exactly',
       own.replace(/<[^>]*>/g, '').split('\n')[1].startsWith('    :p:'),
       own.replace(/<[^>]*>/g, '').split('\n')[1]);
 
+// ---- BMX 0.9's delimited head ------------------------------------------------------------------
+//
+// `:name: -> [head] body` — the head is delimited, so a one-liner's body is real inline content
+// rather than opaque head bytes. The painter must colour the head as a head and leave the body as
+// body; if it treats the whole line as head, a slot in the body stops being a slot.
+
+const delimited = paint('sbmx', ':button: -> [class=row, on:click=Msg.Go] {{ label }} :!button:');
+check('a delimited head is still a fence with a name',
+      delimited.includes('t-fence') && delimited.includes('t-name'), delimited);
+check('and its head is coloured as a head', delimited.includes('t-head'), delimited);
+
 // ---- the other two languages still work ------------------------------------------------------
 check('`burxt` still paints', /t-keyword">function/.test(paint('burxt', 'function f() { }')));
 check('`bmx` still paints', paint('bmx', ':p:\nhi\n:!p:').includes('t-fence'));

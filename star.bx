@@ -262,7 +262,7 @@ pure function star_event_part(head: String) -> Option<String> {
         if byte_at(head, i) == 111 && byte_at(head, i + 1) == 110 && byte_at(head, i + 2) == 58 {
             // Only at a token boundary, so `button on:click=x` matches and a
             // component legitimately named `weapon:click` does not.
-            if i == 0 || byte_at(head, i - 1) == 32 {
+            if star_at_token_start(head, i) {
                 return Option.Some(substring(head, i + 3, len(head) - (i + 3)));
             }
         }
@@ -299,7 +299,7 @@ pure function star_head_without_event(head: String) -> String {
     let mutable i: Int = 0;
     while i + 3 <= len(head) {
         if byte_at(head, i) == 111 && byte_at(head, i + 1) == 110 && byte_at(head, i + 2) == 58 {
-            if i == 0 || byte_at(head, i - 1) == 32 {
+            if star_at_token_start(head, i) {
                 return bmx_strip_end(substring(head, 0, i));
             }
         }
@@ -389,6 +389,26 @@ pure function star_takes_flow(name: String) -> Bool {
         + " pre progress section select table tbody td tfoot th thead tr ul video ");
 }
 
+// **What separates one head token from the next: a space OR a comma.**
+//
+// Andre writes `-> [on:click=save(id), .featured, #plans]`, and a comma is the natural separator
+// inside brackets. Until this existed `class=card, id=main` produced `class="card,"` — the comma
+// swallowed into the value, silently, with no refusal. BMX found the same shape in their own
+// `BMX-E033`, where asking whether a `#` followed *whitespace* let `#one,#two` evade the one-id rule
+// in both implementations at once: **70 of 70 fixtures agreed and both were wrong.**
+//
+// One function rather than five `== 32` tests, because five copies of a separator rule is five places
+// for the next separator to be forgotten.
+pure function star_separates(byte: Int) -> Bool {
+    return byte == 32 || byte == 44;
+}
+
+// Is the token starting at `i` at the start of the head or preceded by a separator? The test that was
+// `byte_at(head, i - 1) == 32` in five places, and wrong at every one of them for a comma.
+pure function star_at_token_start(head: String, i: Int) -> Bool {
+    return i == 0 || star_separates(byte_at(head, i - 1));
+}
+
 pure function star_in_set(name: String, set: String) -> Bool {
     return star_mentions(set, " " + name + " ");
 }
@@ -421,7 +441,7 @@ pure function star_key_part(head: String) -> Option<String> {
     while i + 4 <= len(head) {
         if byte_at(head, i) == 107 && byte_at(head, i + 1) == 101
             && byte_at(head, i + 2) == 121 && byte_at(head, i + 3) == 32 {
-            if i > 0 && byte_at(head, i - 1) == 32 {
+            if i > 0 && star_separates(byte_at(head, i - 1)) {
                 return Option.Some(bmx_strip_end(substring(head, i + 4, len(head) - (i + 4))));
             }
         }
@@ -436,7 +456,7 @@ pure function star_head_without_key(head: String) -> String {
     while i + 4 <= len(head) {
         if byte_at(head, i) == 107 && byte_at(head, i + 1) == 101
             && byte_at(head, i + 2) == 121 && byte_at(head, i + 3) == 32 {
-            if i > 0 && byte_at(head, i - 1) == 32 {
+            if i > 0 && star_separates(byte_at(head, i - 1)) {
                 return bmx_strip_end(substring(head, 0, i));
             }
         }
@@ -1422,7 +1442,7 @@ pure function star_head_value(head: String, wanted: String) -> String {
             i += 1;
         }
         let name_from: Int = i;
-        while i < width && byte_at(head, i) != 32 && byte_at(head, i) != 61 {
+        while i < width && !star_separates(byte_at(head, i)) && byte_at(head, i) != 61 {
             i += 1;
         }
         let name: String = substring(head, name_from, i - name_from);
@@ -1662,7 +1682,7 @@ pure function star_child_of(head: String) -> Option<String> {
         // `child=` at the start of the head or after a space, so `data-child=` is untouched.
         if byte_at(head, i) == 99 && byte_at(head, i + 1) == 104 && byte_at(head, i + 2) == 105
             && byte_at(head, i + 3) == 108 && byte_at(head, i + 4) == 100
-            && byte_at(head, i + 5) == 61 && (i == 0 || byte_at(head, i - 1) == 32) {
+            && byte_at(head, i + 5) == 61 && star_at_token_start(head, i) {
             let from: Int = i + 6;
             let stop: Int = star_value_end(head, from);
             return Option.Some(substring(head, from, stop - from));
@@ -1678,7 +1698,7 @@ pure function star_head_without_child(head: String) -> String {
     while i + 6 <= len(head) {
         if byte_at(head, i) == 99 && byte_at(head, i + 1) == 104 && byte_at(head, i + 2) == 105
             && byte_at(head, i + 3) == 108 && byte_at(head, i + 4) == 100
-            && byte_at(head, i + 5) == 61 && (i == 0 || byte_at(head, i - 1) == 32) {
+            && byte_at(head, i + 5) == 61 && star_at_token_start(head, i) {
             let stop: Int = star_value_end(head, i + 6);
             let before: String = substring(head, 0, i);
             let after: String = substring(head, stop, len(head) - stop);
@@ -1718,7 +1738,8 @@ pure function star_value_end(head: String, from: Int) -> Int {
         return i;
     }
     let mutable depth: Int = 0;
-    while i < width && (depth > 0 || byte_at(head, i) != 32) {
+    let mutable round: Int = 0;
+    while i < width && (depth > 0 || round > 0 || !star_separates(byte_at(head, i))) {
         if i + 1 < width && byte_at(head, i) == 123 && byte_at(head, i + 1) == 123 {
             depth += 1;
             i += 1;
@@ -1727,6 +1748,8 @@ pure function star_value_end(head: String, from: Int) -> Int {
             depth -= 1;
             i += 1;
         }
+        if byte_at(head, i) == 40 { round += 1; }
+        if byte_at(head, i) == 41 { round -= 1; }
         i += 1;
     }
     return i;
@@ -1855,14 +1878,14 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
     let width: Int = len(head);
     let mutable i: Int = 0;
     while i < width {
-        while i < width && byte_at(head, i) == 32 {
+        while i < width && star_separates(byte_at(head, i)) {
             i += 1;
         }
         if i >= width {
             return Result.Ok(out);
         }
         let name_from: Int = i;
-        while i < width && byte_at(head, i) != 32 && byte_at(head, i) != 61 {
+        while i < width && !star_separates(byte_at(head, i)) && byte_at(head, i) != 61 {
             i += 1;
         }
         let name: String = substring(head, name_from, i - name_from);
@@ -1884,9 +1907,16 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
             } else {
                 let from: Int = i;
                 // A `{{ … }}` value may hold spaces, so an interpolation runs to its closing braces
-                // rather than to the next space.
+                // rather than to the next separator.
+                //
+                // **A comma ends a value only at depth zero**, and that qualifier is the whole of it:
+                // `on:click=Msg.Toggle(string_to_int(key, 0))` is full of commas that separate
+                // ARGUMENTS, and a comma rule that could not see parentheses would cut the handler in
+                // half at the first one.
                 let mutable depth: Int = 0;
-                while i < width && (depth > 0 || byte_at(head, i) != 32) {
+                let mutable round: Int = 0;
+                while i < width && (depth > 0 || round > 0
+                                    || !star_separates(byte_at(head, i))) {
                     if i + 1 < width && byte_at(head, i) == 123 && byte_at(head, i + 1) == 123 {
                         depth += 1;
                         i += 1;
@@ -1895,6 +1925,8 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
                         depth -= 1;
                         i += 1;
                     }
+                    if byte_at(head, i) == 40 { round += 1; }
+                    if byte_at(head, i) == 41 { round -= 1; }
                     i += 1;
                 }
                 let written_value: String = substring(head, from, i - from);

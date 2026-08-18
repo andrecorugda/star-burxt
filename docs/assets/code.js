@@ -197,6 +197,20 @@
       // The whitespace after the marker belongs to neither the name nor the head — the grammar's
       // `[ \t]*` eats it between captures, so a head starting one character early is a real
       // divergence and `agrees.mjs` caught it.
+      // a delimited head: :name: -> [head] body      (0.9)
+      m = /^(\s*)(:)([A-Za-z][A-Za-z0-9_-]*)(:)([ \t]*)(->)([ \t]*)(\[)([^\]]*)(\])([ \t]*)(.*)$/.exec(line);
+      if (m) {
+        let head = escapeHtml(m[9])
+          .replace(/(\.)([A-Za-z][A-Za-z0-9_-]*)/g, '<span class="t-class">$1$2</span>')
+          .replace(/(#)([A-Za-z][A-Za-z0-9_-]*)/g, '<span class="t-id">$1$2</span>');
+        out.push(m[1] + span('fence', m[2]) + span('name', m[3]) + span('fence', m[4]) + m[5]
+                 + span('punct', m[6]) + m[7] + span('punct', m[8])
+                 + (m[9] ? '<span class="t-head">' + head + '</span>' : '')
+                 + span('punct', m[10]) + m[11]
+                 + (m[12] ? bmxInline(m[12]) : ''));
+        continue;
+      }
+
       m = /^(\s*)(:)([A-Za-z][A-Za-z0-9_-]*)(:)([ \t]*)(.*)$/.exec(line);
       if (m) {
         let head = m[6];
@@ -232,6 +246,135 @@
     }
     return indented(out, lines).join('\n');
   }
+
+  // Wrap each painted line in a depth span, in a SECOND PASS over the finished lines.
+  //
+  // **Not inside the loop**, and that is not a style choice: the loop body has a dozen `continue`s, so
+  // a wrapper threaded through it leaves one branch unwrapped and nothing says which. One entry per
+  // source line is already an invariant here — `tools/paints.mjs` asserts the line count — so the two
+  // arrays line up by construction and this pass cannot disagree with the painter.
+  function indented(painted, lines) {
+    let depth = 0;
+    let fence = null;
+    return painted.map((html, i) => {
+      const line = lines[i];
+      if (fence !== null) {
+        if (line.trim() === fence) fence = null;
+        return html;
+      }
+      const opens = /^(\s*)(`{3,}|~{3,})/.exec(line);
+      if (opens) { fence = opens[2]; return html; }
+
+      // **A document that indents ITSELF keeps its own columns and gets a HANGING indent.** Real
+      // spaces plus this padding would indent every line twice, so the author's columns win — but a
+      // long line still wraps, and with no box around it the continuation restarted at zero, which
+      // made a nested closer read as a top-level one. The `w` classes hang the wrap at the line's own
+      // depth instead. The text is untouched: padding is not text.
+      const own = /^( +)/.exec(line);
+      if (own) {
+        const level = Math.min(6, Math.max(1, Math.round(own[1].length / 4)));
+        return `<span class="w${level}">${html}</span>`;
+      }
+      if (/^\s/.test(line)) return html;
+
+      // 0.7 fences: `:name:` opens, `:!name:` closes. The closer NAMES its block, so the depth is
+      // recoverable from either — but it is still drawn at its opener's column, because that is the
+      // column a reader compares against.
+      const block = /^\s*:(!?)[A-Za-z][A-Za-z0-9_-]*:/.exec(line);
+      let at = depth;
+      if (block) {
+        if (block[1] === '!') { depth = Math.max(0, depth - 1); at = depth; }
+        else { depth += 1; }
+      }
+      return at > 0 ? `<span class="d${Math.min(at, 6)}">${html}</span>` : html;
+    });
+  }
+
+
+  // ---- CSS, for a `===style` section -----------------------------------------------------------
+  //
+  // Small on purpose: a style section is CSS, and CSS already reads well. What earns colour is the
+  // difference between a SELECTOR and a PROPERTY, because that is the line a reader of a scoped
+  // sheet is looking for.
+
+  function css(src) {
+    let out = '';
+    let i = 0;
+    while (i < src.length) {
+      const rest = src.slice(i);
+
+      if (rest.startsWith('/*')) {
+        const end = rest.indexOf('*/');
+        const text = end < 0 ? rest : rest.slice(0, end + 2);
+        out += span('comment', text);
+        i += text.length;
+        continue;
+      }
+
+      if (rest[0] === '"' || rest[0] === "'") {
+        const q = rest[0];
+        let j = 1;
+        while (j < rest.length && rest[j] !== q) j++;
+        const text = rest.slice(0, Math.min(j + 1, rest.length));
+        out += span('string', text);
+        i += text.length;
+        continue;
+      }
+
+      // a declaration: `name: value;`
+      let m = /^([-a-zA-Z]+)(\s*:\s*)([^;}\n]*)/.exec(rest);
+      if (m && /[{:]/.test(rest.slice(0, m[0].length)) && out.lastIndexOf('{') > out.lastIndexOf('}')) {
+        out += span('prop', m[1]) + span('punct', m[2]) + span('value', m[3]);
+        i += m[0].length;
+        continue;
+      }
+
+      // a selector runs to the opening brace
+      m = /^([^{}\n;]*[^{}\n;\s])(\s*)\{/.exec(rest);
+      if (m) {
+        out += span('selector', m[1]) + m[2] + span('punct', '{');
+        i += m[0].length;
+        continue;
+      }
+
+      out += escapeHtml(rest[0]);
+      i += 1;
+    }
+    return out;
+  }
+
+  // ---- star-burxt's `.sbmx` --------------------------------------------------------------------
+  //
+  // **A composition rather than a third language, because that is what the file is.** A `.sbmx` is
+  // Burxt in `===bx`, CSS in `===style.local` and `===style.global`, and BMX everywhere else — so
+  // the painter finds the sections and hands each one to the painter that already knows it. Adding
+  // a language here means adding a section name, not a grammar.
+
+  function sbmx(src) {
+    const lines = src.split('\n');
+    const out = [];
+    let i = 0;
+    while (i < lines.length) {
+      const open = /^===([A-Za-z][A-Za-z0-9_.-]*)[ \t]*$/.exec(lines[i]);
+      if (open) {
+        const kind = open[1];
+        const body = [];
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim() !== '===') { body.push(lines[j]); j++; }
+        const paint = kind === 'bx' ? burxt : (kind.indexOf('style') === 0 ? css : escapeHtml);
+        out.push(span('section', '===' + kind));
+        if (body.length) out.push(paint(body.join('\n')));
+        if (j < lines.length) out.push(span('section', '==='));
+        i = j + 1;
+        continue;
+      }
+      const from = i;
+      while (i < lines.length && !/^===[A-Za-z]/.test(lines[i])) i += 1;
+      out.push(bmx(lines.slice(from, i).join('\n')));
+    }
+    return out.join('\n');
+  }
+
 
   // ---- CSS, for a `===style` section -----------------------------------------------------------
   //
