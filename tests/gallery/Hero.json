@@ -1,0 +1,23 @@
+{
+  "shows": "Give it a style section",
+  "state": {
+    "tasks": [
+      {
+        "id": 1,
+        "label": "Read the tour",
+        "done": true
+      },
+      {
+        "id": 2,
+        "label": "Write a component",
+        "done": true
+      },
+      {
+        "id": 3,
+        "label": "Give it a style section",
+        "done": false
+      }
+    ],
+    "left": 1
+  }
+}

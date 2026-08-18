@@ -96,7 +96,8 @@
  * inline box lands once, at the box's start, so a long `on:click=` head wrapped back to column zero
  * and the structure the indent was drawing came apart at exactly the lines that need it most.
  * `clone` applies the padding to every fragment. */
-pre code [class^="d"] {
+pre code .d1, pre code .d2, pre code .d3, pre code .d4, pre code .d5, pre code .d6,
+pre code .w1, pre code .w2, pre code .w3, pre code .w4, pre code .w5, pre code .w6 {
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
@@ -115,7 +116,8 @@ pre code .d6 { padding-left: 6.90em; }
  *
  * `inline-block` is what makes `text-indent` apply; the negative indent cancels the padding for the
  * FIRST visual line, where the author's literal spaces already do the work. The text is untouched. */
-pre code [class^="w"] { display: inline-block; }
+pre code .w1, pre code .w2, pre code .w3,
+pre code .w4, pre code .w5, pre code .w6 { display: inline-block; }
 pre code .w1 { padding-left: 4ch;  text-indent: -4ch; }
 pre code .w2 { padding-left: 8ch;  text-indent: -8ch; }
 pre code .w3 { padding-left: 12ch; text-indent: -12ch; }
@@ -143,6 +145,9 @@ pre code .cl {
   /* The box has to reach the gutter's right edge even when the line is empty, or a blank line loses its
    * number and the column stops reading as a column. */
   min-width: 100%;
+  /* The box may carry a `w` class of its own — see `lineBoxes` — and its padding has to come out of the
+   * 100%, or the panel gains a horizontal scrollbar it does not need. */
+  box-sizing: border-box;
   /* **A blank line's box is zero-high, and its number lands on the next line's.** Measured: the box for
    * an empty line reported `height: 0`, so `3` and `4` were drawn a pixel apart. A minimum matching the
    * line height puts the number where the line is; a non-empty line is already taller than this, so it
@@ -189,7 +194,13 @@ pre { position: relative; }
 /* **The guides, one per level, drawn only across the indent.** A repeating gradient supplies the
  * period and `background-size` clips it to this line's own depth, so the lines stop where the code
  * starts instead of striping the whole row. `--step` matches the padding each depth class adds. */
-pre code [class^="d"], pre code [class^="w"] {
+/* **Class selectors, not `[class^="w"]`.** An attribute-prefix match needs the whole attribute to start
+ * with the letter, and a line box carries `class="cl w1"` — so the guides silently did not paint on any
+ * language whose depth lives on the box rather than on an inner span. The size rules below matched all
+ * along, because a class selector matches any class in the list; only the gradient was missing, which
+ * looked exactly like a colour that was too faint. */
+pre code .d1, pre code .d2, pre code .d3, pre code .d4, pre code .d5, pre code .d6,
+pre code .w1, pre code .w2, pre code .w3, pre code .w4, pre code .w5, pre code .w6 {
   --step: 1.15em;
   background-image: repeating-linear-gradient(
     to right, var(--guide, #d6dbe3) 0 1px, transparent 1px var(--step)
@@ -206,7 +217,8 @@ pre code .d5 { background-size: 5.75em 100%; }
 pre code .d6 { background-size: 6.90em 100%; }
 
 /* A document with its own leading spaces indents in `ch`, so its guides do too. */
-pre code [class^="w"] { --step: 4ch; }
+pre code .w1, pre code .w2, pre code .w3,
+pre code .w4, pre code .w5, pre code .w6 { --step: 4ch; }
 pre code .w1 { background-size: 4ch  100%; }
 pre code .w2 { background-size: 8ch  100%; }
 pre code .w3 { background-size: 12ch 100%; }
@@ -216,6 +228,7 @@ pre code .w6 { background-size: 24ch 100%; }
 
 @media (prefers-color-scheme: dark) {
   pre code .cl::before { color: #6b7280; }
-  pre code [class^="d"], pre code [class^="w"] { --guide: #2b3038; }
+  pre code .d1, pre code .d2, pre code .d3, pre code .d4, pre code .d5, pre code .d6,
+pre code .w1, pre code .w2, pre code .w3, pre code .w4, pre code .w5, pre code .w6 { --guide: #2b3038; }
   pre:has(code .cl)::before { background: #2b3038; }
 }

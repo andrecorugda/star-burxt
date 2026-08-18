@@ -1,0 +1,23 @@
+{
+  "shows": "task 2",
+  "state": {
+    "todos": [
+      {
+        "id": 1,
+        "label": "task 1",
+        "done": false
+      },
+      {
+        "id": 2,
+        "label": "task 2",
+        "done": true
+      },
+      {
+        "id": 3,
+        "label": "task 3",
+        "done": false
+      }
+    ],
+    "next_id": 4
+  }
+}

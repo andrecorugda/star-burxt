@@ -1,0 +1,9 @@
+{
+  "shows": "large, cool",
+  "state": {
+    "size": "large",
+    "tone": "cool",
+    "agree": true,
+    "note": "Ship it on Friday."
+  }
+}

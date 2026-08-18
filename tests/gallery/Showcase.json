@@ -1,0 +1,25 @@
+{
+  "shows": "Restyle the examples",
+  "state": {
+    "tasks": [
+      {
+        "id": 1,
+        "label": "Write the guide",
+        "done": true
+      },
+      {
+        "id": 2,
+        "label": "Ship the playground",
+        "done": false
+      },
+      {
+        "id": 3,
+        "label": "Restyle the examples",
+        "done": false
+      }
+    ],
+    "draft": "",
+    "view": "all",
+    "next_id": 4
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "shows": "\u00a310.97",
+  "state": {
+    "ways": 3,
+    "lines": [
+      {
+        "id": 1,
+        "name": "flat white",
+        "cents": 340,
+        "count": 2
+      },
+      {
+        "id": 2,
+        "name": "cinnamon bun",
+        "cents": 295,
+        "count": 1
+      },
+      {
+        "id": 3,
+        "name": "orange juice",
+        "cents": 220,
+        "count": 0
+      }
+    ]
+  }
+}

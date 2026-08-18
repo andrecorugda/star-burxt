@@ -167,7 +167,7 @@ check('a section name mid-sentence is not a section', !prose.includes('t-section
   const doc = [':section: class=card', '    # Today', '', '    :p: child=x :!p:',
                '```', 'fenced', '```', ':!section:'].join('\n');
   const out = paint('sbmx', doc);
-  const boxes = (out.match(/class="cl"/g) || []).length;
+  const boxes = (out.match(/class="cl[ "]/g) || []).length;
   check(`every one of the ${doc.split('\n').length} lines is a numbered box`,
         boxes === doc.split('\n').length, `${boxes} boxes`);
 
@@ -178,6 +178,38 @@ check('a section name mid-sentence is not a section', !prose.includes('t-section
   check('no line number reached the text a reader copies', text === doc, JSON.stringify(text.slice(0, 90)));
   check('and the depth spans are still inside the boxes, so the guides have a width',
         /class="cl"><span class="d1"/.test(out), out.slice(0, 200));
+}
+
+// **EVERY language, not just the markup.** The boxing lived in the depth pass first, which only `bmx` and
+// the markup half of `sbmx` go through — `burxt` and `css` build one string and never see a line, so their
+// panels had no numbers while the markup's did. Andre spotted it on the site before this test existed.
+for (const [language, src] of [
+  ['burxt', 'function f(n: Int) -> Int {\n    return n + 1;\n}'],
+  ['bmx', ':p:\nhi\n:!p:'],
+  ['sbmx', ':props: n: Int\n:!props:\n\n:p: child=x :!p:'],
+  ['css', '.card { padding: 1rem; }\n.card h1 { margin: 0; }'],
+]) {
+  const out = paint(language, src);
+  const boxes = (out.match(/class="cl[ "]/g) || []).length;
+  check(`\`${language}\` gets a box on every one of its ${src.split('\n').length} lines`,
+        boxes === src.split('\n').length, `${boxes} boxes in ${out.slice(0, 120)}`);
+}
+
+// **A painted token can SPAN a newline**, so the split has to close and reopen what is open. CSS is where
+// that happens: a `/* … */` comment across three lines is ONE span, and split naively it loses its colour
+// after the first line and leaves a stray `</span>` behind for the browser to close wherever it likes.
+//
+// Burxt is not the case, and finding that out was worth the detour: it has **line comments only**, and the
+// compiler says so — *"there is no `/* ... */`, so there is no nesting rule to get wrong"*. So the first
+// version of this test was invalid Burxt, and the painter was right not to colour it.
+{
+  const out = paint('css', '/* one\n   two\n   three */\n.card { padding: 0; }');
+  const commentOpens = (out.match(/t-comment/g) || []).length;
+  check('a multi-line comment is coloured on every one of its lines', commentOpens >= 3,
+        `${commentOpens} openings: ${out.slice(0, 200)}`);
+  check('and the tags balance, so nothing is left open at the end of a line',
+        (out.match(/<span/g) || []).length === (out.match(/<\/span>/g) || []).length,
+        out.slice(0, 200));
 }
 
 console.log(failures ? `\n${failures} failure(s)` : '\nthe highlighter paints all three languages');

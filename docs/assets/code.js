@@ -254,11 +254,58 @@
   // block-level line would have swallowed the newline and left the clipboard depending on how a browser
   // rejoins block boundaries.
   //
-  // Every exit from the mapper below goes through it. Three did not on the first attempt — the fence
-  // line, the tab-indented line and the depth line — and a numbered gutter with three unnumbered lines
-  // in it is worse than none, because the numbers stop meaning anything.
-  function boxed(html) {
-    return `<span class="cl">${html}</span>`;
+  // **Done here, once, rather than inside each painter — because it has to reach every language.** It was
+  // in the depth pass first, which only `bmx` and the markup half of `sbmx` go through: `burxt` and `css`
+  // build one string and never see a line, so their panels had no numbers at all while the markup's did.
+  // A gutter on some blocks and not others is worse than none.
+  //
+  // **A painted token can SPAN a newline** — a `/* … */` comment is one span across three lines — so the
+  // split cannot be `html.split('\n')`. Open tags are tracked and reopened on the next line, which is
+  // what keeps a multi-line comment coloured all the way down instead of losing its colour after the
+  // first line and leaving stray `</span>` behind.
+  // The guides need a depth per line, and `burxt` and `css` never go through the depth pass — they build
+  // one string and never see a line. Their indentation is REAL SPACES though, so the depth is readable
+  // straight off the source: the same `w` classes the markup uses for an author-indented document, which
+  // also give the line a hanging indent so a wrapped `return Model { … }` stays inside its own column.
+  //
+  // Skipped when the line already carries a depth span, or a markup line would get two sets of guides at
+  // slightly different offsets — one from the padding star added and one from here.
+  function lineBoxes(html, source) {
+    const lines = [];
+    let open = [];
+    let current = '';
+    let i = 0;
+    while (i < html.length) {
+      const ch = html[i];
+      if (ch === '\n') {
+        lines.push(current + '</span>'.repeat(open.length));
+        current = open.map((t) => t.tag).join('');
+        i += 1;
+        continue;
+      }
+      if (ch === '<') {
+        const end = html.indexOf('>', i);
+        if (end === -1) { current += html.slice(i); break; }
+        const tag = html.slice(i, end + 1);
+        if (tag.startsWith('</')) open.pop();
+        else if (!tag.endsWith('/>')) open.push({ tag });
+        current += tag;
+        i = end + 1;
+        continue;
+      }
+      current += ch;
+      i += 1;
+    }
+    lines.push(current);
+    return lines
+      .map((line, i) => {
+        const already = /^<span class="[dw]\d/.test(line);
+        const own = /^( +)/.exec(source[i] || '');
+        const level = already || !own ? 0
+          : Math.min(6, Math.max(1, Math.round(own[1].length / 4)));
+        return `<span class="cl${level ? ` w${level}` : ''}">${line}</span>`;
+      })
+      .join('\n');
   }
 
   // Wrap each painted line in a depth span, in a SECOND PASS over the finished lines.
@@ -274,10 +321,10 @@
       const line = lines[i];
       if (fence !== null) {
         if (line.trim() === fence) fence = null;
-        return boxed(html);
+        return html;
       }
       const opens = /^(\s*)(`{3,}|~{3,})/.exec(line);
-      if (opens) { fence = opens[2]; return boxed(html); }
+      if (opens) { fence = opens[2]; return html; }
 
       // **A document that indents ITSELF keeps its own columns and gets a HANGING indent.** Real
       // spaces plus this padding would indent every line twice, so the author's columns win — but a
@@ -287,9 +334,9 @@
       const own = /^( +)/.exec(line);
       if (own) {
         const level = Math.min(6, Math.max(1, Math.round(own[1].length / 4)));
-        return boxed(`<span class="w${level}">${html}</span>`);
+        return `<span class="w${level}">${html}</span>`;
       }
-      if (/^\s/.test(line)) return boxed(html);
+      if (/^\s/.test(line)) return html;
 
       // 0.7 fences: `:name:` opens, `:!name:` closes. The closer NAMES its block, so the depth is
       // recoverable from either — but it is still drawn at its opener's column, because that is the
@@ -300,7 +347,7 @@
         if (block[1] === '!') { depth = Math.max(0, depth - 1); at = depth; }
         else { depth += 1; }
       }
-      return boxed(at > 0 ? `<span class="d${Math.min(at, 6)}">${html}</span>` : html);
+      return at > 0 ? `<span class="d${Math.min(at, 6)}">${html}</span>` : html;
     });
   }
 
@@ -489,10 +536,10 @@
       const line = lines[i];
       if (fence !== null) {
         if (line.trim() === fence) fence = null;
-        return boxed(html);
+        return html;
       }
       const opens = /^(\s*)(`{3,}|~{3,})/.exec(line);
-      if (opens) { fence = opens[2]; return boxed(html); }
+      if (opens) { fence = opens[2]; return html; }
 
       // **A document that indents ITSELF keeps its own columns and gets a HANGING indent.** Real
       // spaces plus this padding would indent every line twice, so the author's columns win — but a
@@ -502,9 +549,9 @@
       const own = /^( +)/.exec(line);
       if (own) {
         const level = Math.min(6, Math.max(1, Math.round(own[1].length / 4)));
-        return boxed(`<span class="w${level}">${html}</span>`);
+        return `<span class="w${level}">${html}</span>`;
       }
-      if (/^\s/.test(line)) return boxed(html);
+      if (/^\s/.test(line)) return html;
 
       // 0.7 fences: `:name:` opens, `:!name:` closes. The closer NAMES its block, so the depth is
       // recoverable from either — but it is still drawn at its opener's column, because that is the
@@ -515,7 +562,7 @@
         if (block[1] === '!') { depth = Math.max(0, depth - 1); at = depth; }
         else { depth += 1; }
       }
-      return boxed(at > 0 ? `<span class="d${Math.min(at, 6)}">${html}</span>` : html);
+      return at > 0 ? `<span class="d${Math.min(at, 6)}">${html}</span>` : html;
     });
   }
 
@@ -617,7 +664,7 @@
         if (block.dataset.painted) return;
         // textContent, never innerHTML: the text arrives already escaped by Jekyll, and reading
         // the markup back would double-escape every `<` in a Decimal<2>.
-        block.innerHTML = fn(block.textContent);
+        block.innerHTML = lineBoxes(fn(block.textContent), block.textContent.split('\n'));
         block.dataset.painted = '1';
       });
     }

@@ -1,0 +1,8 @@
+{
+  "shows": "42 items",
+  "state": {
+    "items": 42,
+    "status": "ready",
+    "polling": true
+  }
+}
