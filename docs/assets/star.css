@@ -7,6 +7,13 @@
 /* The lockup. Taller than a wordmark would be because it IS a lockup: a comet, "star-", and the
  * burxt mark. At the default rule inherited from site.css it rendered small enough to read as a
  * favicon that had wandered into the topbar. */
+/* **The landing mark, with room above it.** Andre: *"the starb wordmark on landing the size is ok but there
+ * is space on the top it goes to the edge."* The size stays; what was missing is the space, because this sits
+ * first in the page body and had nothing between it and the bar. */
+.lockup { margin: .6rem 0 1.5rem; }
+.lockup img { height: 40px; width: auto; display: block; }
+@media (max-width: 640px) { .lockup img { height: 32px; } }
+
 /* **22px, because that is what the shared glyph measures.** `star-[b]`, `[b]mx` and the Burxt lockup all
  * carry Burxt's `b` as the full ink height of their cropped box, so one height renders the same `b` in all
  * three and the family lines up on the letter it has in common. Full strength — no `opacity`, because grey
@@ -14,12 +21,17 @@
 .bar .mark { display: inline-flex; align-items: center; }
 
 .bar .mark img {
-  height: 22px;
+  /* **15px, and it is burxt.org's own mark measured rather than a number that sounded right.** I
+   * screenshotted both navbars and read the ink: burxt's mark spans 15px, mine spanned 22 — 47% larger,
+   * which is Andre's "too large" exactly. My wordmark is cropped to its ink so its height IS its ink;
+   * burxt's lockup carries about a third empty, so the same CSS height renders a smaller mark. Matching the
+   * NUMBER would have kept them unequal; matching the ink is what makes them the same size. */
+  height: 15px;
   width: auto;
   display: block;
 }
 @media (max-width: 640px) {
-  .bar .mark img { height: 20px; }
+  .bar .mark img { height: 14px; }
 }
 
 .bar .mark .wordmark {
@@ -122,7 +134,8 @@
   margin: 0 0 2.2rem; font-size: .9rem; line-height: 1.55; color: var(--ink-2);
 }
 
-/* The Burxt lockup on the right of the bar, at the same 22px, so its `b` matches the mark on the left. */
+/* The Burxt lockup on the right, left at 22px: measured, its ink spans 15px at that height — the same as
+ * burxt.org's own navbar mark and now the same as the star mark opposite it. Equal ink, unequal numbers. */
 .bar .burxt img { height: 22px; width: auto; display: block; }
 @media (max-width: 640px) { .bar .burxt img { height: 20px; } }
 

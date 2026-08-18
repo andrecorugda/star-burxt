@@ -187,22 +187,24 @@ pre code .cl::before {
   pointer-events: none;
 }
 
-/* Room for the gutter, and a rule marking where it ends — the same two pieces an editor draws. */
-pre:has(code .cl) {
-  padding-left: 4.2em;
+/* **The gutter room is on the CODE element, not the `pre`, and that is what makes it work everywhere.**
+ * It was `pre:has(code .cl) { padding-left }` and the landing page's showcase panel sets
+ * `.showcase .src pre { padding: .75rem .85rem }` — two classes and an element, which wins. So that panel
+ * had no gutter: the numbers rendered at `-3.4em` outside the frame and were clipped away, while the rule
+ * that marked the gutter's edge landed on top of the code. Andre's report was exactly that — *"there is a
+ * line but no row numbers, that is why the line stays and overlaps the content"* — and both halves came from
+ * the same lost padding.
+ *
+ * Styling the `code` instead cannot collide with anybody's `pre` rule, because it is a different element.
+ * No `:has()`, no specificity to lose.
+ *
+ * **And the rule itself is gone**, because Andre asked for it gone: *"we remove the line for the row numbers,
+ * just add row numbers — look at the burxt showcase, we need the same."* Burxt's showcase is a gutter and
+ * nothing drawn beside it. */
+pre code[data-painted] {
+  display: block;
+  padding-left: 3.4em;
 }
-
-pre:has(code .cl)::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 3.5em;
-  width: 1px;
-  background: var(--line, #e3e6ea);
-}
-
-pre { position: relative; }
 
 @media (prefers-color-scheme: dark) {
   pre code .cl::before { color: #6b7280; }
