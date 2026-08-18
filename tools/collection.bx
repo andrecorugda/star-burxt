@@ -1,0 +1,133 @@
+// The collection and the directory, held to each other.
+//
+//     burxt build tools/collection.bx -o star-collection
+//     ./star-collection
+//
+// **A collection is a claim about coverage, and a claim nobody runs goes stale in the direction nobody
+// checks.** Two ways this rots: a document arrives and nobody adds a row, so the table understates what
+// star can do and the playground never shows it; or a row outlives its document, and a reader is sent to
+// a file that is not there. Both directions, for the same reason `tools/limits.bx` and
+// `tools/surface.bx` ask twice.
+//
+// The third thing it asks is that every row SAYS something. A table of names is an index; the point of
+// this one is what each document is FOR, so an empty middle column is a row that has not earned its
+// place.
+use "std/files.bx";
+use "std/string.bx";
+
+let PAGE: String = "examples/README.md";
+let PLACE: String = "examples";
+
+pure function mentions(haystack: String, needle: String) -> Bool {
+    if len(needle) == 0 { return true; }
+    let mutable i: Int = 0;
+    while i + len(needle) <= len(haystack) {
+        if substring(haystack, i, len(needle)) == needle { return true; }
+        i += 1;
+    }
+    return false;
+}
+
+pure function ends_with(text: String, suffix: String) -> Bool {
+    if len(suffix) > len(text) { return false; }
+    return substring(text, len(text) - len(suffix), len(suffix)) == suffix;
+}
+
+pure function lines_of(text: String) -> [String] allocates {
+    let mutable out: [String] = [];
+    let mutable i: Int = 0;
+    while i <= len(text) {
+        let mutable stop: Int = i;
+        while stop < len(text) && byte_at(text, stop) != 10 { stop += 1; }
+        let a: Int = push(out, substring(text, i, stop - i));
+        i = stop + 1;
+    }
+    return out;
+}
+
+// The `n`th cell of a `| a | b | c |` row, trimmed.
+pure function cell(row: String, wanted: Int) -> String allocates {
+    let mutable at: Int = 0;
+    let mutable from: Int = 0;
+    let mutable seen: Int = 0;
+    while at < len(row) {
+        if byte_at(row, at) == 124 {
+            if seen == wanted + 1 { return string_trim(substring(row, from, at - from)); }
+            seen += 1;
+            from = at + 1;
+        }
+        at += 1;
+    }
+    return "";
+}
+
+// A row's component name: the first cell, ``name.sbmx``.
+pure function named(row: String) -> String allocates {
+    let first: String = cell(row, 0);
+    if !ends_with(first, ".sbmx`") { return ""; }
+    if len(first) < 8 { return ""; }
+    return substring(first, 1, len(first) - 7);
+}
+
+let mutable failures: [String] = [];
+let mutable listed: [String] = [];
+
+let page: String = file_read(PAGE);
+let rows: [String] = lines_of(page);
+let mutable r: Int = 0;
+while r < len(rows) {
+    let name: String = named(rows[r]);
+    if len(name) > 0 {
+        let a: Int = push(listed, name);
+        // Every row must say what the document is FOR.
+        if len(cell(rows[r], 1)) < 12 {
+            let x: Int = push(failures, name + ": its row does not say what it shows. A name on its own"
+                + " is an index — the collection is the reasons");
+        }
+        if !file_exists(PLACE + "/" + name + ".sbmx") {
+            let y: Int = push(failures, PAGE + " lists `" + name + ".sbmx`, which is not in " + PLACE
+                + "/ — a reader is being sent to a file that is not there");
+        }
+    }
+    r += 1;
+}
+
+if len(listed) < 15 {
+    print_error("only " + to_string(len(listed)) + " row(s) found in " + PAGE
+                + " — the table pattern has stopped matching, so this gate is asserting nothing");
+    exit(2);
+}
+
+// The other direction: a document that arrived and was never written down.
+match file_list_directory(PLACE) {
+    None => { print_error("cannot read " + PLACE); exit(2); }
+    Some(names) => {
+        let mutable n: Int = 0;
+        while n < len(names) {
+            if ends_with(names[n], ".sbmx") {
+                let stem: String = substring(names[n], 0, len(names[n]) - 5);
+                let mutable found: Bool = false;
+                let mutable l: Int = 0;
+                while l < len(listed) {
+                    if listed[l] == stem { found = true; }
+                    l += 1;
+                }
+                if !found {
+                    let x: Int = push(failures, stem + ".sbmx is in " + PLACE + "/ and not in " + PAGE
+                        + ". An unlisted example is one the playground will never show and nobody will"
+                        + " remember the point of");
+                }
+            }
+            n += 1;
+        }
+    }
+}
+
+if len(failures) > 0 {
+    print_error(to_string(len(failures)) + " problem(s):");
+    let mutable i: Int = 0;
+    while i < len(failures) { print_error("  " + failures[i]); i += 1; }
+    exit(1);
+}
+
+print(to_string(len(listed)) + " example(s) in the collection, each present and each with a reason");

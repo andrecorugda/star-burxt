@@ -236,6 +236,17 @@ jobs:
           ./star-build examples/Feed.sbmx feed /tmp/build
           node examples/drive-feed.mjs /tmp/build/feed.wasm
 
+      # **A collection is a claim about coverage, and a claim nobody runs goes stale in the direction
+      # nobody checks.** Either a document arrives and no row is added — so the table understates star and
+      # the playground never shows it — or a row outlives its file and sends a reader nowhere. Both
+      # directions, plus the rule that every row must say what its document is FOR: a table of names is an
+      # index, and the point of this one is the reasons.
+      - name: The collection and the directory agree
+        run: |
+          set -eux
+          burxt build tools/collection.bx -o star-collection
+          ./star-collection
+
       # **One set was answering two different questions and was wrong both ways.** What an element may
       # CONTAIN is not what an element IS: `select` is phrasing content and holds `option`s, every
       # heading holds text and is flow. The check for what may sit inside a phrasing element asked

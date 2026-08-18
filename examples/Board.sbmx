@@ -1,0 +1,161 @@
+===bx
+// Noughts and crosses — a game whose rules are a PURE FUNCTION of the board.
+//
+// Where `Snake.sbmx` is about time, this is about a decision: eight lines, three squares each, and a
+// winner the view never computes twice because `update` settles it once and stores it. The squares are a
+// flat list of nine and CSS lays them out, so there is no nested loop here — the other way round from
+// `Grid.sbmx`, on purpose.
+use "std/string.bx";
+use "std/json.bx";
+
+class Square { id: Int, mark: String }
+class Model  { squares: [Square], turn: String, winner: String }
+enum Msg { Play(Int), Again }
+
+pure function mark_at(squares: [Square], id: Int) -> String {
+    let mutable i: Int = 0;
+    while i < len(squares) {
+        if squares[i].id == id { return squares[i].mark; }
+        i += 1;
+    }
+    return "";
+}
+
+// Three in a row, or nothing. `""` is not a winner, so an empty line cannot win by accident — which is
+// the bug every version of this has.
+pure function line_winner(squares: [Square], a: Int, b: Int, c: Int) -> String {
+    let first: String = mark_at(squares, a);
+    if len(first) == 0 { return ""; }
+    if first == mark_at(squares, b) && first == mark_at(squares, c) { return first; }
+    return "";
+}
+
+pure function decided(squares: [Square]) -> String allocates {
+    let lines: [Int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 3, 6, 1, 4, 7, 2, 5, 8, 0, 4, 8, 2, 4, 6];
+    let mutable at: Int = 0;
+    while at + 2 < len(lines) {
+        let won: String = line_winner(squares, lines[at], lines[at + 1], lines[at + 2]);
+        if len(won) > 0 { return won; }
+        at += 3;
+    }
+    let mutable filled: Int = 0;
+    let mutable i: Int = 0;
+    while i < len(squares) {
+        if len(squares[i].mark) > 0 { filled += 1; }
+        i += 1;
+    }
+    if filled == 9 { return "draw"; }
+    return "";
+}
+
+pure function empty_board() -> [Square] allocates {
+    let mutable out: [Square] = [];
+    let mutable i: Int = 0;
+    while i < 9 { let a: Int = push(out, Square { id: i, mark: "" }); i += 1; }
+    return out;
+}
+
+pure function played(m: Model, id: Int) -> Model allocates {
+    // A finished game and an occupied square are both refusals, and neither is an error — the click
+    // simply does not mean anything, so the state does not change.
+    if len(m.winner) > 0 { return m; }
+    if len(mark_at(m.squares, id)) > 0 { return m; }
+
+    let mutable out: [Square] = [];
+    let mutable i: Int = 0;
+    while i < len(m.squares) {
+        if m.squares[i].id == id { let a: Int = push(out, Square { id: id, mark: m.turn }); }
+        else { let b: Int = push(out, m.squares[i]); }
+        i += 1;
+    }
+    let mutable next: String = "O";
+    if m.turn == "O" { next = "X"; }
+    return Model { squares: out, turn: next, winner: decided(out) };
+}
+
+pure function update(msg: Msg, m: Model) -> Model allocates {
+    match msg {
+        Play(id) => { return played(m, id); }
+        Again    => { return Model { squares: empty_board(), turn: "X", winner: "" }; }
+    }
+}
+
+pure function verdict(m: Model) -> String allocates {
+    if m.winner == "draw" { return "a draw"; }
+    if len(m.winner) > 0 { return m.winner + " wins"; }
+    return m.turn + " to play";
+}
+
+pure function face(s: Square) -> String {
+    if len(s.mark) == 0 { return "sq"; }
+    return "sq taken";
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable marks: [Json] = [];
+    let mutable i: Int = 0;
+    while i < len(m.squares) { let a: Int = push(marks, json_text(m.squares[i].mark)); i += 1; }
+    let mutable f: [Field] = [];
+    let b: Int = push(f, json_field("marks", json_list(marks)));
+    let c: Int = push(f, json_field("turn", json_text(m.turn)));
+    let d: Int = push(f, json_field("winner", json_text(m.winner)));
+    return json_render(json_object(f));
+}
+
+function from_text(text: String) -> Model allocates {
+    let mutable squares: [Square] = [];
+    let mutable turn: String = "X";
+    match json_parse(text) {
+        Error(e) => { }
+        Ok(v) => {
+            match json_at(v, "turn") {
+                None => { }
+                Some(x) => { match json_as_text(x) { None => { } Some(t) => { turn = t; } } }
+            }
+            match json_at(v, "marks") {
+                None => { }
+                Some(list) => {
+                    match list {
+                        Null => { } Truth(b) => { } Number(n) => { } Text(t) => { } Object(o) => { }
+                        List(items) => {
+                            let mutable i: Int = 0;
+                            while i < len(items) {
+                                let mutable mark: String = "";
+                                match json_as_text(items[i]) { None => { } Some(t) => { mark = t; } }
+                                let a: Int = push(squares, Square { id: i, mark: mark });
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if len(squares) != 9 { return Model { squares: empty_board(), turn: "X", winner: "" }; }
+    // The winner is DERIVED rather than trusted: a state arriving off the page could claim anything.
+    return Model { squares: squares, turn: turn, winner: decided(squares) };
+}
+===
+
+===style.local
+.board { display: grid; grid-template-columns: repeat(3, 3.4rem); gap: 4px;
+         background: #cbd2dd; padding: 4px; border-radius: 6px; width: max-content; }
+.sq    { height: 3.4rem; font: 600 1.5rem/1 ui-sans-serif, system-ui, sans-serif; color: #1f2430;
+         background: #fff; border: 0; border-radius: 4px; cursor: pointer; }
+.sq.taken { cursor: default; color: #d9531e; }
+.said  { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; margin: .6rem 0; }
+.again { font: inherit; padding: .3rem .9rem; margin-top: .7rem; }
+===
+
+:props: model: Model
+:!props:
+
+:p: class=said child={verdict(model)} :!p:
+
+:div: class=board
+    :for: square in model.squares key to_string(square.id)
+        :button: class={{ face(square) }} child={square.mark} on:click=Msg.Play(string_to_int(key, 0)) :!button:
+    :!for:
+:!div:
+
+:button: class=again child={"new game"} on:click=Msg.Again :!button:

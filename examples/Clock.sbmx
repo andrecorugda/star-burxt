@@ -1,0 +1,95 @@
+===bx
+// A clock, which a star component cannot write on its own — and that is the effect system working.
+//
+// `update` and the view are `pure`, so neither can read a clock. `StarWatch.Every` says WHEN to act and
+// carries no payload, so a tick cannot tell you the time either. So the time comes from where time
+// actually lives: a tick asks the server through `after`, and the answer arrives at `arrived`.
+//
+// **This was not expressible until `after` existed.** `commands` is keyed on a `Msg` and a reply is not
+// one, so nothing arriving through a subscription could ask for anything — a timer could not fetch, and
+// the canonical example of a reactive framework could not be written.
+use "std/string.bx";
+use "std/json.bx";
+
+class Model { at: String, ticks: Int, running: Bool }
+enum Msg { Toggle }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg { Toggle => { return Model { at: m.at, ticks: m.ticks, running: !m.running }; } }
+}
+
+pure function watch(m: Model) -> [StarWatch] allocates {
+    let mutable out: [StarWatch] = [];
+    if m.running { let a: Int = push(out, StarWatch.Every(1, 1000)); }
+    return out;
+}
+
+// Tag 1 is the tick, tag 2 is the server's answer. A tick asks; it does not know.
+pure function after(tag: Int, m: Model) -> [StarCmd] allocates {
+    let mutable out: [StarCmd] = [];
+    if tag == 1 { let a: Int = push(out, StarCmd.Fetch(2, "/api/time")); }
+    return out;
+}
+
+pure function arrived(tag: Int, value: String, m: Model) -> Model {
+    if tag == 1 { return Model { at: m.at, ticks: m.ticks + 1, running: m.running }; }
+    if tag == 2 { return Model { at: value, ticks: m.ticks, running: m.running }; }
+    return m;
+}
+
+pure function label(m: Model) -> String allocates {
+    if len(m.at) == 0 { return "—"; }
+    return m.at;
+}
+
+pure function button_text(m: Model) -> String {
+    if m.running { return "stop"; }
+    return "start";
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable f: [Field] = [];
+    let a: Int = push(f, json_field("at", json_text(m.at)));
+    let b: Int = push(f, json_field("ticks", json_int(m.ticks)));
+    let c: Int = push(f, json_field("running", json_truth(m.running)));
+    return json_render(json_object(f));
+}
+
+function from_text(text: String) -> Model {
+    let mutable at: String = "";
+    let mutable ticks: Int = 0;
+    let mutable running: Bool = false;
+    match json_parse(text) {
+        Error(e) => { }
+        Ok(v) => {
+            match json_at(v, "at") {
+                None => { }
+                Some(x) => { match json_as_text(x) { None => { } Some(t) => { at = t; } } }
+            }
+            match json_at(v, "ticks") {
+                None => { }
+                Some(x) => { match json_as_int(x) { None => { } Some(n) => { ticks = n; } } }
+            }
+            match json_at(v, "running") {
+                None => { }
+                Some(x) => { match json_as_truth(x) { None => { } Some(b) => { running = b; } } }
+            }
+        }
+    }
+    return Model { at: at, ticks: ticks, running: running };
+}
+===
+
+===style.local
+.face  { font: 600 2.4rem/1 ui-monospace, monospace; color: #1f2430; letter-spacing: .04em; }
+.count { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; color: #6b7280; margin: .3rem 0 .9rem; }
+.go    { font: inherit; padding: .35rem .9rem; }
+===
+
+:props: model: Model
+:!props:
+
+:p: class=face child={label(model)} :!p:
+:p: class=count child={to_string(model.ticks) + " ticks, asked of the server"} :!p:
+
+:button: class=go child={button_text(model)} on:click=Msg.Toggle :!button:
