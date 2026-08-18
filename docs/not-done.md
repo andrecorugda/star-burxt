@@ -21,6 +21,13 @@ decision, and it is being worked on.
 the head reads one `on:` binding and the rest of the line is the expression. Put the second event on
 a wrapper, or handle it in the one you have.
 
+**`template` and `svg` are not elements star knows**, and both are decisions rather than omissions.
+A `template`'s children are inert and star renders children as live content, so admitting it would
+render exactly what the element exists not to render. `svg` is foreign content — its children are not
+HTML, so `:path:` and `:circle:` need a second vocabulary with its own content model. Everything else
+in HTML that holds phrasing or flow content is there, including `time`, `abbr`, `kbd`, `iframe` and
+`audio`, which were missing until they were looked for.
+
 **A block that only wraps something is still worth avoiding.** A `span` holding nothing but a square
 is three tokens of markup for a shape CSS can draw — `===style.local` with a `::before` is usually the
 better answer, and it keeps the document about content.

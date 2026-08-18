@@ -680,6 +680,36 @@ def main():
         got = sheet_for(css)
         check(label, want in got, got[:160])
 
+    # ---- the claim the documentation SELLS, which nothing tested -------------------------------
+    #
+    # `how-do-i.md` and chapter 7 both say **"a view cannot fetch, and that is checked rather than
+    # promised."** It is true — the generator emits `pure function <name>`, so the compiler refuses a
+    # view that calls anything impure. **Nothing asserted it.** If the generator ever stopped emitting
+    # that marker the claim would become false silently, and the page would go on making it.
+    #
+    # BMX found the identical shape today: `ESCAPING.md` said *"the conformance suite tests this"* of
+    # their scheme refusal and pointed at a file that no longer existed. The security-critical half of
+    # a contract held by a sentence. This is star's version of that sentence.
+    impure = (
+        '===bx\nuse "std/files.bx";\n\nclass Model { n: Int }\nenum Msg { Nothing }\n'
+        "pure function update(msg: Msg, m: Model) -> Model { return m; }\n\n"
+        "function peek() -> String touches files {\n"
+        '    match file_read_maybe("/etc/hostname") { None => { return ""; } Some(t) => { return t; } }\n'
+        "}\n===\n\n:props: model: Model\n:!props:\n\n:p: child={peek()}\n:!p:\n")
+    said = compile_component(impure)
+    check("A VIEW THAT REACHES OUTSIDE IS REFUSED BY THE COMPILER, not by a promise",
+          "may not call" in said and "peek" in said, said[:220])
+
+    # **The control**: the same shape with a `pure` helper must COMPILE, or this passes because
+    # everything fails and asserts nothing about `pure` at all.
+    pure_ok = impure.replace("function peek() -> String touches files {",
+                             "pure function peek() -> String {").replace(
+        '    match file_read_maybe("/etc/hostname") { None => { return ""; } Some(t) => { return t; } }\n',
+        '    return "ok";\n').replace('use "std/files.bx";\n\n', "")
+    fine = compile_component(pure_ok)
+    check("and the control: the same view with a `pure` helper compiles",
+          "no errors" in fine, fine[:220])
+
     shutil.rmtree(work, ignore_errors=True)
 
     if failures:

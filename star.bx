@@ -370,8 +370,9 @@ pure function star_event_is_wired(name: String) -> Bool {
 // Text-level. Paragraphs inside these UNWRAP, and a heading, list, quote or code block is refused.
 pure function star_takes_phrasing(name: String) -> Bool {
     return star_in_set(name,
-        " a b button caption code dt em h1 h2 h3 h4 h5 h6 i label legend mark option p q s small"
-        + " span strong sub summary sup textarea title u ");
+        " a abbr b bdi bdo button caption cite code data data dfn del dt em h1 h2 h3 h4 h5 h6 i ins"
+        + " kbd label legend mark meter option p q rp rt ruby s samp small span strong sub summary"
+        + " sup textarea time title u var ");
 }
 
 // Takes no children at all. `html_element` carries `requires !html_is_void(tag) ||
@@ -382,11 +383,27 @@ pure function star_is_void(name: String) -> Bool {
 }
 
 // Everything else a document may wrap things in.
+//
+// **`template` and `svg` are left out ON PURPOSE, and saying so is the point.** A convention that
+// exists only as an absence is indistinguishable from a name somebody forgot — which is how `time`,
+// `abbr`, `kbd`, `iframe` and a dozen others sat refused as *undeclared block names* while being
+// perfectly good HTML. Those were false refusals of correct markup, found by turning the
+// still-parses search key around: a scanner with a wrong model fails in BOTH directions, and a suite
+// cannot hold the accepting one because nobody writes a case asserting that something they believe
+// illegal actually works.
+//
+//   `template` — its children are INERT. star renders children as live content, so admitting it
+//                would render exactly what the element exists not to render.
+//   `svg`      — foreign content. Its children are not HTML elements, so `:path:` and `:circle:`
+//                would have to be a second vocabulary with a different content model.
+//
+// Both are answerable, neither is answered, and `not-done.md` says so.
 pure function star_takes_flow(name: String) -> Bool {
     return star_in_set(name,
-        " address article aside blockquote canvas colgroup dd details dialog div dl fieldset"
-        + " figcaption figure footer form header hgroup li main nav ol optgroup output picture"
-        + " pre progress section select table tbody td tfoot th thead tr ul video ");
+        " address article aside audio blockquote canvas colgroup dd details dialog div dl fieldset"
+        + " figcaption figure footer form header hgroup iframe li main menu nav noscript object ol"
+        + " optgroup output picture pre progress search section select table tbody td tfoot th thead"
+        + " tr ul video ");
 }
 
 // **What separates one head token from the next: a space OR a comma.**
@@ -2037,6 +2054,15 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
             // attributes, and the third is `doing?`. So the refusal says that, because the fix is
             // quotes rather than a different name.
             if !html_is_name(name) {
+                // **Two different causes, and one message for both sent readers to the wrong one.**
+                // A name with a space before it is a quoting mistake; `xml:lang` is a name the host
+                // cannot emit. Telling someone to add quotes to `xml:lang` is advice that cannot
+                // work, which is the failure this project keeps finding in other people's messages.
+                if star_mentions(name, ":") {
+                    return Result.Error("STAR-E020: `" + name + "` is not an attribute name here —"
+                        + " a colon in one is valid HTML but `html_attr` cannot carry it. Use a"
+                        + " `data-` attribute, or the namespace-free spelling if the element has one");
+                }
                 return Result.Error("STAR-E020: `" + name + "` is not an attribute name."
                     + " An unquoted value ends at the first space, so"
                     + " `placeholder=What needs doing?` is three attributes — put the value in"

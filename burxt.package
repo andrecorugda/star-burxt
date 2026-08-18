@@ -29,4 +29,4 @@ version     0.1.0
 # the Burxt file at that repo's root would shorten this by seven characters and make a specification
 # repository look like a Burxt package, which is the one thing it must not look like. It needs no
 # manifest of its own — nothing reads a dependency's — so it stays exactly what it is.
-dependency  bmx  https://github.com/andrecorugda/bmx  burxt-0.10.0
+dependency  bmx  https://github.com/andrecorugda/bmx  burxt-0.11.0

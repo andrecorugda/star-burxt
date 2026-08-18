@@ -1,4 +1,4 @@
 # Written by `burxt fetch`. Every dependency, pinned to the exact commit that was
 # resolved — so the next person to fetch gets these bytes even if the tag has moved.
 # Commit this file. Do not edit it by hand.
-package  bmx  https://github.com/andrecorugda/bmx  burxt-0.10.0  9446158195695d4423f5d003174e3c14215a5653
+package  bmx  https://github.com/andrecorugda/bmx  burxt-0.11.0  d40f9a380af68fbe1be10f521e3fae5d0a148845
