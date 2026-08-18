@@ -13,8 +13,13 @@
 /* **The gap Andre circled was two margins, not one.** This sits directly above the page's `h1`, which
  * brings its own top margin, so the space between mark and headline was the sum of both. The mark keeps a
  * little air above it and gives up all of it below; the heading's own margin is the only gap left. */
-.lockup { margin: .4rem 0 0; }
-.lockup + h1, .lockup + p + h1 { margin-top: .5rem; }
+/* **29px below the bar, which is bmx.burxt-lang.org measured rather than a value that felt right.** Andre
+ * sent that page as the reference — *"this kind of spacing is correct"* — so I screenshotted both tops and
+ * read the rows: BMX has 29px between the bar's border and its first content ink, and I had swung from far
+ * too much to 6px. The mark then gives the headline a modest gap of its own, which is the part he circled
+ * when it was the sum of two margins. */
+.lockup { margin: 1.75rem 0 0; }
+.lockup + h1, .lockup + p + h1 { margin-top: .85rem; }
 .lockup img { height: 40px; width: auto; display: block; }
 @media (max-width: 640px) { .lockup img { height: 32px; } }
 
