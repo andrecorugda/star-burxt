@@ -81,15 +81,26 @@ function from_text(text: String) -> Model {
 ===
 
 ===style.local
-.face  { font: 600 2.4rem/1 ui-monospace, monospace; color: #1f2430; letter-spacing: .04em; }
-.count { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; color: #6b7280; margin: .3rem 0 .9rem; }
-.go    { font: inherit; padding: .35rem .9rem; }
+.face { font: 650 3rem/1 var(--bx-mono); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 ===
 
 :props: model: Model
 :!props:
 
-:p: class=face child={label(model)} :!p:
-:p: class=count child={to_string(model.ticks) + " ticks, asked of the server"} :!p:
+:div: class=bx-card
+    :div: class=bx-spread
+        :div:
+            :h2: class=bx-title child={"Server time"} :!h2:
+            :p: class=bx-muted child={to_string(model.ticks) + " ticks, each one asked of the server"} :!p:
+        :!div:
+        :button: class="bx-btn bx-btn-primary" child={button_text(model)} on:click=Msg.Toggle :!button:
+    :!div:
 
-:button: class=go child={button_text(model)} on:click=Msg.Toggle :!button:
+    :hr: class=bx-divider :!hr:
+
+    :p: class=face child={label(model)} :!p:
+    :p: class=bx-muted
+    A `pure` view cannot read a clock, and a tick carries no payload — so the time comes from where time
+    lives.
+    :!p:
+:!div:

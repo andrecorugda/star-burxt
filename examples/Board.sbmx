@@ -138,24 +138,32 @@ function from_text(text: String) -> Model allocates {
 ===
 
 ===style.local
-.board { display: grid; grid-template-columns: repeat(3, 3.4rem); gap: 4px;
-         background: #cbd2dd; padding: 4px; border-radius: 6px; width: max-content; }
-.sq    { height: 3.4rem; font: 600 1.5rem/1 ui-sans-serif, system-ui, sans-serif; color: #1f2430;
-         background: #fff; border: 0; border-radius: 4px; cursor: pointer; }
-.sq.taken { cursor: default; color: #d9531e; }
-.said  { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; margin: .6rem 0; }
-.again { font: inherit; padding: .3rem .9rem; margin-top: .7rem; }
+.grid { display: grid; grid-template-columns: repeat(3, 3.6rem); gap: 5px;
+        background: var(--bx-line); padding: 5px; border-radius: var(--bx-r); width: max-content; }
+.sq   { height: 3.6rem; font: 650 1.6rem/1 var(--bx-font); color: var(--bx-ink);
+        background: var(--bx-surface); border: 0; border-radius: var(--bx-r-sm); cursor: pointer; }
+.sq:hover:not(.taken) { background: var(--bx-brand-wash); }
+.sq.taken { cursor: default; color: var(--bx-brand); }
 ===
 
 :props: model: Model
 :!props:
 
-:p: class=said child={verdict(model)} :!p:
+:div: class=bx-card
+    :div: class=bx-spread
+        :h2: class=bx-title child={"Noughts and crosses"} :!h2:
+        :span: class=bx-badge child={verdict(model)} :!span:
+    :!div:
 
-:div: class=board
-    :for: square in model.squares key to_string(square.id)
-        :button: class={{ face(square) }} child={square.mark} on:click=Msg.Play(string_to_int(key, 0)) :!button:
-    :!for:
+    :hr: class=bx-divider :!hr:
+
+    :div: class=grid
+        :for: square in model.squares key to_string(square.id)
+            :button: class={{ face(square) }} child={square.mark} on:click=Msg.Play(string_to_int(key, 0)) :!button:
+        :!for:
+    :!div:
+
+    :div: class=bx-row
+        :button: class=bx-btn child={"new game"} on:click=Msg.Again :!button:
+    :!div:
 :!div:
-
-:button: class=again child={"new game"} on:click=Msg.Again :!button:

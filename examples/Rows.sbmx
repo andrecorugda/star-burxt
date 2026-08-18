@@ -111,22 +111,32 @@ function from_text(text: String) -> Model allocates {
 ===
 
 ===style.local
-.row   { display: flex; gap: .5rem; align-items: center; margin: .35rem 0; }
-.lift  { font: inherit; padding: .25rem .6rem; }
-.field { font: inherit; padding: .3rem .5rem; border: 1px solid #cbd2dd; border-radius: 5px; }
+.row  { display: grid; grid-template-columns: 1fr auto; gap: .5rem; align-items: center;
+        padding: .3rem 0; }
+.lift { white-space: nowrap; }
 ===
 
 :props: model: Model
 :!props:
 
-# Rows — {{ to_string(model.moves) }} moves
-
-:for: row in model.rows key to_string(row.id)
-    :div: class=row
-        :input: class=field value={{ row.text }} on:input=Msg.Typed(string_to_int(key, 0), value)
-        :!input:
-        :button: class=lift on:click=Msg.Lift(string_to_int(key, 0))
-        up
-        :!button:
+:div: class=bx-card
+    :div: class=bx-spread
+        :div:
+            :h2: class=bx-title child={"Reorder while you type"} :!h2:
+            :p: class=bx-muted
+            Type in a row, then move it. The caret follows the ROW, because the key says which row it is.
+            :!p:
+        :!div:
+        :span: class="bx-badge bx-badge-quiet" child={to_string(model.moves) + " moves"} :!span:
     :!div:
-:!for:
+
+    :hr: class=bx-divider :!hr:
+
+    :for: row in model.rows key to_string(row.id)
+        :div: class=row
+            :input: class="bx-input field" value={{ row.text }} on:input=Msg.Typed(string_to_int(key, 0), value)
+            :!input:
+            :button: class="bx-btn lift" child={"move up"} on:click=Msg.Lift(string_to_int(key, 0)) :!button:
+        :!div:
+    :!for:
+:!div:

@@ -111,25 +111,36 @@ function from_text(text: String) -> Model allocates {
 ===
 
 ===style.local
-.board { display: inline-block; border: 1px solid #cbd2dd; border-radius: 6px; overflow: hidden; }
+.board { display: inline-block; border-radius: var(--bx-r); overflow: hidden;
+         box-shadow: var(--bx-shadow-sm); }
 .rank  { display: flex; }
-.sq    { width: 34px; height: 34px; border: 0; padding: 0; background: #f4f6fa; cursor: pointer; }
-.sq.dark { background: #dfe4ec; }
-.sq.lit  { background: #d9531e; }
-.count { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; margin: .6rem 0; }
+.sq    { width: 32px; height: 32px; border: 0; padding: 0; background: var(--bx-surface);
+         cursor: pointer; }
+.sq.dark { background: var(--bx-line-soft); }
+.sq.lit  { background: var(--bx-brand); }
 ===
 
 :props: model: Model
 :!props:
 
-:p: class=count child={to_string(model.lit) + " lit"} :!p:
-
-:div: class=board
-    :for: row in model.rows key to_string(row.y)
-        :div: class=rank
-            :for: cell in row.cells key to_string(cell.id)
-                :button: class={{ shade(cell) }} on:click=Msg.Toggle(string_to_int(key, 0)) :!button:
-            :!for:
+:div: class=bx-card
+    :div: class=bx-spread
+        :div:
+            :h2: class=bx-title child={"A loop inside a loop"} :!h2:
+            :p: class=bx-muted child={"64 squares from two nested :for: blocks"} :!p:
         :!div:
-    :!for:
+        :span: class=bx-badge child={to_string(model.lit) + " lit"} :!span:
+    :!div:
+
+    :hr: class=bx-divider :!hr:
+
+    :div: class=board
+        :for: row in model.rows key to_string(row.y)
+            :div: class=rank
+                :for: cell in row.cells key to_string(cell.id)
+                    :button: class={{ shade(cell) }} on:click=Msg.Toggle(string_to_int(key, 0)) :!button:
+                :!for:
+            :!div:
+        :!for:
+    :!div:
 :!div:

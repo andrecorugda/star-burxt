@@ -79,24 +79,32 @@ function from_text(text: String) -> Model {
 ===
 
 ===style.local
-.draft { display: block; width: 22rem; height: 5rem; font: inherit; padding: .4rem .6rem;
-         border: 1px solid #cbd2dd; border-radius: 6px; }
-.bar   { margin: .6rem 0; display: flex; gap: .4rem; }
-.bar button { font: inherit; padding: .3rem .8rem; }
-.state { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; color: #6b7280; }
+.bar { display: flex; gap: .45rem; margin-top: .8rem; }
 ===
 
 :props: model: Model
 :!props:
 
-:p: class=state child={model.status} :!p:
+:div: class=bx-card
+    :div: class=bx-spread
+        :h2: class=bx-title child={"Draft"} :!h2:
+        :span: class="bx-badge bx-badge-quiet" child={model.status} :!span:
+    :!div:
 
-:textarea: class=draft on:input=Msg.Typed(value)
-{{ model.text }}
-:!textarea:
+    :hr: class=bx-divider :!hr:
 
-:div: class=bar
-    :button: child=save on:click=Msg.Save :!button:
-    :button: child=restore on:click=Msg.Restore :!button:
-    :button: child=clear on:click=Msg.Clear :!button:
+    :textarea: class="bx-area draft" on:input=Msg.Typed(value)
+    {{ model.text }}
+    :!textarea:
+
+    :div: class=bar
+        :button: class="bx-btn bx-btn-primary" child=save on:click=Msg.Save :!button:
+        :button: class=bx-btn child=restore on:click=Msg.Restore :!button:
+        :button: class="bx-btn bx-btn-quiet" child=clear on:click=Msg.Clear :!button:
+    :!div:
+
+    :p: class=bx-muted
+    It survives a reload — `Store` and `Load` are the browser's own storage, and `clear` puts the caret
+    back in the field.
+    :!p:
 :!div:

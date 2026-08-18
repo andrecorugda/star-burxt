@@ -418,6 +418,45 @@ never call `load`, so the linker drops it, its string data and the network impor
 a password inside `load` is present in the wasm object file and absent from the linked module. It is
 checked on every push, with a control that proves the check can find things.
 
+## …use Tailwind, Bootstrap or Ant Design?
+
+You just use them. **star never reads a class name** — `class=` is an attribute, its value is a string,
+and nothing in the framework inspects it. There is no plugin, no config, and nothing to integrate:
+
+```sbmx
+:button: class="px-4 py-2 rounded-lg bg-indigo-600 text-white" child=Save on:click=Msg.Save :!button:
+```
+
+A head is one line, so a long list of utilities is a long line. That is the honest cost of the utility
+style and it is the same in JSX.
+
+**One rule, and it is the one that bites:** more than one class means **quotes**.
+
+Right:
+
+```sbmx
+:div: class="card shadow-sm p-4" child=x :!div:
+```
+
+Refused:
+
+```sbmx
+:div: class=card shadow-sm p-4 child=x :!div:
+```
+
+> STAR-E026 `shadow-sm` has no value, so it stands for a boolean attribute
+
+An unquoted value ends at the first space, so the unquoted form is one class plus two boolean attributes.
+That used to happen silently and the extra classes were simply lost; it is refused by name now, which
+matters most for utility CSS, where four classes on an element is ordinary.
+
+Whether the framework's stylesheet arrives from a CDN, a build step or your own file is your page's
+business — the same as it would be in any other project. `examples/theme.css` is what this repository's
+own examples use, and it is nothing more than a stylesheet: tokens, dark mode, and a few component
+classes. Swap it for Tailwind's output and every component keeps working, because the split between *what
+makes this component itself* (`===style.local`, scoped by star) and *what the page decides* (type, colour,
+spacing) is the same split those frameworks already make.
+
 ## …use star as the front end of Laravel, Rails or Django?
 
 Two things, and neither needs your backend to know what star is.

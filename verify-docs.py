@@ -238,6 +238,10 @@ def main():
         # offending line, because `<!--` alone appears in the CORRECT example three paragraphs above
         # and would demand a refusal from a document that must be accepted.
         "Total: 5 <!-- fix this -->": "BMX-E007",
+        # The unquoted multi-class form, which is the one mistake anybody using utility CSS will make.
+        # The marker is the whole head, because `class=card` on its own is CORRECT and appears three
+        # paragraphs above — a looser marker would demand a refusal from a working example.
+        "class=card shadow-sm p-4": "STAR-E026",
     }
 
     work = tempfile.mkdtemp(prefix="star-docs-")
