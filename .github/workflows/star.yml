@@ -236,6 +236,19 @@ jobs:
           ./star-build examples/Feed.sbmx feed /tmp/build
           node examples/drive-feed.mjs /tmp/build/feed.wasm
 
+      # **`:for: … key …` has emitted `data-star-key` since it existed and the reconciler ignored it.**
+      # The file's own comment called keys "the fix" and said they waited on a format decision that had
+      # already been made. It also claimed positional matching was merely wasteful on a reorder. It was
+      # not: measured in a real browser, typing in the third row and moving THAT row up left the caret
+      # at position two, which by then held a different record — the next keystroke edited the wrong
+      # row, with the state and the DOM both correct.
+      #
+      # There is no DOM here and star takes no dependency it does not own, so this checks the ORDERING
+      # against a small DOM that first proves its own `insertBefore` moves rather than copies. The
+      # focus-and-caret half is browser-measured and the file records the steps.
+      - name: A keyed list ends up in the order the view asked for
+        run: node tools/orders.mjs
+
       # **A game, because a form asks star one question and a game asks the other four:** a tick that
       # runs only while the state says so, four global keys, a list that moves and grows every frame,
       # and a rule that ends it. Two real defects came out of writing it — the first paint never told

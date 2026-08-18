@@ -28,10 +28,39 @@
 export function reconcile(parent, nextHTML) {
   const template = document.createElement('template');
   template.innerHTML = nextHTML;
+
+  // **Moving a node blurs it**, because the DOM defines a move as a remove followed by an insert. So
+  // where the caret was is recorded before the patch and put back after it — by NODE, which is the
+  // whole point of matching by key: the same input element is still there to give it back to.
+  const held = document.activeElement;
+  const caret = held && typeof held.selectionStart === 'number' && parent.contains(held)
+    ? { node: held, start: held.selectionStart, end: held.selectionEnd } : null;
+
   patchChildren(parent, template.content);
+
+  if (caret && caret.node.isConnected && document.activeElement !== caret.node) {
+    caret.node.focus();
+    try { caret.node.setSelectionRange(caret.start, caret.end); } catch {}
+  }
 }
 
 function patchChildren(oldParent, newParent) {
+  // **Keys, and this file used to say they were "the fix" and wait for a format decision.** The
+  // decision had already been made — `:for: … key …` has emitted `data-star-key` since it existed, and
+  // the reconciler ignored it. Positional matching is not merely wasteful when a list REORDERS, which
+  // is what the old comment said. Measured in a real browser: typing in the third row and moving that
+  // row up left the caret at POSITION two, which by then held a different record — so the next
+  // keystroke edited the wrong row, with the state and the DOM both correct. Silent, and exactly the
+  // kind of thing only somebody using it finds.
+  //
+  // **The keyed nodes are aligned first, then patched positionally.** My first attempt matched by key
+  // only when EVERY child carried one, which never fired: a `:for:` emits its rows as siblings of
+  // whatever else the view rendered, so `<h1>` sat in the same parent and disqualified the list. A
+  // loop's rows are a CONTIGUOUS RUN, so moving that run into the new order and then running the
+  // existing positional pass gets both — no special case for headings, and one code path doing the
+  // patching.
+  alignKeys(oldParent, newParent);
+
   const oldKids = oldParent.childNodes;
   const newKids = newParent.childNodes;
   const shared = Math.min(oldKids.length, newKids.length);
@@ -42,6 +71,51 @@ function patchChildren(oldParent, newParent) {
   // the live NodeList indices stable while we walk it.
   while (oldKids.length > newKids.length) oldParent.removeChild(oldKids[oldKids.length - 1]);
   for (let i = shared; i < newKids.length; i++) oldParent.appendChild(newKids[i].cloneNode(true));
+}
+
+// The keys a parent's element children carry, in order.
+//
+// `alignKeys` is exported for `tools/orders.mjs`. **Nothing in CI exercised this file at all** — every
+// test mounts without a reconciler, so the whole module was covered by a landing-page screenshot and
+// two manual browser sessions. There is no DOM in CI and this project does not take dependencies it
+// does not own, so what is checked here is the ORDERING, against a small DOM that proves its own
+// `insertBefore` moves rather than copies. The focus and caret half is browser-measured and says so.
+function keysOf(parent) {
+  const out = [];
+  for (const node of parent.childNodes) {
+    if (node.nodeType === 1 && node.hasAttribute('data-star-key')) {
+      out.push([node.getAttribute('data-star-key'), node]);
+    }
+  }
+  return out;
+}
+
+// Put the existing keyed nodes into the order the new markup names them, before anything is patched.
+// Only nodes that appear on both sides move; arrivals and departures are left to the positional pass,
+// which already handles a longer or shorter list.
+export function alignKeys(oldParent, newParent) {
+  const held = keysOf(oldParent);
+  if (held.length < 2) return;                       // nothing can be out of order
+  const wanted = keysOf(newParent).map(([key]) => key);
+  if (wanted.length === 0) return;
+
+  const byKey = new Map(held);
+  const order = wanted.filter((key) => byKey.has(key));
+  const already = held.map(([key]) => key).filter((key) => order.includes(key));
+  if (order.join('\u0000') === already.join('\u0000')) return;   // the common case: nothing moved
+
+  // **The anchor is what follows the whole run**, so a heading above it and a button below it stay
+  // where the view put them. Anchoring on the last SURVIVOR instead was my first attempt and
+  // `tools/orders.mjs` caught it: when a row departs, the survivors landed after the departing node,
+  // and the positional pass then patched a survivor's identity onto it. Survivors first in the new
+  // order, then whatever the new list no longer names — so the surplus is at the END, which is where
+  // the positional pass removes from.
+  const last = held[held.length - 1][1];
+  const anchor = last.nextSibling;
+  for (const key of order) oldParent.insertBefore(byKey.get(key), anchor);
+  for (const [key, node] of held) {
+    if (!order.includes(key)) oldParent.insertBefore(node, anchor);
+  }
 }
 
 function patchNode(oldNode, newNode) {

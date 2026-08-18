@@ -1,0 +1,132 @@
+===bx
+// A list whose rows hold FOCUS, which is the case the reconciler's own comment warns about.
+//
+// `reconcile.js` matches children by position and ignores the `data-star-key` this markup emits. Its
+// comment says a reordered list "would lose focus" — written as a consequence rather than measured,
+// which makes it the oldest untested claim in the repository. This component is what points a real
+// browser at it: type into a row, move it, and see whether the caret is still there.
+use "std/string.bx";
+use "std/json.bx";
+
+class Row   { id: Int, text: String }
+class Model { rows: [Row], moves: Int }
+enum Msg { Typed(Int, String), Lift(Int) }
+
+pure function edited(rows: [Row], id: Int, text: String) -> [Row] allocates {
+    let mutable out: [Row] = [];
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        if rows[i].id == id { let a: Int = push(out, Row { id: id, text: text }); }
+        else { let b: Int = push(out, rows[i]); }
+        i += 1;
+    }
+    return out;
+}
+
+// Move the row with this id one place earlier. The ids do not change, so a keyed reconciler would
+// move one node and a positional one rewrites everything from the swap onward.
+pure function lifted(rows: [Row], id: Int) -> [Row] allocates {
+    let mutable out: [Row] = [];
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        if i + 1 < len(rows) && rows[i + 1].id == id {
+            let a: Int = push(out, rows[i + 1]);
+            let b: Int = push(out, rows[i]);
+            i += 2;
+        } else {
+            let c: Int = push(out, rows[i]);
+            i += 1;
+        }
+    }
+    return out;
+}
+
+pure function update(msg: Msg, m: Model) -> Model allocates {
+    match msg {
+        Typed(id, text) => { return Model { rows: edited(m.rows, id, text), moves: m.moves }; }
+        Lift(id) => { return Model { rows: lifted(m.rows, id), moves: m.moves + 1 }; }
+    }
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable list: [Json] = [];
+    let mutable i: Int = 0;
+    while i < len(m.rows) {
+        let mutable r: [Field] = [];
+        let a: Int = push(r, json_field("id", json_int(m.rows[i].id)));
+        let b: Int = push(r, json_field("text", json_text(m.rows[i].text)));
+        let k: Int = push(list, json_object(r));
+        i += 1;
+    }
+    let mutable f: [Field] = [];
+    let a: Int = push(f, json_field("rows", json_list(list)));
+    let b: Int = push(f, json_field("moves", json_int(m.moves)));
+    return json_render(json_object(f));
+}
+
+function from_text(text: String) -> Model allocates {
+    let mutable rows: [Row] = [];
+    let mutable moves: Int = 0;
+    match json_parse(text) {
+        Error(e) => { }
+        Ok(v) => {
+            match json_at(v, "moves") {
+                None => { }
+                Some(x) => { match json_as_int(x) { None => { } Some(n) => { moves = n; } } }
+            }
+            match json_at(v, "rows") {
+                None => { }
+                Some(list) => {
+                    match list {
+                        Null => { } Truth(b) => { } Number(n) => { } Text(t) => { } Object(o) => { }
+                        List(items) => {
+                            let mutable i: Int = 0;
+                            while i < len(items) {
+                                let mutable id: Int = 0;
+                                let mutable body: String = "";
+                                match json_at(items[i], "id") {
+                                    None => { }
+                                    Some(x) => { match json_as_int(x) { None => { } Some(n) => { id = n; } } }
+                                }
+                                match json_at(items[i], "text") {
+                                    None => { }
+                                    Some(x) => { match json_as_text(x) { None => { } Some(t) => { body = t; } } }
+                                }
+                                let k: Int = push(rows, Row { id: id, text: body });
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if len(rows) == 0 {
+        let a: Int = push(rows, Row { id: 1, text: "one" });
+        let b: Int = push(rows, Row { id: 2, text: "two" });
+        let c: Int = push(rows, Row { id: 3, text: "three" });
+    }
+    return Model { rows: rows, moves: moves };
+}
+===
+
+===style.local
+.row   { display: flex; gap: .5rem; align-items: center; margin: .35rem 0; }
+.lift  { font: inherit; padding: .25rem .6rem; }
+.field { font: inherit; padding: .3rem .5rem; border: 1px solid #cbd2dd; border-radius: 5px; }
+===
+
+:props: model: Model
+:!props:
+
+# Rows — {{ to_string(model.moves) }} moves
+
+:for: row in model.rows key to_string(row.id)
+    :div: class=row
+        :input: class=field value={{ row.text }} on:input=Msg.Typed(string_to_int(key, 0), value)
+        :!input:
+        :button: class=lift on:click=Msg.Lift(string_to_int(key, 0))
+        up
+        :!button:
+    :!div:
+:!for:
