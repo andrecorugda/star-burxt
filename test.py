@@ -387,10 +387,15 @@ def main():
     # `html_element` has a precondition on its attribute names, so a name that is not one exits 70 —
     # a bare "burxt exit 70" in a console, from a function the author never called. An unquoted value
     # with spaces in it is read as several attributes, and the last of them is not a name.
+    # **Which code fires moved, and the property did not.** STAR-E026 now catches the SECOND token —
+    # `needs`, a valid attribute name with no value — before STAR-E020 reaches `doing?`, which is not a
+    # name at all. Both messages carry the quoting fix, because a bare token cannot tell a spilled value
+    # from text meant as a body: `class=card Order` and `placeholder=What needs doing?` look the same
+    # from here. What matters is that it is refused and the fix is in the message.
     unquoted = generate(":props: n: Int\n:!props:\n\n:input: placeholder=What needs doing?\n:!input:\n")
+    said = unquoted.stderr + unquoted.stdout
     check("an unquoted value with spaces is refused by NAME, with the fix in the message",
-          "STAR-E020" in (unquoted.stderr + unquoted.stdout)
-          and "quotes" in (unquoted.stderr + unquoted.stdout),
+          ("STAR-E020" in said or "STAR-E026" in said) and "quotes" in said,
           (unquoted.stderr or unquoted.stdout))
 
     # ---- a `for` over a CALL binds it first ----------------------------------------------------

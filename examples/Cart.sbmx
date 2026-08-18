@@ -174,32 +174,56 @@ function from_text(text: String) -> Model allocates {
 ===
 
 ===style.local
-.row   { display: flex; gap: .5rem; align-items: center; margin: .3rem 0; }
-.row button { font: inherit; width: 1.8rem; }
-.name  { min-width: 14rem; font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; }
-.total { font: 600 1.2rem/1.6 ui-sans-serif, system-ui, sans-serif; margin-top: .8rem; }
-.split { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; color: #6b7280; }
-.ways button { font: inherit; padding: .2rem .7rem; margin-right: .3rem; }
+/* Only what makes a cart a cart. Type, colour, buttons and the card come from the page's theme —
+ * `examples/theme.css` — which is the same split Tailwind and Bootstrap make. */
+.line   { display: grid; grid-template-columns: 2rem 2rem 1fr auto; gap: .5rem; align-items: center;
+          padding: .5rem 0; border-top: 1px solid var(--bx-line-soft); }
+.line:first-of-type { border-top: 0; }
+.name   { font-weight: 500; }
+.each   { color: var(--bx-ink-faint); font-size: .85rem; }
+.amount { font-variant-numeric: tabular-nums; }
+.sum    { display: flex; justify-content: space-between; align-items: baseline; margin-top: .2rem; }
+.shares { font-variant-numeric: tabular-nums; }
 ===
 
 :props: model: Model
 :!props:
 
-:for: line in model.lines key to_string(line.id)
-    :div: class=row
-        :button: child={"−"} on:click=Msg.Fewer(string_to_int(key, 0)) :!button:
-        :button: child={"+"} on:click=Msg.More(string_to_int(key, 0)) :!button:
-        :span: class=name child={line_label(line)} :!span:
+:div: class=bx-card
+    :div: class=bx-spread
+        :h2: class=bx-title child=Order :!h2:
+        :span: class=bx-badge child={to_string(len(model.lines)) + " lines"} :!span:
     :!div:
-:!for:
 
-:p: class=split child={"subtotal " + money(subtotal(model.lines)) + " + service " + money(service(model.lines))} :!p:
-:p: class=total child={"total " + money(cart_total(model.lines))} :!p:
+    :for: line in model.lines key to_string(line.id)
+        :div: class=line
+            :button: class="bx-btn bx-btn-icon" child={"−"} on:click=Msg.Fewer(string_to_int(key, 0)) :!button:
+            :button: class="bx-btn bx-btn-icon" child={"+"} on:click=Msg.More(string_to_int(key, 0)) :!button:
+            :div:
+                :div: class=name child={line.name} :!div:
+                :div: class=each child={money(line.each) + " each × " + to_string(line.count)} :!div:
+            :!div:
+            :div: class=amount child={money(line_total(line))} :!div:
+        :!div:
+    :!for:
 
-:div: class=ways
-    :button: child={"one bill"} on:click=Msg.Split(1) :!button:
-    :button: child={"split 2"} on:click=Msg.Split(2) :!button:
-    :button: child={"split 3"} on:click=Msg.Split(3) :!button:
+    :hr: class=bx-divider :!hr:
+
+    :div: class=sum
+        :span: class=bx-muted child={"subtotal " + money(subtotal(model.lines)) + "  ·  service 12.5% " + money(service(model.lines))} :!span:
+        :span: class="bx-figure amount" child={money(cart_total(model.lines))} :!span:
+    :!div:
 :!div:
 
-:p: class=split child={shares(model)} :!p:
+:div: class=bx-card
+    :h2: class=bx-title child={"Split the bill"} :!h2:
+    :p: class=bx-muted
+    Dividing money cannot lose a penny, so the shares are computed rather than rounded.
+    :!p:
+    :div: class=bx-row
+        :button: class=bx-btn child={"one bill"} on:click=Msg.Split(1) :!button:
+        :button: class=bx-btn child={"two ways"} on:click=Msg.Split(2) :!button:
+        :button: class=bx-btn child={"three ways"} on:click=Msg.Split(3) :!button:
+    :!div:
+    :p: class="shares bx-mono" child={shares(model)} :!p:
+:!div:

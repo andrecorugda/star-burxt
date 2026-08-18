@@ -781,12 +781,15 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                 let with_child: String = star_head_without_key(star_head_without_event(fenced.head));
                 let bare_head: String = star_head_without_child(with_child);
                 let mutable written: String = "";
+                let mutable flag_lines: String = "";
                 match star_attrs_of(bare_head) {
                     Error(e) => {
                         return Result.Error(e + " (at " + star_at(source, fenced.offset) + ")");
                     }
-                    Ok(list) => { written = list; }
+                    Ok(pair) => { written = pair.inline; flag_lines = pair.flags; }
                 }
+                // Named once so every emission site below decides the same list.
+                let holder: String = "at_" + tag + "_" + to_string(i);
                 match star_event_part(fenced.head) {
                     None => { }
                     Some(part) => {
@@ -902,6 +905,10 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                                 + " so it cannot take `child=`");
                         }
                         if attrs == "[]" { attrs = star_attr_list(key_attr, star_two(written, mark_attr)); }
+                        if len(flag_lines) > 0 {
+                            out = out + star_flag_block(attrs, flag_lines, holder, indent);
+                            attrs = holder;
+                        }
                         // **Braces mean an EXPRESSION; bare or quoted means text.** `child={…}` is
                         // Burxt between the braces, so the compiler judges it — `child={task.labl}`
                         // is an error naming the field. `child=hello` and `child="two words"` are the
@@ -1001,6 +1008,10 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                         c += 1;
                     }
                     if attrs == "[]" { attrs = star_attr_list(key_attr, star_two(written, mark_attr)); }
+                    if len(flag_lines) > 0 {
+                        out = out + star_flag_block(attrs, flag_lines, holder, indent);
+                        attrs = holder;
+                    }
                     out = out + indent + "let " + label + ": Int = push(" + target
                         + ", html_element(\"" + fenced.name + "\", " + attrs
                         + ", [" + phrasing + "]));\n";
@@ -1033,6 +1044,10 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                     Error(e) => { return Result.Error(e); }
                     Ok(body) => {
                         if attrs == "[]" { attrs = star_attr_list(key_attr, star_two(written, mark_attr)); }
+                        if len(flag_lines) > 0 {
+                            out = out + star_flag_block(attrs, flag_lines, holder, indent);
+                            attrs = holder;
+                        }
                         out = out + indent + "let mutable " + inner + ": [Html] = [];\n" + body;
                         out = out + indent + "let " + label + ": Int = push(" + target
                             + ", html_element(\"" + fenced.name + "\", " + attrs
@@ -1528,7 +1543,7 @@ pure function star_prop_names(props: String) -> [String] {
 pure function star_head_value(head: String, wanted: String) -> String {
     match star_attrs_of(head) {
         Error(e) => { return ""; }
-        Ok(list) => { }
+        Ok(pair) => { }
     }
     let width: Int = len(head);
     let mutable i: Int = 0;
@@ -1593,6 +1608,41 @@ pure function star_head_value(head: String, wanted: String) -> String {
 //
 // A bare name is a boolean attribute: `::: input disabled` emits `disabled=""`, which is how HTML
 // spells true.
+//
+// **But only for the names that HAVE a boolean spelling, and that set is closed.** `:h2: class=title
+// Order :!h2:` emitted `<h2 class="title" Order="">` — a heading with no text in it, silently, and I
+// shipped exactly that twice in one afternoon while styling. It also reached a released example:
+// `Choices.sbmx` had `:legend: tone :!legend:` and `:option: value=small small :!option:`, so its
+// dropdown labels were BLANK and its fieldset unlabelled. The browser test I wrote for it asserted the
+// model and never looked at the text.
+//
+// `child=` already exists for exactly this, which is what makes refusing safe: there is a spelling that
+// means what the author meant. So a valueless token that is not one of HTML's own booleans is a
+// mistake worth naming — and `data-` and `aria-` stay open because an author's own attributes are
+// theirs to invent.
+// What a head's attributes compile to. **`flags` is the half that depends on the STATE**, and it has to
+// be separate because HTML has no way to spell a false boolean: `checked="false"` is checked, and the
+// only way to say "not checked" is for the attribute not to be there. So `checked={{ model.agree }}`
+// cannot be an attribute with a computed value — it has to be a decision about whether the attribute
+// exists, which is a statement rather than an expression.
+//
+// **Until this existed a form could not show its own state.** Server-rendering `Choices.sbmx` with
+// `agree: true, size: "large"` produced no `checked` and no `selected` anywhere: the first paint showed
+// an empty form, the client hydrated to the same HTML, and the page disagreed with the model with
+// nothing reported. That is the whole reason a checkbox is the first thing anyone tries.
+//
+// One scanner produces both halves, because two scanners over the same head is how a delimiter rule
+// comes to have two answers — which has cost this project nine defects in one class already.
+class StarAttrs { inline: String, flags: String }
+
+pure function star_is_bare_flag(name: String) -> Bool {
+    if len(name) > 5 && substring(name, 0, 5) == "data-" { return true; }
+    if len(name) > 5 && substring(name, 0, 5) == "aria-" { return true; }
+    return star_in_set(name,
+        " allowfullscreen async autofocus autoplay checked controls default defer disabled download"
+        + " formnovalidate hidden inert ismap itemscope loop multiple muted nomodule novalidate open"
+        + " playsinline readonly required reversed selected ");
+}
 
 // `, x` when x is there, nothing when it is not — so a list can be built by concatenation without
 // a trailing comma nobody can see in generated source.
@@ -2038,8 +2088,9 @@ pure function star_trim(text: String) -> String {
 // The head handed in has already had `on:` and `key` removed, so what is left is attributes and
 // nothing else. Refuses a value it cannot read rather than dropping it — an attribute that silently
 // does not appear is the failure this whole project keeps finding.
-pure function star_attrs_of(head: String) -> Result<String, String> {
+pure function star_attrs_of(head: String) -> Result<StarAttrs, String> allocates {
     let mutable out: String = "";
+    let mutable flags: String = "";
     let width: Int = len(head);
     let mutable i: Int = 0;
     while i < width {
@@ -2047,7 +2098,7 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
             i += 1;
         }
         if i >= width {
-            return Result.Ok(out);
+            return Result.Ok(StarAttrs { inline: out, flags: flags });
         }
         let name_from: Int = i;
         while i < width && !star_separates(byte_at(head, i)) && byte_at(head, i) != 61 {
@@ -2055,7 +2106,10 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
         }
         let name: String = substring(head, name_from, i - name_from);
         let mutable value: String = "\"\"";
+        let mutable valueless: Bool = true;
+        let mutable flagged: String = "";
         if i < width && byte_at(head, i) == 61 {
+            valueless = false;
             i += 1;
             if i < width && byte_at(head, i) == 34 {
                 i += 1;
@@ -2107,6 +2161,7 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
                     i += 1;
                 }
                 let written_value: String = substring(head, from, i - from);
+                flagged = written_value;
                 // **A quote inside an UNQUOTED value is refused here, or the compiler refuses it.**
                 // It used to emit `html_attr("class", "x" onload="steal()")` — a Burxt syntax error
                 // about generated code, pointing at a line the author never wrote. Safe, since it
@@ -2159,11 +2214,83 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
                     + " `placeholder=What needs doing?` is three attributes — put the value in"
                     + " quotes: `placeholder=\"What needs doing?\"`");
             }
+            // **A valueless name that HTML has no boolean for is almost always text.** See
+            // `star_is_bare_flag` — this is the one that made a heading render empty and a dropdown
+            // show blank labels, in a shipped example, with nothing reported.
+            // **A boolean attribute whose value is an interpolation is a DECISION, not a value.**
+            // `checked={{ model.agree }}` cannot be `checked="false"`, because that is checked. It
+            // leaves the inline list here and comes back as an `if` around a `push`, so when the
+            // expression is false the attribute is not there at all — which is the only thing HTML
+            // understands as false.
+            if !valueless && star_is_bare_flag(name) && star_is_interpolated(flagged) {
+                flags = flags + name + "\t" + star_trim(star_unwrapped(flagged)) + "\n";
+                continue;
+            }
+            if valueless && !star_is_bare_flag(name) {
+                // **TWO causes, and this one names both on purpose.** Elsewhere in this file a
+                // message that covered two causes was the defect — `xml:lang` told to add quotes —
+                // but those could be told apart by the colon. These cannot: `class=card Order` and
+                // `placeholder=What needs doing?` produce an identical bare token, and the head gives
+                // nothing to choose by. Guessing one would send half of all readers to the wrong fix,
+                // so both are stated and the reader picks the one they recognise.
+                return Result.Error("STAR-E026: `" + name + "` has no value, so it stands for a"
+                    + " boolean attribute — this element renders with NO TEXT in it and `" + name
+                    + "` ends up on the tag. Two spellings cause that. An unquoted value ends at the"
+                    + " first space, so `placeholder=What needs doing?` is three tokens — put the"
+                    + " value in quotes: `placeholder=\"What needs doing?\"`. Or you meant text, and"
+                    + " it is `child=" + name + "` — or the text on its own line between the fences."
+                    + " If you really did mean a boolean attribute, `" + name + "=\"\"` says so");
+            }
             if len(out) > 0 { out = out + ", "; }
             out = out + "html_attr(\"" + name + "\", " + value + ")";
         }
     }
-    return Result.Ok(out);
+    return Result.Ok(StarAttrs { inline: out, flags: flags });
+}
+
+// `{{ … }}`, which is what makes a boolean attribute a decision rather than a value.
+pure function star_is_interpolated(written: String) -> Bool {
+    let t: String = star_trim(written);
+    if len(t) < 4 { return false; }
+    return substring(t, 0, 2) == "\{\{";
+}
+
+// The expression inside `{{ … }}`.
+pure function star_unwrapped(written: String) -> String allocates {
+    let t: String = star_trim(written);
+    if !star_is_interpolated(t) { return t; }
+    let mutable stop: Int = len(t);
+    while stop > 2 && !(byte_at(t, stop - 1) == 125 && byte_at(t, stop - 2) == 125) { stop -= 1; }
+    if stop <= 4 { return ""; }
+    return substring(t, 2, stop - 4);
+}
+
+// The `if` around each `push`, which is where a state-dependent attribute is decided. The holder is a
+// list so the attribute can simply not be added — the one spelling HTML reads as false.
+pure function star_flag_block(attrs: String, lines: String, holder: String, indent: String)
+    -> String allocates {
+    if len(lines) == 0 { return ""; }
+    let mutable out: String = indent + "let mutable " + holder + ": [Attr] = " + attrs + ";\n";
+    let mutable at: Int = 0;
+    let mutable from: Int = 0;
+    let mutable n: Int = 0;
+    while at <= len(lines) {
+        if at == len(lines) || byte_at(lines, at) == 10 {
+            let row: String = substring(lines, from, at - from);
+            if len(row) > 0 {
+                let mutable cut: Int = 0;
+                while cut < len(row) && byte_at(row, cut) != 9 { cut += 1; }
+                let name: String = substring(row, 0, cut);
+                let expr: String = substring(row, cut + 1, len(row) - cut - 1);
+                out = out + indent + "if " + expr + " \{ let " + holder + "_" + to_string(n)
+                    + ": Int = push(" + holder + ", html_attr(\"" + name + "\", \"\")); \}\n";
+                n += 1;
+            }
+            from = at + 1;
+        }
+        at += 1;
+    }
+    return out;
 }
 
 // The complete source of a generated component, minus the runtime entry points.

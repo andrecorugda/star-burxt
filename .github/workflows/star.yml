@@ -275,6 +275,18 @@ jobs:
       - name: A keyed list ends up in the order the view asked for
         run: node tools/orders.mjs
 
+      # **HTML has no false**, so `checked="false"` is checked and the only way to say "not checked" is
+      # for the attribute to be absent. Until `checked={{ … }}` compiled to a DECISION rather than a
+      # value, a form could not show its own state: rendering with `agree: true` produced an unticked box
+      # and the client hydrated to the same wrong HTML. Run twice, because the property is presence AND
+      # absence — one state cannot tell an attribute that is always there from one that never is.
+      - name: A form rendered on the server shows its own state
+        run: |
+          set -eux
+          ./star-generate examples/Choices.sbmx choices --fragment > /tmp/build/choices-r.bx
+          burxt build /tmp/build/choices-r.bx -o /tmp/build/choices-render
+          node tools/flags.mjs /tmp/build/choices-render
+
       # **A game, because a form asks star one question and a game asks the other four:** a tick that
       # runs only while the state says so, four global keys, a list that moves and grows every frame,
       # and a rule that ends it. Two real defects came out of writing it — the first paint never told

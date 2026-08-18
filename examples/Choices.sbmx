@@ -1,6 +1,16 @@
 ===bx
 // Every form control star can drive, and each one's value means something different.
 //
+// **And a form now shows its own state.** `checked={{ model.agree }}` is a decision rather than a value,
+// because HTML has no false: `checked="false"` is checked, and the only way to say no is for the
+// attribute to be absent. Before this, server-rendering this component with `agree: true` produced an
+// unticked box and an unselected dropdown — the page disagreeing with the model, silently, which is the
+// first thing anybody would try.
+//
+// **Its dropdown labels were BLANK when it shipped.** `:option: value=small small :!option:` reads the
+// second `small` as a boolean attribute, so every option had a value and no text — and the browser test
+// I wrote asserted the model rather than the page, so it passed. STAR-E026 refuses that spelling now.
+//
 // The edge is what arrives as `value`. A text field gives its text; a CHECKBOX gives its checked state
 // rather than its value, because `on` is not an answer; a select gives the chosen option; a radio gives
 // the value of the one that was clicked. One `on:` per element, so each control carries its own handler.
@@ -58,44 +68,57 @@ function from_text(text: String) -> Model {
 ===
 
 ===style.local
-.field { display: block; margin: .7rem 0; }
-.field select, .field textarea { font: inherit; padding: .3rem .5rem; border: 1px solid #cbd2dd;
-                                border-radius: 5px; }
-.said { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; color: #6b7280; }
+/* Only the layout. Everything that makes it look like a product is the page's theme. */
+.field  { margin: 0 0 1rem; }
+.field:last-child { margin-bottom: 0; }
+.tones  { display: flex; gap: 1.2rem; }
 ===
 
 :props: model: Model
 :!props:
 
-:p: class=said child={summary(model)} :!p:
+:div: class=bx-card
+    :div: class=bx-spread
+        :h2: class=bx-title child=Preferences :!h2:
+        :span: class="bx-badge bx-badge-quiet" child={summary(model)} :!span:
+    :!div:
 
-:label: class=field
-    size
-    :select: on:change=Msg.Size(value)
-        :option: value=small small :!option:
-        :option: value=medium medium :!option:
-        :option: value=large large :!option:
-    :!select:
-:!label:
+    :hr: class=bx-divider :!hr:
 
-:fieldset: class=field
-    :legend: tone :!legend:
-    :label:
-        :input: type=radio name=tone value=warm on:change=Msg.Tone(value) :!input:
-        warm
-    :!label:
-    :label:
-        :input: type=radio name=tone value=cool on:change=Msg.Tone(value) :!input:
-        cool
-    :!label:
-:!fieldset:
+    :div: class=field
+        :label: class=bx-label child=Size :!label:
+        :select: class=bx-select on:change=Msg.Size(value)
+            :option: value=small selected={{ model.size == "small" }} child=Small :!option:
+            :option: value=medium selected={{ model.size == "medium" }} child=Medium :!option:
+            :option: value=large selected={{ model.size == "large" }} child=Large :!option:
+        :!select:
+    :!div:
 
-:label: class=field
-    :input: type=checkbox on:change=Msg.Agree(value) :!input:
-    I agree
-:!label:
+    :fieldset: class="bx-fieldset field"
+        :legend: child=Tone :!legend:
+        :div: class=tones
+            :label: class=bx-check
+                :input: type=radio name=tone value=warm checked={{ model.tone == "warm" }} on:change=Msg.Tone(value) :!input:
+                :span: child=Warm :!span:
+            :!label:
+            :label: class=bx-check
+                :input: type=radio name=tone value=cool checked={{ model.tone == "cool" }} on:change=Msg.Tone(value) :!input:
+                :span: child=Cool :!span:
+            :!label:
+        :!div:
+    :!fieldset:
 
-:label: class=field
-    notes
-    :textarea: on:input=Msg.Note(value) :!textarea:
-:!label:
+    :div: class=field
+        :label: class=bx-check
+            :input: type=checkbox checked={{ model.agree }} on:change=Msg.Agree(value) :!input:
+            :span: child={"I agree to the terms"} :!span:
+        :!label:
+    :!div:
+
+    :div: class=field
+        :label: class=bx-label child=Notes :!label:
+        :textarea: class=bx-area on:input=Msg.Note(value)
+        {{ model.note }}
+        :!textarea:
+    :!div:
+:!div:

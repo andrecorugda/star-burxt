@@ -362,4 +362,46 @@ Total: 5 <!-- fix this -->
 And the alternative that message names does work — `` `<!-- fix this -->` `` shows the characters
 themselves. An unterminated comment is `BMX-E006` rather than a document that quietly ends early.
 
+---
+
+## A checkbox that shows its state — `checked={{ … }}`
+
+```sbmx
+:input: type=checkbox checked={{ model.agree }} :!input:
+:option: value=large selected={{ model.size == "large" }} child=Large :!option:
+:button: disabled={{ !model.ready }} child=Send :!button:
+```
+
+**HTML has no false.** `checked="false"` is checked — the only spelling that means *not* checked is for
+the attribute not to be there at all. So for the boolean attributes, `{{ … }}` is a **decision** rather
+than a value: the expression is a `Bool`, and when it is false the attribute is simply not emitted.
+
+Before this, a form could not show its own state. Rendering a component with `agree: true` on the server
+produced an unticked box, the client hydrated to the same HTML, and the page disagreed with the model with
+nothing reported — which is the first thing anybody tries.
+
+The names this applies to are HTML's own booleans: `checked`, `selected`, `disabled`, `readonly`,
+`required`, `multiple`, `hidden`, `open`, `autofocus`, `autoplay`, `controls`, `loop`, `muted`, `defer`,
+`async`, `novalidate`, `reversed`, `inert` and the rest of the closed set. Everything else takes a value,
+and a bare name with no value is refused:
+
+```
+STAR-E026 `Order` has no value, so it stands for a boolean attribute — this element renders with
+NO TEXT in it
+```
+
+**That refusal exists because it shipped.** `:legend: tone :!legend:` and
+`:option: value=small small :!option:` were in `Choices.sbmx`, so its fieldset was unlabelled and every
+dropdown option was blank — and the browser test written for it asserted the model rather than the page.
+
+## More than one class
+
+```sbmx
+:div: class="bx-card bx-spread" child=x :!div:
+```
+
+**Quote it.** An unquoted value ends at the first space, so `class=bx-card bx-spread` is one class and a
+boolean attribute called `bx-spread` — which is why the refusal above matters for anybody using utility
+CSS, where three or four classes on an element is the normal case.
+
 {% endraw %}
