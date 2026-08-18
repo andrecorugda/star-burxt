@@ -40,7 +40,7 @@ quietly become `"[object Object]"`.
 
 ## Wrapping things in elements
 
-A `:::` block with an element name wraps whatever is inside it:
+A block named after an element wraps whatever is inside it:
 
 ```sbmx
 :section:

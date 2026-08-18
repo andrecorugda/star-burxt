@@ -73,6 +73,7 @@
     <a href="{{ site.baseurl }}/how-do-i.html" class="{% if page.title == 'How do I…?' %}here{% endif %}">How do I…?</a>
     <a href="{{ site.baseurl }}/blocks.html"   class="{% if page.title == 'Blocks' %}here{% endif %}">Blocks</a>
     <a href="{{ site.baseurl }}/install.html"  class="{% if page.title == 'Set up' %}here{% endif %}">Set up</a>
+    <a href="https://github.com/andrecorugda/star-burxt">GitHub</a>
     <a class="burxt" href="https://burxt-lang.org">Burxt</a>
   </span>
 </nav>
@@ -84,7 +85,13 @@
        each page via scripts/site-nav.py; here the client-side "On this page" does that job, so a
        renamed heading cannot leave a dead anchor behind in a hand-written list. -->
   <nav class="side" aria-label="Documentation contents">
-    <div class="group site">
+    <!-- NOT `class="group site"`. Upstream `site.css:261` is `.side .site { display: none }` with a
+         `block` only inside the mobile media query — on burxt-lang.org that group duplicates the
+         topbar, so it belongs in the drawer and nowhere else. **Here it is the first thing a reader
+         should see, and while it carried that class it was invisible on every desktop.** Measured
+         against bmx.burxt-lang.org, which shows `Start here` and renders four groups where this site
+         rendered three. BMX hit the identical defect and left the note that found this one. -->
+    <div class="group">
       <h2>Start here</h2>
       <ul>
         <li class="topic"><a href="{{ site.baseurl }}/"{% if page.title == "star-burxt" %} class="here" aria-current="page"{% endif %}><span>What is star-burxt?</span></a></li>

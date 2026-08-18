@@ -23,7 +23,7 @@ A slot or a handler names something that is not there.
 Hello {{ nmae }}
 ```
 
-**Fix:** check the spelling against your `::: props` line. If the value is new, add it there.
+**Fix:** check the spelling against your `:props:` line. If the value is new, add it there.
 
 ---
 
@@ -51,7 +51,7 @@ apply surcharge
 :!button:
 ```
 
-**Fix:** say how — `::: props total: Decimal<2, RoundHalfEven>` — or keep the exact answer with
+**Fix:** say how — `:props: total: Decimal<2, RoundHalfEven>` — or keep the exact answer with
 `Decimal<4>`. [Chapter 5](guide/05-money.html) is about this one.
 
 ---

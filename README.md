@@ -1,34 +1,37 @@
 # star-burxt
 
-**Build a front end by writing a document.** A `.bmx` file becomes a component that renders,
-responds to clicks, and holds state.
+**Build a front end by writing a document.** A `.sbmx` file becomes a component that renders,
+responds to clicks, holds state, fetches, and routes.
 
 **Documentation: [star.burxt-lang.org](https://star.burxt-lang.org)** — start there. It is a
-six-chapter tour, not a specification.
+seven-chapter tour, not a specification.
 
 ```
-::: props count: Int
-:::
+:props: count: Int
+:!props:
 
 # Counter
 
 The count is {{ to_string(count) }}.
 
-::: button on:click=count + 1
+:button: on:click=count + 1
 increment
-:::
+:!button:
 ```
 
 That is a whole component. It renders, the button works, and if you misspell `count` you are told
 before the page exists — including inside the button, which is the part no other framework checks.
+
+For anything past a counter, a `===bx` section holds your own Burxt — a `Model`, a `Msg`, and one
+`update` — and `on:click=Msg.Increment` names a message instead of an expression.
 
 ## Using it
 
 One line in your project's `burxt.package`:
 
 ```
-dependency  star  https://github.com/andrecorugda/star-burxt  v0.1.0
-dependency  bmx   https://github.com/andrecorugda/bmx         burxt-0.5.1
+dependency  star  https://github.com/andrecorugda/star-burxt  v0.2.0
+dependency  bmx   https://github.com/andrecorugda/bmx         burxt-0.7.1
 ```
 
 Then `burxt fetch`. Full instructions: [star.burxt-lang.org/install](https://star.burxt-lang.org/install.html).
@@ -38,11 +41,17 @@ Then `burxt fetch`. Full instructions: [star.burxt-lang.org/install](https://sta
 | | |
 |---|---|
 | `star.bx` | the framework — one file |
-| `examples/generate.bx` | a `.bmx` document → a component, on the command line |
-| `examples/index.html`, `reconcile.js` | the browser driver |
-| `examples/counter.bmx`, `form.bmx` | components |
+| `resolve.bx` | which components a document imports, resolved once for every tool |
+| `examples/generate.bx` | a `.sbmx` document → a component. Built as `star-generate` |
+| `examples/check.bx` | all three layers of problem, in one command. Built as `star-check` |
+| `examples/build.bx` | document → component → wasm, one command. Built as `star-build` |
+| `examples/app.js`, `reconcile.js`, `index.html` | the browser driver, and a page to copy |
+| `examples/*.sbmx` | components — `Hero`, `Todos`, `Feed`, `Served`, `App` and the rest |
+| `editors/` | the VS Code extension and the language server |
+| `tools/liquid.bx` | the site's guard, a Burxt program |
+| `tools/showcase.py`, `shoot.mjs` | the landing page's screenshot and its source panel |
 | `test.py` | the guarantees |
-| `verify-docs.py` | every example on the site, generated |
+| `verify-docs.py` | every example on the site — generated **and compiled** |
 | `docs/` | the site |
 
 ## The supported surface is three names

@@ -30,7 +30,7 @@ Three things are going on, and only one of them is new:
 **`# Hello` and the paragraph** are ordinary Markdown. If you have written a README, you have written
 these.
 
-**`::: props name: String`** says *this component is given a name, and a name is text*. Every
+**`:props: name: String`** says *this component is given a name, and a name is text*. Every
 document starts with one of these — it is how the component gets anything to be about.
 
 **`{{ name }}`** puts that value in the page.
@@ -76,11 +76,11 @@ sure whether something works, write it and look.
 
 ## Every document needs `props`
 
-Drop the `::: props` block and you are told:
+Drop the `:props:` block and you are told:
 
 ```sbmx
 this document declares no `props` block, so it has no signature and nothing
-can invoke it. Add `::: props name: Type`
+can invoke it. Add `:props: name: Type`
 ```
 
 A component that is given nothing has nothing to show that a plain HTML file would not show better.
@@ -89,7 +89,7 @@ If a piece of your page really is fixed text, write it as fixed text.
 ## What you have
 
 - a `.sbmx` file is a component
-- `::: props` says what it is given, and comes first
+- `:props:` says what it is given, and comes first
 - `{{ }}` puts a value in the page
 - a mistake in a `{{ }}` is caught before the page exists
 

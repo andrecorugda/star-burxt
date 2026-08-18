@@ -56,6 +56,44 @@ def examples():
                 yield (os.path.relpath(path, ROOT), text[:m.start()].count("\n") + 1, body)
 
 
+def quoted_messages():
+    r"""Every refusal the pages QUOTE must be one the generator still emits.
+
+    **A page quoting a message the compiler stopped emitting is worse than a stale example**, because
+    the example is checked and the quote is not: a reader searches for the sentence they were shown and
+    finds nothing. `docs/guide/01` quoted `Add \`::: props name: Type\`` for a day after that message
+    was respelled, and only Andre reading the page found it.
+
+    Compared on the DISTINCTIVE tail rather than the whole line, because a page wraps a message and a
+    source file concatenates one — neither holds it as a single string, and requiring that would fail
+    on formatting rather than on content.
+    """
+    source = open(os.path.join(ROOT, "star.bx"), encoding="utf-8").read()
+    # Everything star.bx can say, with the Burxt string plumbing removed so a quote can be found in it.
+    said = re.sub(r'"\s*\+\s*[\w_.\[\]()+ ]*?\+\s*"', "", source)
+    said = said.replace('\\`', '`').replace('\\"', '"')
+
+    wrong = []
+    for base, _, names in os.walk(os.path.join(ROOT, "docs")):
+        for n in sorted(names):
+            if not n.endswith(".md"):
+                continue
+            path = os.path.join(base, n)
+            text = open(path, encoding="utf-8").read()
+            for m in re.finditer(r"^(STAR-E\d+): ?(.{12,60})", text, re.M):
+                code, tail = m.group(1), m.group(2).strip()
+                if code not in source:
+                    wrong.append("%s:%d quotes %s, which star.bx does not emit at all"
+                                 % (os.path.relpath(path, ROOT),
+                                    text[:m.start()].count("\n") + 1, code))
+                elif tail.split("`")[0].strip() and tail.split("`")[0].strip() not in said:
+                    wrong.append("%s:%d quotes %s with wording star.bx does not have: %r"
+                                 % (os.path.relpath(path, ROOT),
+                                    text[:m.start()].count("\n") + 1, code,
+                                    tail.split("`")[0].strip()[:48]))
+    return wrong
+
+
 def hidden_fences():
     """Code blocks the extractor above cannot see, which is worse than a block that fails.
 
@@ -108,7 +146,7 @@ def main():
     # a component here that did not match the documented call would make this check a fiction.
     open(os.path.join(work, "Badge.sbmx"), "w").write(
         ":props: amount: Int, tone: String\n:!props:\n\n:span: class=badge\n{{ tone }}: {{ to_string(amount) }}\n:!span:\n")
-    wrong, checked, refuted, typechecked = list(hidden_fences()), 0, 0, [0]
+    wrong, checked, refuted, typechecked = list(hidden_fences()) + quoted_messages(), 0, 0, [0]
 
     for path, line, body in examples():
         # **An example that is MEANT to be refused is fed verbatim.** The preamble below supplies a

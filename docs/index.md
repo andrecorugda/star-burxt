@@ -1,7 +1,7 @@
 ---
 layout: default
 title: star-burxt
-description: "Write a page in Markdown. Get a real front-end app. star-burxt turns .bmx documents into components that render, respond to clicks, and hold state."
+description: "Write a page in Markdown. Get a real front-end app. star-burxt turns .sbmx documents into components that render, respond to clicks, hold state, fetch and route."
 ---
 
 {% raw %}
@@ -72,12 +72,13 @@ function you can read, test, and diff — not a closure that re-runs.
 |---|---|
 | `# Heading` and paragraphs | headings and paragraphs, as in any Markdown |
 | `{{ total }}` | your data, in the page |
-| `::: props model: Model` | what the component is given |
-| `::: button on:click=Msg.Add` | a button, and your `update` decides what it does |
-| `::: for item in items key item.id` | a row per item, each with its own buttons |
-| `::: match model.route` | a screen per route — **forget one and the build fails** |
-| `::: if ready` / `::: else` | a section that appears when it should |
-| `::: Badge amount={{ n }}` | another component, imported with `use` |
+| `:props: model: Model` | what the component is given |
+| `:button: on:click=Msg.Add` | a button, and your `update` decides what it does |
+| `:for: item in items key item.id` | a row per item, each with its own buttons |
+| `:match: model.route` | a screen per route — **forget one and the build fails** |
+| `:if: ready` / `:else:` | a section that appears when it should |
+| `:Badge: amount={{ n }}` | another component, imported with `use` |
+| `:span: child={total} :!span:` | a leaf on one line, body and all |
 | `===style.local` | CSS scoped to this component, with no default |
 | `commands` and `watch` | fetching, timers, websockets — without `await` |
 | `load` | server rendering, and server code that **cannot** reach the browser |

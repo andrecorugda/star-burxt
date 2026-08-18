@@ -57,27 +57,29 @@ teammate's build match yours.
 >
 > Add the line and it goes away.
 >
-> **`burxt-0.5.1` is not a typo for the format's version.** BMX the *format* is at 0.2; that tag
-> names the Burxt implementation of it, which is a separate thing released on its own schedule.
+> **`burxt-0.7.1` is not a typo for the format's version.** BMX the *format* has its own number; that
+> tag names the Burxt implementation of it, which is a separate thing released on its own schedule.
 
-## 3. Build the generator
+## 3. Build the three commands
 
-The generator turns a `.bmx` document into a component. You build it once:
-
-```sh
-git clone https://github.com/andrecorugda/star-burxt
-burxt build star-burxt/examples/generate.bx -o star-generate
-```
-
-Now you have a `star-generate` command:
+They are Burxt programs, and you build them once:
 
 ```sh
-./star-generate counter.bmx counter
+git clone https://github.com/andrecorugda/star-burxt && cd star-burxt
+burxt build examples/generate.bx -o star-generate
+burxt build examples/check.bx    -o star-check
+burxt build examples/build.bx    -o star-build
 ```
 
-It prints the component it made. **You are meant to read that output.** Nothing is hidden in it, and
-watching your document turn into ordinary code is the quickest way to see what star-burxt does for
-you.
+| the command | what it is for |
+|---|---|
+| `star-check counter.sbmx` | every problem in one place — **use this while you write** |
+| `star-build counter.sbmx counter` | document → component → `.wasm`, one command |
+| `star-generate counter.sbmx counter` | just the component, printed |
+
+`star-generate` prints the component it made, and **you are meant to read that output.** Nothing is
+hidden in it, and watching your document turn into ordinary code is the quickest way to see what
+star-burxt does for you.
 
 ## That's it
 

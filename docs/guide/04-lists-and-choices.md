@@ -32,7 +32,7 @@ Real screens repeat things and hide things. Two blocks do both.
 :!ul:
 ```
 
-**`::: for line in lines`** repeats its body once per item, with `line` naming the current one.
+**`:for: line in lines`** repeats its body once per item, with `line` naming the current one.
 
 **`key line.id`** tells star-burxt how to recognise a row when the list changes. Give it something
 that identifies the item — an id, an order number, a code.
@@ -185,9 +185,9 @@ This is on [what's not built yet](../not-done.html) with everything else in that
 
 ## What you have
 
-- `::: for x in xs key x.id` — a row per item
+- `:for: x in xs key x.id` — a row per item
 - a key identifies the row, and it matters more than it looks
-- `::: if condition` — a section that appears when it should
+- `:if: condition` — a section that appears when it should
 - buttons do not go inside loops yet
 
 **[Chapter 5: Money →](05-money.html)**

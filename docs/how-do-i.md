@@ -94,7 +94,7 @@ Everything is set.
 :!if:
 ```
 
-There is no `else`. Write a second `::: if` for the other case.
+There is no `else`. Write a second `:if:` for the other case.
 
 ## …style a component?
 
@@ -135,7 +135,7 @@ draft
 :!span:
 ```
 
-A value with spaces is quoted. A bare name is a boolean attribute — `::: input disabled`.
+A value with spaces is quoted. A bare name is a boolean attribute — `:input: disabled`.
 
 ## …build a link from my data?
 
@@ -272,7 +272,7 @@ declares them, so two props of the same type cannot swap by accident.
 ## …see what my document turned into?
 
 ```sh
-./star-generate page.bmx page
+./star-generate page.sbmx page
 ```
 
 It prints the component. Reading it is encouraged — there is nothing in there you did not write.
@@ -487,7 +487,7 @@ Nothing at {{ model.path }}
 Copy `examples/router.js` beside your page. It intercepts in-page links, handles the back button,
 and hands the path in.
 
-**Your links are real markup** — `::: a href=/posts/42` — so they work before any JavaScript runs
+**Your links are real markup** — `:a: href=/posts/42` — so they work before any JavaScript runs
 and the driver only upgrades them.
 
 And because the route is an `enum` matched exhaustively, **adding a screen and forgetting to draw it

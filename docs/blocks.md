@@ -13,13 +13,27 @@ Everything you can write, on one page.
 ## The shape
 
 ```text
-::: name head
+:name: head
 body
-:::
+:!name:
 ```
 
-A block opens with `:::`, closes with `:::`, and the body is an ordinary document — headings,
-paragraphs, lists, and more blocks.
+**A block opens with `:name:` and closes with `:!name:`** — the closer says what it closes, so a
+document with three levels in it can be read without counting. The body is an ordinary document:
+headings, paragraphs, lists, and more blocks.
+
+Two things follow from the closer carrying a name:
+
+- **a closer that names the wrong block is refused**, so a document cannot be wrong about its own
+  structure
+- **you can indent**, because nesting is by containment and leading space means nothing. Indent for
+  the reader; the parser ignores it either way.
+
+And a short block fits on one line:
+
+```text
+:name: head :!name:
+```
 
 ---
 
@@ -89,7 +103,7 @@ hello
 ```
 
 A value with spaces is quoted — `class="tag muted"`. A bare name is a boolean attribute —
-`::: input disabled`. And a value can interpolate:
+`:input: disabled`. And a value can interpolate:
 
 ```sbmx
 :a: href=/posts/{{ to_string(post.id) }}
@@ -236,9 +250,9 @@ place. When the head grows, put the body back between the fences.
 in a head works here too.
 
 - **a `child=` and a body between the fences is refused**, not silently merged
-- a bare word is still a boolean attribute, exactly as in HTML: `::: input disabled`
+- a bare word is still a boolean attribute, exactly as in HTML: `:input: disabled`
 
-**`child`, not `value`.** `value` is a real HTML attribute — `::: input value={{ model.draft }}` is
+**`child`, not `value`.** `value` is a real HTML attribute — `:input: value={{ model.draft }}` is
 how a field is driven — so that is the one name it could not have been.
 
 ## Every attribute goes BEFORE `on:`
