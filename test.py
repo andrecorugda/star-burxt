@@ -645,6 +645,41 @@ def main():
     check("a value mixing literal and interpolation is unaffected",
           'html_attr("href", "/x/" + (to_string(n)) + "/y")' in mixed.stdout, mixed.stdout[-200:])
 
+    # ---- the SEVENTH costume: a comma inside a selector's parentheses --------------------------
+    #
+    # BMX found the class in a head, then in a slot, then in a link target — six instances across two
+    # repositories in a day. This is the seventh, and it was a wrong ANSWER rather than a refusal:
+    #
+    #     .x:not(.a .b, .c)   ->   .x:not(.a .b[data-s-c], .c)[data-s-c]
+    #
+    # The splitter cut mid-parenthesis, so the marker landed INSIDE the `:not()` and the rule excluded
+    # `.a .b[data-s-c]` instead of `.a .b`. Valid CSS, silent, wrong meaning — which is the shape all
+    # seven shared.
+    def sheet_for(css):
+        generate("===bx\nclass Model { n: Int }\nenum Msg { Nothing }\n"
+                 "pure function update(msg: Msg, m: Model) -> Model { return m; }\n===\n\n"
+                 "===style.local\n" + css + "\n===\n\n"
+                 ":props: model: Model\n:!props:\n\n:div: class=x\nhi\n:!div:\n")
+        path = os.path.join(work, "doc.css")
+        return open(path).read() if os.path.exists(path) else ""
+
+    for label, css, want in [
+        ("a comma inside `:not()` is not a separator",
+         ".x:not(.a .b, .c) { color: red; }", ".x[data-s-c]:not(.a .b, .c)"),
+        ("and the marker stays OUTSIDE the parentheses",
+         ".a:not(.b, .c) { color: red; }", ".a[data-s-c]:not(.b, .c)"),
+        ("a comma inside an attribute selector is protected",
+         '[title="a,b"] { color: red; }', '[title="a,b"][data-s-c]'),
+        ("a real selector list still splits",
+         ".a, .b { color: red; }", ".a[data-s-c], .b[data-s-c]"),
+        ("a descendant still stamps its last part",
+         ".card h1 { margin: 0; }", ".card h1[data-s-c]"),
+        ("and a pseudo-element still comes after the marker",
+         '.row::before { content: "}"; }', ".row[data-s-c]::before"),
+    ]:
+        got = sheet_for(css)
+        check(label, want in got, got[:160])
+
     shutil.rmtree(work, ignore_errors=True)
 
     if failures:

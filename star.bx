@@ -1298,8 +1298,28 @@ pure function star_scoped_selector(selector: String, marker: String) -> String {
     let mutable out: String = "";
     let mutable one: String = "";
     let mutable i: Int = 0;
+    // **A comma inside `:not(…)`, `:is(…)` or `[title="a,b"]` is not a separator**, and this is the
+    // seventh instance of one sentence: a delimiter rule has to know what protects a delimiter.
+    // Without the guard, `.x:not(.a .b, .c)` split mid-parenthesis and the marker landed INSIDE the
+    // `:not()`, so the rule excluded `.a .b[data-s-c]` rather than `.a .b`. Valid CSS, silent, and
+    // the wrong meaning — which is the shape every one of the seven had.
+    let mutable round: Int = 0;
+    let mutable square: Int = 0;
+    let mutable quote: Int = 0;
     while i <= len(selector) {
-        if i == len(selector) || byte_at(selector, i) == 44 {
+        if i < len(selector) && quote == 0 {
+            let c: Int = byte_at(selector, i);
+            if c == 40 { round += 1; }
+            if c == 41 { round -= 1; }
+            if c == 91 { square += 1; }
+            if c == 93 { square -= 1; }
+        }
+        if i < len(selector) && (byte_at(selector, i) == 34 || byte_at(selector, i) == 39) {
+            if quote == 0 { quote = byte_at(selector, i); }
+            else { if quote == byte_at(selector, i) { quote = 0; } }
+        }
+        if i == len(selector)
+            || (byte_at(selector, i) == 44 && round == 0 && square == 0 && quote == 0) {
             let trimmed: String = star_trim(one);
             if len(trimmed) > 0 {
                 if len(out) > 0 { out = out + ", "; }
@@ -1338,16 +1358,24 @@ pure function star_stamped(selector: String, marker: String) -> String {
     // Where the last compound selector starts: after the last space, `>`, `+` or `~`.
     let mutable from: Int = 0;
     let mutable i: Int = 0;
+    let mutable depth: Int = 0;
     while i < len(selector) {
         let c: Int = byte_at(selector, i);
-        if c == 32 || c == 62 || c == 43 || c == 126 { from = i + 1; }
+        // A combinator inside `:not(.a .b)` or `[title="a b"]` joins nothing at this level — the last
+        // compound is the whole `:not(…)`, not the `.b` inside it.
+        if c == 40 || c == 91 { depth += 1; }
+        if c == 41 || c == 93 { depth -= 1; }
+        if depth == 0 && (c == 32 || c == 62 || c == 43 || c == 126) { from = i + 1; }
         i += 1;
     }
     // The first `:` at or after that point is where a pseudo begins, and the marker goes before it.
     let mutable at: Int = len(selector);
     let mutable j: Int = from;
+    let mutable inside: Int = 0;
     while j < len(selector) {
-        if byte_at(selector, j) == 58 {
+        if byte_at(selector, j) == 40 || byte_at(selector, j) == 91 { inside += 1; }
+        if byte_at(selector, j) == 41 || byte_at(selector, j) == 93 { inside -= 1; }
+        if byte_at(selector, j) == 58 && inside == 0 {
             at = j;
             j = len(selector);
         } else {
