@@ -134,13 +134,17 @@ pre code .w4 { padding-left: 16ch; text-indent: -16ch; }
 pre code .w5 { padding-left: 20ch; text-indent: -20ch; }
 pre code .w6 { padding-left: 24ch; text-indent: -24ch; }
 
-/* ---- the gutter and the indent guides -------------------------------------------------------- *
+/* ---- the gutter ------------------------------------------------------------------------------- *
  *
  * **What a reader copies is still the document.** A line number drawn with `content:` is generated
- * content, which no browser puts on the clipboard, and a guide drawn with `background-image` is paint.
- * Neither is text — which is the same rule the display indentation above already follows, and the
- * reason a panel here can look like an editor without becoming a trap: copy it and you get the flat
- * source the format accepts.
+ * content, and no browser puts generated content on the clipboard — which is the same rule the display
+ * indentation above already follows, and the reason a panel here can look like an editor without
+ * becoming a trap: copy it and you get the flat source the format accepts.
+ *
+ * This section also drew indent guides until Andre saw them. The rules are gone; the sentence explaining
+ * them is gone with them, which took a grep rather than the deletion — **the prose describing a mechanism
+ * is not adjacent to the mechanism, so removing the code does not put its description in front of you.**
+ * That is the markup session's, and the third instance they had found today when they said it.
  *
  * Each line is an `inline-block` box with the newline OUTSIDE it, so the boxes stack without swallowing
  * the newline that separates them. */

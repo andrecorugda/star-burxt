@@ -158,7 +158,7 @@ check('`bmx` still paints', paint('bmx', ':p:\nhi\n:!p:').includes('t-fence'));
 const prose = paint('sbmx', 'Use ===style.local for this.\n');
 check('a section name mid-sentence is not a section', !prose.includes('t-section'), prose);
 
-// ---- the gutter and the guides ----------------------------------------------------------------
+// ---- the gutter --------------------------------------------------------------------------------
 //
 // **Every line gets a box or the numbering stops meaning anything.** Three exits from the wrapper had
 // none on the first attempt — a fence line, a tab-indented line, and the depth line — which would have

@@ -7,27 +7,19 @@
 /* The lockup. Taller than a wordmark would be because it IS a lockup: a comet, "star-", and the
  * burxt mark. At the default rule inherited from site.css it rendered small enough to read as a
  * favicon that had wandered into the topbar. */
-/* **The wordmark lives here, not in the bar.** `star-[b]` — Burxt's own `b` doing duty as the letter, so
- * star is that letter inside its own name rather than a separate identity with a family resemblance. At this
- * size the letters can be read as words, which is the whole reason a navbar gets the gear instead: thin
- * orange letterforms at 14px have no mass. */
-.lockup { margin: 0 0 1.4rem; }
-.lockup img { height: 44px; width: auto; display: block; }
-@media (max-width: 640px) { .lockup img { height: 34px; } }
-
-/* The gear beside the name. Full strength — no `opacity`, because orange at 62% is a different colour
- * rather than a quieter one. 24px because a gear reads shorter than a tall letter at the same height. */
-.bar .mark { display: inline-flex; align-items: center; gap: .5rem; }
-.bar .mark .glyph { height: 24px; width: 24px; display: block; }
-@media (max-width: 640px) { .bar .mark .glyph { height: 21px; width: 21px; } }
+/* **22px, because that is what the shared glyph measures.** `star-[b]`, `[b]mx` and the Burxt lockup all
+ * carry Burxt's `b` as the full ink height of their cropped box, so one height renders the same `b` in all
+ * three and the family lines up on the letter it has in common. Full strength — no `opacity`, because grey
+ * at 62% is quieter grey but orange at 62% is a different colour, and #E8502A goes muddy brown. */
+.bar .mark { display: inline-flex; align-items: center; }
 
 .bar .mark img {
-  height: 30px;
+  height: 22px;
   width: auto;
   display: block;
 }
 @media (max-width: 640px) {
-  .bar .mark img { height: 26px; }
+  .bar .mark img { height: 20px; }
 }
 
 .bar .mark .wordmark {
@@ -129,6 +121,10 @@
 .doc-body .showcase-note {
   margin: 0 0 2.2rem; font-size: .9rem; line-height: 1.55; color: var(--ink-2);
 }
+
+/* The Burxt lockup on the right of the bar, at the same 22px, so its `b` matches the mark on the left. */
+.bar .burxt img { height: 22px; width: auto; display: block; }
+@media (max-width: 640px) { .bar .burxt img { height: 20px; } }
 
 /* ---- the gallery shelf ------------------------------------------------------------------------- *
  *

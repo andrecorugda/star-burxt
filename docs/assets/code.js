@@ -247,9 +247,8 @@
     return indented(out, lines).join('\n');
   }
 
-  // **Every line gets a box, and the newline stays OUTSIDE it.** The gutter number and the indent guides
-  // both need somewhere to hang, and an inline run has no left edge to hang them from. An `inline-block`
-  // per line has one — and because the `\n` between two boxes is still real text, what a reader copies is
+  // **Every line gets a box, and the newline stays OUTSIDE it.** The gutter number needs somewhere to hang
+  // and an inline run has no left edge to hang it from. An `inline-block` per line has one — and because the `\n` between two boxes is still real text, what a reader copies is
   // unchanged: newlines are text, indentation is padding, and a number drawn by CSS is neither. A
   // block-level line would have swallowed the newline and left the clipboard depending on how a browser
   // rejoins block boundaries.
@@ -263,13 +262,18 @@
   // split cannot be `html.split('\n')`. Open tags are tracked and reopened on the next line, which is
   // what keeps a multi-line comment coloured all the way down instead of losing its colour after the
   // first line and leaving stray `</span>` behind.
-  // The guides need a depth per line, and `burxt` and `css` never go through the depth pass — they build
-  // one string and never see a line. Their indentation is REAL SPACES though, so the depth is readable
-  // straight off the source: the same `w` classes the markup uses for an author-indented document, which
-  // also give the line a hanging indent so a wrapped `return Model { … }` stays inside its own column.
+  // A depth per line for `burxt` and `css`, which never go through the depth pass — they build one string
+  // and never see a line. Their indentation is REAL SPACES, so the depth is readable straight off the
+  // source, and the `w` classes give the line a **hanging indent**: a wrapped `return Model { … }` stays
+  // inside its own column instead of restarting at zero.
   //
-  // Skipped when the line already carries a depth span, or a markup line would get two sets of guides at
-  // slightly different offsets — one from the padding star added and one from here.
+  // **This was added to size the indent guides, and the guides are gone.** It stays on its own merit — the
+  // markup half has had hanging wraps since before any of this and these two languages did not — but it is
+  // worth naming, because machinery kept past its only consumer becomes a floor under something nobody
+  // wants. Checked rather than assumed: `padding-left` with the matching negative `text-indent` leaves the
+  // first visual line exactly where the author's spaces put it and hangs only the continuations.
+  //
+  // Skipped when the line already carries a depth span, so a markup line is not indented twice.
   function lineBoxes(html, source) {
     const lines = [];
     let open = [];

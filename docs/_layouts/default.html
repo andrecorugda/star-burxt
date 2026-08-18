@@ -30,22 +30,16 @@
 <a class="skip" href="#top">Skip to content</a>
 
 <nav class="bar">
-  <!-- The mark: the gear, then the name.
-       Andre's report was "star icon in navbar did not update at all but you have it on burxt navbar" — he
-       was comparing this bar against burxt's, which shows the gear for star. What was here was the WORDMARK,
-       and the language session had already paid for that lesson twice: **a wordmark at nav size has no
-       mass.** Thin orange letterforms at 14px read as an afterthought beside a 22px lockup whatever the
-       colour, because an icon carries the orange as a SHAPE and survives being small in a way letters do not.
-       So the icon carries the identity here and the wordmark belongs on the landing page, where letters can
-       be read as words.
-
-       **24px against a 22px lockup, and that is measured rather than matched.** A gear carries less apparent
-       height than a tall `b` at the same pixel count — it has no full-height stroke — so equal numbers look
-       unequal. And no `opacity`: grey at 62% is quieter grey, but orange at 62% is a different colour, and
-       #E8502A came out muddy brown when they tried it. -->
+  <!-- The mark is the WORDMARK, at the size the shared glyph sets.
+       Two corrections from the language session, both of advice they had given me an hour earlier and both
+       paid for by Andre rejecting it on their site first. **The icons are for a FILE TREE**, where a name
+       cannot fit and a shape has to carry the identity; a navbar has room for names, and a wordmark IS the
+       name. And the size is derived rather than tried: in `star-[b]`, `[b]mx` and the Burxt lockup, **the
+       `b` glyph is the full ink height of the cropped box** — so `height: 22px` renders a 22px `b` in all
+       three, and they line up on the letter they have in common. Which is the whole branding decision
+       rather than a number that looked right: they guessed 15, then 19, then 24, and Andre rejected each. -->
   <a class="mark" href="{{ site.baseurl }}/">
-    <img class="glyph" src="{{ site.baseurl }}/assets/brand/sbmx-icon.svg" alt="" width="24" height="24">
-    <strong class="wordmark">star-burxt</strong>
+    <img src="{{ site.baseurl }}/assets/brand/starb_logo_transparent.svg" alt="star-burxt">
   </a>
 
 
@@ -82,7 +76,12 @@
     <a href="{{ site.baseurl }}/blocks.html"   class="{% if page.title == 'Blocks' %}here{% endif %}">Blocks</a>
     <a href="{{ site.baseurl }}/install.html"  class="{% if page.title == 'Set up' %}here{% endif %}">Set up</a>
     <a href="https://github.com/andrecorugda/star-burxt">GitHub</a>
-    <a class="burxt" href="https://burxt-lang.org">Burxt</a>
+    <!-- Andre: "on bmx and star there is a burxt nav at the right side, we need to replace it with burxt
+         wordmark with icon like you have on burxt navbar." The lockup is already 100% ink, so it needs no
+         crop, and 22px puts its `b` at the same height as the mark on the left. -->
+    <a class="burxt" href="https://burxt-lang.org">
+      <img src="{{ site.baseurl }}/assets/brand/burxt-lockup-light.png" alt="Burxt" width="1311" height="360">
+    </a>
   </span>
 </nav>
 

@@ -4,11 +4,6 @@ title: star-burxt
 description: "Write a page in Markdown. Get a real front-end app. star-burxt turns .sbmx documents into components that render, respond to clicks, hold state, fetch and route."
 ---
 
-<p class="lockup">
-  <img src="{{ site.baseurl }}/assets/brand/starb_logo_transparent.svg"
-       alt="star-burxt" width="319" height="97">
-</p>
-
 {% raw %}
 
 # Build a front end by writing a document
