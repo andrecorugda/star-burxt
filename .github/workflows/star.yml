@@ -236,6 +236,22 @@ jobs:
           ./star-build examples/Feed.sbmx feed /tmp/build
           node examples/drive-feed.mjs /tmp/build/feed.wasm
 
+      # **A selector nothing can match has no failure mode.** The CSS is valid, the class never appears,
+      # and the page looks like a design decision — so no compiler, test or screenshot reports it. Both of
+      # `Showcase.sbmx`'s were real: `.tab.on` meant every tab looked identical INCLUDING the one you were
+      # on, and `.empty` meant an empty list showed nothing at all. A stylesheet is a record of intent and
+      # those were two intents nobody wired.
+      #
+      # Conservative on purpose, because a false positive here is a rule somebody deletes: a class may
+      # arrive from a `class=` value or from a String in the `===bx` section, and a compound selector needs
+      # ONE string carrying BOTH names — which is the distinction that found `.tab.on`, since `on` alone
+      # appears in every `on:click` in the file.
+      - name: Every CSS rule can match something the markup renders
+        run: |
+          set -eux
+          burxt build tools/reachable.bx -o star-reachable
+          ./star-reachable
+
       # **A collection is a claim about coverage, and a claim nobody runs goes stale in the direction
       # nobody checks.** Either a document arrives and no row is added — so the table understates star and
       # the playground never shows it — or a row outlives its file and sends a reader nowhere. Both

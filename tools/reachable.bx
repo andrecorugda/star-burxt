@@ -1,0 +1,250 @@
+// Can anything this component renders match the CSS it carries?
+//
+//     burxt build tools/reachable.bx -o star-reachable
+//     ./star-reachable
+//
+// **A selector nothing can match has no failure mode.** The CSS is valid, the class simply never appears,
+// and the page looks like a design decision. Nothing reports it: not the compiler, which never sees the
+// stylesheet against the markup; not a test, which asserts what the page DOES; not a screenshot, which
+// shows what it looks like and not what it was meant to look like.
+//
+// Both of `Showcase.sbmx`'s were real and neither was noticed for months:
+//
+//   `.tab.on`  the component knew which view was showing and never told the page, so every tab looked
+//              identical INCLUDING the one you were looking at
+//   `.empty`   it was designed to say something when the list was empty and never rendered it, so an
+//              empty list showed nothing at all
+//
+// **A stylesheet is a record of intent**, and those were two intents that were never wired.
+//
+// The test is deliberately conservative, because a false positive here is a rule somebody deletes. A
+// class can arrive from a `class=` value in a head, or from a String in the `===bx` section — helpers
+// return `"pick done"` and `"tab on"`, so the literals are where a computed class lives. A compound
+// selector like `.tab.on` needs ONE string carrying BOTH names, which is exactly the distinction that
+// found it: `on` on its own appears in every `on:click` in the file.
+use "std/files.bx";
+use "std/string.bx";
+
+let PLACE: String = "examples";
+
+pure function mentions(haystack: String, needle: String) -> Bool {
+    if len(needle) == 0 { return true; }
+    let mutable i: Int = 0;
+    while i + len(needle) <= len(haystack) {
+        if substring(haystack, i, len(needle)) == needle { return true; }
+        i += 1;
+    }
+    return false;
+}
+
+pure function ends_with(text: String, suffix: String) -> Bool {
+    if len(suffix) > len(text) { return false; }
+    return substring(text, len(text) - len(suffix), len(suffix)) == suffix;
+}
+
+pure function is_name_byte(b: Int) -> Bool {
+    if b >= 97 && b <= 122 { return true; }
+    if b >= 65 && b <= 90 { return true; }
+    if b >= 48 && b <= 57 { return true; }
+    return b == 45 || b == 95;
+}
+
+// The `===style.local` and `===style.global` sections, with `/* … */` removed — a comment naming a
+// stylesheet was this gate's first false positive, because `examples/theme.css` ends in something that
+// looks exactly like a class.
+pure function stylesheet_of(source: String) -> String allocates {
+    let mutable out: String = "";
+    let mutable i: Int = 0;
+    let mutable inside: Bool = false;
+    while i < len(source) {
+        let mutable stop: Int = i;
+        while stop < len(source) && byte_at(source, stop) != 10 { stop += 1; }
+        let line: String = substring(source, i, stop - i);
+        if len(line) >= 3 && substring(line, 0, 3) == "===" {
+            if inside { inside = false; }
+            else {
+                if mentions(line, "===style") { inside = true; }
+            }
+        } else {
+            if inside { out = out + line + "\n"; }
+        }
+        i = stop + 1;
+    }
+    // Comments out, then declaration bodies out, so only selectors are left.
+    let mutable bare: String = "";
+    let mutable j: Int = 0;
+    let mutable in_comment: Bool = false;
+    let mutable depth: Int = 0;
+    while j < len(out) {
+        if !in_comment && j + 1 < len(out) && byte_at(out, j) == 47 && byte_at(out, j + 1) == 42 {
+            in_comment = true;
+            j += 2;
+            continue;
+        }
+        if in_comment {
+            if j + 1 < len(out) && byte_at(out, j) == 42 && byte_at(out, j + 1) == 47 {
+                in_comment = false;
+                j += 2;
+                continue;
+            }
+            j += 1;
+            continue;
+        }
+        if byte_at(out, j) == 123 { depth += 1; bare = bare + "\n"; j += 1; continue; }
+        if byte_at(out, j) == 125 { depth -= 1; bare = bare + "\n"; j += 1; continue; }
+        if depth == 0 { bare = bare + substring(out, j, 1); }
+        j += 1;
+    }
+    return bare;
+}
+
+// Every class name a class string carries, as ` a b c `, so a whole-token test is a substring test.
+pure function tokens_of(value: String) -> String allocates {
+    let mutable out: String = " ";
+    let mutable i: Int = 0;
+    while i < len(value) {
+        while i < len(value) && !is_name_byte(byte_at(value, i)) { i += 1; }
+        let from: Int = i;
+        while i < len(value) && is_name_byte(byte_at(value, i)) { i += 1; }
+        if i > from { out = out + substring(value, from, i - from) + " "; }
+    }
+    return out;
+}
+
+// The class strings a document can produce: every `class=` value, and every String literal in it — a
+// helper returning `"tab on"` is where a computed class actually lives.
+pure function class_strings(source: String) -> [String] allocates {
+    let mutable out: [String] = [];
+    let mutable i: Int = 0;
+    while i + 6 <= len(source) {
+        if substring(source, i, 6) == "class=" {
+            let mutable at: Int = i + 6;
+            if at < len(source) && byte_at(source, at) == 34 {
+                at += 1;
+                let from: Int = at;
+                while at < len(source) && byte_at(source, at) != 34 { at += 1; }
+                let a: Int = push(out, tokens_of(substring(source, from, at - from)));
+            } else {
+                let from: Int = at;
+                while at < len(source) && byte_at(source, at) != 32 && byte_at(source, at) != 10 { at += 1; }
+                let b: Int = push(out, tokens_of(substring(source, from, at - from)));
+            }
+            i = at;
+            continue;
+        }
+        if byte_at(source, i) == 34 {
+            let from: Int = i + 1;
+            let mutable at: Int = from;
+            while at < len(source) && byte_at(source, at) != 34 && byte_at(source, at) != 10 { at += 1; }
+            let c: Int = push(out, tokens_of(substring(source, from, at - from)));
+            i = at + 1;
+            continue;
+        }
+        i += 1;
+    }
+    return out;
+}
+
+// Is there ONE class string carrying every name in this compound selector?
+pure function reachable(needed: [String], strings: [String]) -> Bool {
+    let mutable s: Int = 0;
+    while s < len(strings) {
+        let mutable all: Bool = true;
+        let mutable n: Int = 0;
+        while n < len(needed) {
+            if !mentions(strings[s], " " + needed[n] + " ") { all = false; }
+            n += 1;
+        }
+        if all { return true; }
+        s += 1;
+    }
+    return false;
+}
+
+// The class names in one compound unit — `.tab.on` is two, `a.link` is one, `h1` is none.
+pure function classes_in(unit: String) -> [String] allocates {
+    let mutable out: [String] = [];
+    let mutable i: Int = 0;
+    while i < len(unit) {
+        if byte_at(unit, i) == 46 {
+            let from: Int = i + 1;
+            let mutable at: Int = from;
+            while at < len(unit) && is_name_byte(byte_at(unit, at)) { at += 1; }
+            if at > from { let a: Int = push(out, substring(unit, from, at - from)); }
+            i = at;
+            continue;
+        }
+        i += 1;
+    }
+    return out;
+}
+
+// Split the selector text on everything that separates one compound unit from the next.
+pure function units_of(selectors: String) -> [String] allocates {
+    let mutable out: [String] = [];
+    let mutable from: Int = 0;
+    let mutable i: Int = 0;
+    while i <= len(selectors) {
+        let mutable cut: Bool = i == len(selectors);
+        if !cut {
+            let b: Int = byte_at(selectors, i);
+            cut = b == 32 || b == 10 || b == 9 || b == 44 || b == 62 || b == 43 || b == 126;
+        }
+        if cut {
+            if i > from { let a: Int = push(out, substring(selectors, from, i - from)); }
+            from = i + 1;
+        }
+        i += 1;
+    }
+    return out;
+}
+
+let mutable failures: [String] = [];
+let mutable checked: Int = 0;
+
+match file_list_directory(PLACE) {
+    None => { print_error("cannot read " + PLACE); exit(2); }
+    Some(names) => {
+        let mutable n: Int = 0;
+        while n < len(names) {
+            if ends_with(names[n], ".sbmx") {
+                let source: String = file_read(PLACE + "/" + names[n]);
+                let sheet: String = stylesheet_of(source);
+                if len(sheet) > 0 {
+                    let strings: [String] = class_strings(source);
+                    let units: [String] = units_of(sheet);
+                    let mutable u: Int = 0;
+                    while u < len(units) {
+                        let needed: [String] = classes_in(units[u]);
+                        if len(needed) > 0 {
+                            checked += 1;
+                            if !reachable(needed, strings) {
+                                let x: Int = push(failures, names[n] + ": `" + units[u]
+                                    + "` cannot match anything this component renders. Either the markup"
+                                    + " never sets that class — a rule for a state that cannot happen —"
+                                    + " or the rule outlived the markup that used it");
+                            }
+                        }
+                        u += 1;
+                    }
+                }
+            }
+            n += 1;
+        }
+    }
+}
+
+if checked < 40 {
+    print_error("only " + to_string(checked) + " class selector(s) found across " + PLACE
+                + " — the stylesheet pattern has stopped matching, so this gate is asserting nothing");
+    exit(2);
+}
+
+if len(failures) > 0 {
+    print_error(to_string(len(failures)) + " unreachable selector(s):");
+    let mutable i: Int = 0;
+    while i < len(failures) { print_error("  " + failures[i]); i += 1; }
+    exit(1);
+}
+
+print(to_string(checked) + " class selector(s), every one reachable by something the markup renders");

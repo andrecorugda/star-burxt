@@ -101,6 +101,7 @@ run "every published limitation holds" ./star-limits
 run "the published surface is the real one" ./star-surface
 run "HTML's content model, both ways" ./star-content
 run "the collection and the directory agree" ./star-collection
+run "every CSS rule can match something" ./star-reachable
 
 printf '  %-46s' "every component checks clean"
 for doc in examples/*.sbmx; do

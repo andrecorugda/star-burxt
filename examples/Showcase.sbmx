@@ -222,6 +222,10 @@ function from_text(text: String) -> Model allocates {
 .clear { font: inherit; font-size: .8rem; color: var(--bx-brand); background: none;
          border: 0; padding: 0; cursor: pointer; }
 .clear:hover { text-decoration: underline; }
+/* **This rule was here before anything could match it.** The component was designed to say something
+ * when the list is empty and the markup never rendered it, so an empty list showed nothing at all — the
+ * second dead selector in this file, after `.tab.on`. A stylesheet is a record of intent, and two of this
+ * one's intents were never wired. `tools/reachable.bx` refuses that now. */
 .empty { padding: 1.6rem 1.3rem; color: var(--bx-ink-faint); text-align: center; border-bottom: 1px solid #f6f7fa; }
 ===
 
@@ -269,6 +273,10 @@ Done
 :!button:
 
 :!div:
+
+:if: len(shown(model)) == 0
+    :p: class=empty child={"Nothing here. Add something above."} :!p:
+:!if:
 
 :ul: class=list
 
