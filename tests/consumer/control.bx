@@ -1,0 +1,9 @@
+// **The control.** A probe that only shows a private name being refused proves nothing about
+// visibility — a typo is refused too, and so is a package that failed to resolve at all. This names
+// a PUBLISHED type across the same boundary in the same temporary package, so if it does not compile
+// then the boundary is broken in some other way and the refusal next door is not evidence.
+use "star/star.bx";
+
+let c: StarComponent = StarComponent { view: "", dispatch: "", handlers: [], code: "",
+                                       style: "", props: "", argument_list: "" };
+print("reached " + to_string(len(c.handlers)));

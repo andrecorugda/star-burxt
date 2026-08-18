@@ -31,7 +31,7 @@ One line in your project's `burxt.package`:
 
 ```
 dependency  star  https://github.com/andrecorugda/star-burxt  v0.2.0
-dependency  bmx   https://github.com/andrecorugda/bmx         burxt-0.7.1
+dependency  bmx   https://github.com/andrecorugda/bmx         burxt-0.12.0
 ```
 
 `burxt fetch` writes the exact commit into `burxt.lock`, so a checkout is reproducible.
@@ -51,15 +51,39 @@ Then `burxt fetch`. Full instructions: [star.burxt-lang.org/install](https://sta
 | `examples/*.sbmx` | components — `Hero`, `Todos`, `Feed`, `Served`, `App` and the rest |
 | `editors/` | the VS Code extension and the language server |
 | `tools/liquid.bx` | the site's guard, a Burxt program |
+| `tools/surface.bx` | builds a real dependent package and holds the README's promise to it |
+| `tests/consumer/` | what an outside package compiles — the whole job on the published names |
 | `tools/showcase.py`, `shoot.mjs` | the landing page's screenshot and its source panel |
 | `test.py` | the guarantees |
 | `verify-docs.py` | every example on the site — generated **and compiled** |
 | `docs/` | the site |
 
-## The supported surface is three names
+## The supported surface is six names
 
-`star_generate`, `StarComponent`, `StarHandler`. Everything else in `star.bx` is how it is done
-today, and the day one of those changes should not be the day somebody else's build breaks.
+```
+star_generate     a document → a component, or a refusal naming what is wrong
+star_resolve      which components a document imports, before generating it
+star_source_of    the component as Burxt source, ready to compile
+StarKnown         a component this one may use — `star_generate`'s third argument
+StarComponent     what `star_generate` returns
+StarHandler       one `on:` handler, inside `StarComponent.handlers`
+```
+
+**The old claim here was three names, and it was not merely understated — it was unusable.**
+`star_generate(source, name, known: [StarKnown])` cannot be called without `StarKnown`, and nothing
+reaches a document's imports without `star_resolve`. Somebody following that list would have got as
+far as writing the call and no further.
+
+**The compiler enforces this, and it is the package rather than the file that draws the line.** A
+declaration without `public` is unreachable from a package that depends on this one, and eight
+helpers here were `public` for no reason at all — `resolve.bx` is in the same package and never
+needed them. Reaching one now is a named refusal that ends *"the fix belongs in `star`, by writing
+`public` in front of its declaration"*, which is the failure mode worth having: loud, and a one-line
+fix that is a deliberate decision by whoever maintains the surface.
+
+`tools/surface.bx` builds a real dependent package and holds this to both directions — every name
+listed is reachable, every reachable name is listed, and the six alone are enough to do the whole
+job.
 
 ## Testing
 
@@ -71,6 +95,7 @@ python3 verify-docs.py   # every .sbmx example on the site — generated AND com
 node tools/paints.mjs    # the site colours burxt, bmx, sbmx and css
 
 burxt build tools/liquid.bx -o star-liquid && ./star-liquid   # the site: raw blocks, front matter, CNAME
+burxt build tools/surface.bx -o star-surface && ./star-surface # the surface, from a real dependent package
 ```
 
 `tools/check-all.sh` exists because **a pipeline's exit status is the last command's**: running

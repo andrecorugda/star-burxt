@@ -1,0 +1,387 @@
+// What star PROMISES to a package that depends on it, held to both directions.
+//
+//     burxt build tools/surface.bx -o star-surface
+//     ./star-surface
+//
+// **The README said three names and the three could not be used.** `star_generate`'s third
+// argument is `[StarKnown]`, so `StarKnown` is mandatory and was unlisted; nothing reaches a
+// document's imports without `star_resolve`, also unlisted. A reader following that list would have
+// written the call and stopped. An understated surface is not the harmless direction — it is a
+// consumer discovering the real API by reading source, and then depending on whatever they found.
+//
+// **The boundary is the PACKAGE, not the file, and the compiler does enforce it.** I measured this
+// the wrong way round first: a non-`public` function called from another FILE compiles, which looked
+// like proof that `public` is decoration, and I nearly reported that to the language session as a
+// defect. It is not one. `flag_public` is read only where a declaration carries an owning package,
+// so the enforcement lives at the dependency boundary — exactly where it belongs, and invisible to
+// any test that stays inside one tree. **The control matters more than the case:** the same probe
+// has to show a `public` name being ACCEPTED across the same boundary, or "refused" proves nothing
+// about visibility.
+//
+// **A refusal has to be refused for the STATED reason.** Aiming this probe at a name I had invented
+// produced `unknown function: star_element_is_known` — a refusal, convincing, and nothing to do with
+// visibility. A renamed helper would pass such a check forever. So the message must actually say the
+// name is not `public`, and the private name is DISCOVERED from `star.bx` rather than written here,
+// because a hardcoded one silently stops being private the day somebody publishes it.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+
+let README: String = "README.md";
+let SOURCES: [String] = ["star.bx", "resolve.bx"];
+let FIXTURES: String = "tests/consumer";
+
+pure function ends_with(text: String, suffix: String) -> Bool {
+    if len(suffix) > len(text) { return false; }
+    return substring(text, len(text) - len(suffix), len(suffix)) == suffix;
+}
+
+pure function starts_with(text: String, prefix: String) -> Bool {
+    if len(prefix) > len(text) { return false; }
+    return substring(text, 0, len(prefix)) == prefix;
+}
+
+pure function mentions(haystack: String, needle: String) -> Bool {
+    if len(needle) == 0 { return true; }
+    let mutable i: Int = 0;
+    while i + len(needle) <= len(haystack) {
+        if substring(haystack, i, len(needle)) == needle { return true; }
+        i += 1;
+    }
+    return false;
+}
+
+pure function lines_of(text: String) -> [String] allocates {
+    let mutable out: [String] = [];
+    let mutable i: Int = 0;
+    while i <= len(text) {
+        let mutable stop: Int = i;
+        while stop < len(text) && byte_at(text, stop) != 10 { stop += 1; }
+        let added: Int = push(out, substring(text, i, stop - i));
+        i = stop + 1;
+    }
+    return out;
+}
+
+// The first word of a line — the name in a `name  description` row.
+pure function first_word(line: String) -> String {
+    let t: String = string_trim(line);
+    let mutable i: Int = 0;
+    while i < len(t) && byte_at(t, i) != 32 && byte_at(t, i) != 9 { i += 1; }
+    return substring(t, 0, i);
+}
+
+// The names the README publishes: the fenced block under the surface heading.
+pure function claimed_names(readme: String) -> [String] allocates {
+    let rows: [String] = lines_of(readme);
+    let mutable out: [String] = [];
+    let mutable seen_heading: Bool = false;
+    let mutable inside: Bool = false;
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        let line: String = rows[i];
+        if starts_with(line, "## The supported surface") { seen_heading = true; }
+        else {
+            if seen_heading && starts_with(string_trim(line), "```") {
+                if inside { return out; }
+                inside = true;
+            } else {
+                if inside && len(string_trim(line)) > 0 {
+                    let added: Int = push(out, first_word(line));
+                }
+            }
+        }
+        i += 1;
+    }
+    return out;
+}
+
+// Everything a dependent package can reach: `public function`, `public class`, `public enum`.
+pure function public_names(source: String) -> [String] allocates {
+    let rows: [String] = lines_of(source);
+    let mutable out: [String] = [];
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        let line: String = rows[i];
+        if starts_with(line, "public ") {
+            let mutable rest: String = substring(line, 7, len(line) - 7);
+            if starts_with(rest, "function ") { rest = substring(rest, 9, len(rest) - 9); }
+            if starts_with(rest, "class ")    { rest = substring(rest, 6, len(rest) - 6); }
+            if starts_with(rest, "enum ")     { rest = substring(rest, 5, len(rest) - 5); }
+            let mutable stop: Int = 0;
+            while stop < len(rest) && byte_at(rest, stop) != 40 && byte_at(rest, stop) != 32
+                  && byte_at(rest, stop) != 60 { stop += 1; }
+            let name: String = substring(rest, 0, stop);
+            if len(name) > 0 { let added: Int = push(out, name); }
+        }
+        i += 1;
+    }
+    return out;
+}
+
+// A name that is NOT public, found rather than written down.
+pure function a_private_function(source: String) -> String {
+    let rows: [String] = lines_of(source);
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        let line: String = rows[i];
+        let mutable body: String = line;
+        if starts_with(body, "pure ") { body = substring(body, 5, len(body) - 5); }
+        if starts_with(body, "function star_") {
+            let rest: String = substring(body, 9, len(body) - 9);
+            let mutable stop: Int = 0;
+            while stop < len(rest) && byte_at(rest, stop) != 40 { stop += 1; }
+            return substring(rest, 0, stop);
+        }
+        i += 1;
+    }
+    return "";
+}
+
+pure function holds(names: [String], wanted: String) -> Bool {
+    let mutable i: Int = 0;
+    while i < len(names) {
+        if names[i] == wanted { return true; }
+        i += 1;
+    }
+    return false;
+}
+
+// A git tag as `burxt fetch` spells it in a directory name: every dot becomes a dash.
+pure function dashed(tag: String) -> String allocates {
+    let mutable out: String = "";
+    let mutable i: Int = 0;
+    while i < len(tag) {
+        if byte_at(tag, i) == 46 { out = out + "-"; } else { out = out + substring(tag, i, 1); }
+        i += 1;
+    }
+    return out;
+}
+
+// The value after `dependency  <name>` in a manifest: the url and the ref.
+pure function dependency_ref(manifest: String, name: String) -> String {
+    let rows: [String] = lines_of(manifest);
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        let line: String = string_trim(rows[i]);
+        if starts_with(line, "dependency") && mentions(line, " " + name + " ") {
+            let mutable last: Int = len(line);
+            while last > 0 && byte_at(line, last - 1) != 32 { last -= 1; }
+            return substring(line, last, len(line) - last);
+        }
+        i += 1;
+    }
+    return "";
+}
+
+// Every `burxt-N.N.N` a document names. Two dots required, so the dashed directory names under
+// `.burxt/packages` (`…-burxt-0-12-0`) are not mistaken for versions.
+pure function refs_in(text: String) -> [String] allocates {
+    let mutable out: [String] = [];
+    let mutable i: Int = 0;
+    while i + 6 <= len(text) {
+        if substring(text, i, 6) == "burxt-" {
+            let mutable stop: Int = i + 6;
+            let mutable dots: Int = 0;
+            while stop < len(text)
+                  && (byte_at(text, stop) == 46
+                      || (byte_at(text, stop) >= 48 && byte_at(text, stop) <= 57)) {
+                if byte_at(text, stop) == 46 { dots += 1; }
+                stop += 1;
+            }
+            if dots >= 2 { let added: Int = push(out, substring(text, i, stop - i)); }
+            i = stop;
+            continue;
+        }
+        i += 1;
+    }
+    return out;
+}
+
+let mutable failures: [String] = [];
+
+// ---- the two directions of the claim ------------------------------------------------------------
+let readme: String = file_read(README);
+let claimed: [String] = claimed_names(readme);
+if len(claimed) == 0 {
+    print_error("no fenced surface list under `## The supported surface` in " + README
+                + " — the pattern has stopped matching, so this gate is asserting nothing");
+    exit(2);
+}
+
+let mutable reachable: [String] = [];
+let mutable s: Int = 0;
+while s < len(SOURCES) {
+    let found: [String] = public_names(file_read(SOURCES[s]));
+    let mutable f: Int = 0;
+    while f < len(found) { let a: Int = push(reachable, found[f]); f += 1; }
+    s += 1;
+}
+
+let mutable c: Int = 0;
+while c < len(claimed) {
+    if !holds(reachable, claimed[c]) {
+        let x: Int = push(failures, README + " promises `" + claimed[c]
+            + "`, which is not `public` in " + SOURCES[0] + " or " + SOURCES[1]
+            + " — a dependent package cannot reach it");
+    }
+    c += 1;
+}
+let mutable r: Int = 0;
+while r < len(reachable) {
+    if !holds(claimed, reachable[r]) {
+        let x: Int = push(failures, "`" + reachable[r] + "` is `public`, so a dependent package can"
+            + " reach it, and " + README + " does not list it. Either promise it or drop the"
+            + " `public` — an unlisted reachable name is a promise nobody decided to make");
+    }
+    r += 1;
+}
+
+// ---- the pin the README hands a newcomer must be the pin star is built against ------------------
+let manifest: String = file_read("burxt.package");
+let pinned: String = dependency_ref(manifest, "bmx");
+if len(pinned) == 0 {
+    let x: Int = push(failures, "no `dependency bmx` in burxt.package");
+} else {
+    // **Every document that names a BMX ref must name the pinned one, and `tools/refs.py` cannot
+    // catch this.** That gate asks whether an advertised ref EXISTS, and `burxt-0.5.1` does exist —
+    // so `docs/install.md` advertised it for as long as it was published, resolving cleanly, while
+    // this repository was built against something four minor versions newer. Existence and currency
+    // are different properties and only one of them was being checked.
+    let mutable docs: [String] = ["README.md"];
+    match file_walk("docs") {
+        None => { let x: Int = push(failures, "cannot walk docs/"); }
+        Some(found) => {
+            let mutable f: Int = 0;
+            while f < len(found) {
+                if ends_with(found[f], ".md") { let a: Int = push(docs, found[f]); }
+                f += 1;
+            }
+        }
+    }
+    let mutable seen: Int = 0;
+    let mutable d: Int = 0;
+    while d < len(docs) {
+        let refs: [String] = refs_in(file_read(docs[d]));
+        let mutable r2: Int = 0;
+        while r2 < len(refs) {
+            seen += 1;
+            if refs[r2] != pinned {
+                let x: Int = push(failures, docs[d] + " names `" + refs[r2] + "` where burxt.package"
+                    + " pins `" + pinned + "`. A reader copying that line depends on a different BMX"
+                    + " than this repository is built against — and `tools/refs.py` passes it,"
+                    + " because a stale ref still resolves");
+            }
+            r2 += 1;
+        }
+        d += 1;
+    }
+    if seen == 0 {
+        let x: Int = push(failures, "no document names a BMX ref at all, so nothing tells a reader"
+            + " which one to depend on — or the pattern has stopped matching");
+    }
+}
+
+// ---- a REAL dependent package, which is the only place visibility is enforced ------------------
+//
+// Hermetic on purpose: both dependencies are paths, so this needs no network and cannot be broken
+// by a tag moving. BMX comes from the copy `burxt fetch` already placed in `.burxt/packages`.
+match os_cwd() {
+    None => { let x: Int = push(failures, "cannot read the working directory"); }
+    Some(root) => {
+        let wanted: String = dashed(pinned);
+        let mutable bmx_dir: String = "";
+        match file_list_directory(".burxt/packages") {
+            None => {
+                let x: Int = push(failures, "no .burxt/packages — run `burxt fetch` first");
+            }
+            Some(dirs) => {
+                let mutable d: Int = 0;
+                while d < len(dirs) {
+                    if ends_with(dirs[d], wanted) { bmx_dir = root + "/.burxt/packages/" + dirs[d]; }
+                    d += 1;
+                }
+                if len(bmx_dir) == 0 {
+                    let x: Int = push(failures, "no fetched BMX matching `" + wanted
+                        + "` in .burxt/packages — run `burxt fetch`");
+                }
+            }
+        }
+
+        if len(bmx_dir) > 0 {
+            match file_temp_directory("star-surface") {
+                None => { let x: Int = push(failures, "cannot make a temporary directory"); }
+                Some(probe) => {
+                    let wrote_manifest: Int = file_write(probe + "/burxt.package",
+                        "name        surface-probe\nversion     0.0.1\n\n"
+                        + "dependency  star  " + root + "\n"
+                        + "dependency  bmx   " + bmx_dir + "\n");
+                    let doc: Bool = file_copy("examples/Hero.sbmx", probe + "/Hero.sbmx");
+
+                    // (1) The listed names ALONE must do the whole job. The probe is a FILE rather
+                    //     than a string built here: Burxt interpolates `{`, so a generated program
+                    //     would need every brace escaped, and a fixture you can compile by hand is
+                    //     worth more than one you can only read through two layers of quoting.
+                    let one: Bool = file_copy(FIXTURES + "/job.bx", probe + "/job.bx");
+                    let built: String = os_capture("cd " + probe
+                        + " && burxt build job.bx -o job 2>&1");
+                    if !mentions(built, "compiled") {
+                        let x: Int = push(failures,
+                            "the published names are NOT enough to generate a component from outside"
+                            + " the package: " + string_trim(built));
+                    } else {
+                        let ran: String = os_capture("cd " + probe + " && ./job 2>&1");
+                        if !mentions(ran, "on:click") {
+                            let x: Int = push(failures, "a dependent package built against the"
+                                + " published surface, then produced nothing usable: "
+                                + string_trim(ran));
+                        }
+                    }
+
+                    // (2) The CONTROL, without which "refused" says nothing about visibility.
+                    let two: Bool = file_copy(FIXTURES + "/control.bx", probe + "/control.bx");
+                    let ctl: String = os_capture("cd " + probe
+                        + " && burxt build control.bx -o control 2>&1");
+                    if !mentions(ctl, "compiled") {
+                        let x: Int = push(failures, "the CONTROL failed, so this gate cannot tell a"
+                            + " visibility refusal from any other kind: " + string_trim(ctl));
+                    }
+
+                    // (3) And a name star kept to itself must be refused FOR THAT REASON. Generated,
+                    //     because the name is DISCOVERED — a hardcoded one stops being private the
+                    //     day somebody publishes it, and the probe would then pass by accident.
+                    let hidden: String = a_private_function(file_read("star.bx"));
+                    if len(hidden) == 0 {
+                        let x: Int = push(failures, "found no non-`public` function in star.bx,"
+                            + " which cannot be right — the probe has stopped matching");
+                    } else {
+                        let pr: Int = file_write(probe + "/private.bx",
+                            "use \"star/star.bx\";\nprint(to_string(" + hidden + "()));\n");
+                        let said: String = os_capture("cd " + probe
+                            + " && burxt build private.bx -o private 2>&1");
+                        if mentions(said, "compiled") {
+                            let x: Int = push(failures, "`" + hidden + "` is not `public` and a"
+                                + " dependent package reached it anyway");
+                        } else {
+                            if !mentions(said, "not `public`") {
+                                let x: Int = push(failures, "`" + hidden + "` was refused for some"
+                                    + " OTHER reason than visibility, so this proves nothing about"
+                                    + " the boundary: " + string_trim(said));
+                            }
+                        }
+                    }
+                    let gone: Bool = file_temp_release(probe);
+                }
+            }
+        }
+    }
+}
+
+if len(failures) > 0 {
+    print_error(to_string(len(failures)) + " problem(s):");
+    let mutable i: Int = 0;
+    while i < len(failures) { print_error("  " + failures[i]); i += 1; }
+    exit(1);
+}
+
+print(to_string(len(claimed)) + " published name(s), each reachable, and nothing reachable unpublished");

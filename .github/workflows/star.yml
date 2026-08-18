@@ -174,6 +174,18 @@ jobs:
           burxt build tools/limits.bx -o star-limits
           ./star-limits
 
+      # **star's README promised three names, and the three could not be used** — `star_generate`
+      # takes `[StarKnown]`, so `StarKnown` was mandatory and unlisted. This builds a REAL dependent
+      # package, because the package boundary is the only place `public` is enforced: a non-`public`
+      # function called from another file compiles fine, which looks like proof that the keyword is
+      # decoration and is not. It also carries its own control — a published name accepted across the
+      # same boundary — since a refusal alone could just as easily be a typo.
+      - name: The published surface is the one star actually has
+        run: |
+          set -eux
+          burxt build tools/surface.bx -o star-surface
+          ./star-surface
+
       - name: The editor configuration behaves
         run: node editors/vscode/config.mjs
 

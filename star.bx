@@ -1082,7 +1082,7 @@ pure function star_props(blocks: [Block]) -> String {
 // have to be lifted above the generated header, and the rest of the author's code placed after it.
 //
 // A `use` is recognised at the start of a line, which is where the language requires it anyway.
-public function star_imports_of(code: String) -> String {
+function star_imports_of(code: String) -> String {
     let mutable out: String = "";
     let width: Int = len(code);
     let mutable at: Int = 0;
@@ -1097,7 +1097,7 @@ public function star_imports_of(code: String) -> String {
     return out;
 }
 
-public function star_code_without_imports(code: String) -> String {
+function star_code_without_imports(code: String) -> String {
     let mutable out: String = "";
     let width: Int = len(code);
     let mutable at: Int = 0;
@@ -1169,7 +1169,7 @@ pure function star_at(source: String, offset: Int) -> String {
 
 // Small path helpers, here rather than in `std/path.bx`, because star's driver needs four of them
 // and a dependency for four functions is a dependency to keep in step for four functions.
-public function star_directory_of(path: String) -> String {
+function star_directory_of(path: String) -> String {
     let mutable cut: Int = 0 - 1;
     let mutable i: Int = 0;
     while i < len(path) {
@@ -1182,7 +1182,7 @@ public function star_directory_of(path: String) -> String {
     return substring(path, 0, cut + 1);
 }
 
-public function star_without_extension(path: String) -> String {
+function star_without_extension(path: String) -> String {
     let mutable cut: Int = len(path);
     let mutable i: Int = 0;
     while i < len(path) {
@@ -1192,7 +1192,7 @@ public function star_without_extension(path: String) -> String {
     return substring(path, 0, cut);
 }
 
-public function star_ends_with(text: String, suffix: String) -> Bool {
+function star_ends_with(text: String, suffix: String) -> Bool {
     if len(suffix) > len(text) {
         return false;
     }
@@ -1200,7 +1200,7 @@ public function star_ends_with(text: String, suffix: String) -> Bool {
 }
 
 // The path inside `use "..."`, or the empty String.
-public function star_quoted_path(line: String) -> String {
+function star_quoted_path(line: String) -> String {
     let mutable i: Int = 0;
     while i < len(line) && byte_at(line, i) != 34 {
         i += 1;
@@ -1218,7 +1218,7 @@ public function star_quoted_path(line: String) -> String {
 
 // `./Badge.sbmx` -> `Badge`. The BLOCK NAME an author writes, so the file name and the markup
 // cannot drift: renaming the file renames the block.
-public function star_component_name(target: String) -> String {
+function star_component_name(target: String) -> String {
     let base: String = substring(target, len(star_directory_of(target)),
                                  len(target) - len(star_directory_of(target)));
     return star_without_extension(base);
@@ -1226,7 +1226,7 @@ public function star_component_name(target: String) -> String {
 
 // The author's imports as the GENERATED file needs them: a `.sbmx` becomes the `.bx` it was
 // generated into, and everything else passes through.
-public function star_burxt_imports(code: String) -> String {
+function star_burxt_imports(code: String) -> String {
     let mutable out: String = "";
     let imports: String = star_imports_of(code);
     let mutable at: Int = 0;

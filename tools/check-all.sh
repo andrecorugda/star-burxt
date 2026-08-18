@@ -98,6 +98,7 @@ run "the editor configuration"       node editors/vscode/config.mjs
 run "the showcase is current"        python3 tools/showcase.py
 run "every advertised ref exists"    python3 tools/refs.py
 run "every published limitation holds" ./star-limits
+run "the published surface is the real one" ./star-surface
 
 printf '  %-46s' "every component checks clean"
 for doc in examples/*.sbmx; do

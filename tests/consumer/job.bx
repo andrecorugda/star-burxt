@@ -1,0 +1,22 @@
+// The whole job, from OUTSIDE the package: read a document, resolve what it imports, generate it,
+// and take the Burxt source back out. If star's published surface is enough for anything, it is
+// enough for this — and `tools/surface.bx` copies this file into a real dependent package to find
+// out, rather than trusting that the names in the README add up to a usable API.
+use "star/star.bx";
+use "star/resolve.bx";
+use "std/files.bx";
+
+match file_read_maybe("Hero.sbmx") {
+    None => { print_error("cannot read Hero.sbmx"); exit(2); }
+    Some(source) => {
+        let known: [StarKnown] = star_resolve("Hero.sbmx", source, false);
+        match star_generate(source, "hero", known) {
+            Error(why) => { print_error("refused: " + why); exit(1); }
+            Ok(component) => {
+                let code: String = star_source_of(component, "hero");
+                let one: StarHandler = component.handlers[0];
+                print(to_string(len(code)) + " bytes, first handler on:" + one.event);
+            }
+        }
+    }
+}
