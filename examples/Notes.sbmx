@@ -1,0 +1,102 @@
+===bx
+// A draft that remembers itself, and a caret put where the reader needs it.
+//
+// **The buttons are `child=save on:click=…`, and the order is not a preference.** A handler runs to the
+// end of the head, so `:button: on:click=Msg.Save save :!button:` reads `save` as part of the
+// EXPRESSION — and what you get is a Burxt syntax error pointing at a generated file you never wrote.
+// `child=` is the only way to give a one-liner a body, and it has to come before the `on:`.
+//
+// Two commands nothing else here uses. `Store`/`Load` is the browser's own storage, and `Focus` is the
+// one command that does not carry a tag — nothing comes back from putting a caret somewhere, so there
+// is nothing to deliver.
+use "std/string.bx";
+use "std/json.bx";
+
+class Model { text: String, status: String }
+enum Msg { Typed(String), Save, Restore, Clear }
+
+const SLOT: String = "star.note";
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Typed(v) => { return Model { text: v, status: "unsaved" }; }
+        Save    => { return Model { text: m.text, status: "saved" }; }
+        Restore => { return Model { text: m.text, status: "reading" }; }
+        Clear   => { return Model { text: "", status: "cleared" }; }
+    }
+}
+
+// Tag 3 is the stored draft coming back. `Save` and `Clear` need no tag: nothing arrives from writing.
+pure function commands(msg: Msg, m: Model) -> [StarCmd] allocates {
+    let mutable out: [StarCmd] = [];
+    match msg {
+        Typed(v) => { }
+        Save    => { let a: Int = push(out, StarCmd.Store(SLOT, m.text)); }
+        Restore => { let b: Int = push(out, StarCmd.Load(3, SLOT)); }
+        Clear   => {
+            let c: Int = push(out, StarCmd.Store(SLOT, ""));
+            let d: Int = push(out, StarCmd.Focus(".draft"));
+        }
+    }
+    return out;
+}
+
+// An empty slot is a real answer — nothing stored is not an error, so it says so rather than looking
+// like a failure.
+pure function arrived(tag: Int, value: String, m: Model) -> Model {
+    if tag == 3 {
+        if len(value) == 0 { return Model { text: m.text, status: "nothing stored" }; }
+        return Model { text: value, status: "restored" };
+    }
+    return m;
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable f: [Field] = [];
+    let a: Int = push(f, json_field("text", json_text(m.text)));
+    let b: Int = push(f, json_field("status", json_text(m.status)));
+    return json_render(json_object(f));
+}
+
+function from_text(text: String) -> Model {
+    let mutable body: String = "";
+    let mutable status: String = "new";
+    match json_parse(text) {
+        Error(e) => { }
+        Ok(v) => {
+            match json_at(v, "text") {
+                None => { }
+                Some(x) => { match json_as_text(x) { None => { } Some(t) => { body = t; } } }
+            }
+            match json_at(v, "status") {
+                None => { }
+                Some(x) => { match json_as_text(x) { None => { } Some(t) => { status = t; } } }
+            }
+        }
+    }
+    return Model { text: body, status: status };
+}
+===
+
+===style.local
+.draft { display: block; width: 22rem; height: 5rem; font: inherit; padding: .4rem .6rem;
+         border: 1px solid #cbd2dd; border-radius: 6px; }
+.bar   { margin: .6rem 0; display: flex; gap: .4rem; }
+.bar button { font: inherit; padding: .3rem .8rem; }
+.state { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; color: #6b7280; }
+===
+
+:props: model: Model
+:!props:
+
+:p: class=state child={model.status} :!p:
+
+:textarea: class=draft on:input=Msg.Typed(value)
+{{ model.text }}
+:!textarea:
+
+:div: class=bar
+    :button: child=save on:click=Msg.Save :!button:
+    :button: child=restore on:click=Msg.Restore :!button:
+    :button: child=clear on:click=Msg.Clear :!button:
+:!div:

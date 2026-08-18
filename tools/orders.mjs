@@ -22,7 +22,7 @@
 //
 // Before: `activeElement.value` was "two" with the caret clamped to 3. After: "THIRD" with the caret
 // still at 5, and the same NODE. Re-run it whenever this file changes.
-import { alignKeys } from '../examples/reconcile.js';
+import { alignKeys, patchNode } from '../examples/reconcile.js';
 
 let failures = 0;
 const check = (name, got, want) => {
@@ -129,5 +129,54 @@ const order = (p) => p.childNodes.map((n) => n.getAttribute('data-star-key') ?? 
         before.every((n, i) => live.childNodes[i] === n), true);
 }
 
-console.log(failures ? `\n${failures} failure(s)` : '\na keyed list ends up in the order the view asked for');
+// ---- what a form control's value follows -------------------------------------------------------
+//
+// **A `<textarea>`'s value is its CHILD CONTENT, not an attribute**, and this branch used to ask both
+// tags for a `value` attribute. A textarea rendered from `{{ model.text }}` has none, so a component
+// that loaded a saved draft reported "restored" with the field still EMPTY — the state right, the page
+// wrong, and a status line claiming success. Measured in a real browser before and after.
+//
+// What is checked here is the DECISION — assign on a difference, leave alone when equal, which is what
+// keeps the view from fighting the caret. The reason the rule is needed at all is a browser behaviour no
+// fake can honestly reproduce: a control's live value stops following its children the moment somebody
+// types. That half is browser-measured: `/x/notes`, type, save, wipe, restore, then type again and read
+// `selectionStart`.
+const field = (tag, { value = '', text = '', attrs = {} } = {}) => {
+  const node = { nodeType: 1, tagName: tag, value, childNodes: [], attrs: { ...attrs } };
+  node.textContent = text;
+  node.attributes = Object.entries(node.attrs).map(([name, v]) => ({ name, value: v }));
+  node.hasAttribute = (n) => Object.prototype.hasOwnProperty.call(node.attrs, n);
+  node.getAttribute = (n) => (node.hasAttribute(n) ? node.attrs[n] : null);
+  node.setAttribute = (n, v) => { node.attrs[n] = v; };
+  node.removeAttribute = (n) => { delete node.attrs[n]; };
+  return node;
+};
+
+{
+  const live = field('TEXTAREA', { value: '' });
+  patchNode(live, field('TEXTAREA', { text: 'restored draft' }));
+  check('a textarea takes its value from the child content', live.value, 'restored draft');
+}
+{
+  // The one that keeps the caret: the state and the field already agree, so nothing is written.
+  const live = field('TEXTAREA', { value: 'typed so far' });
+  let writes = 0;
+  Object.defineProperty(live, 'value', {
+    get: () => 'typed so far', set: () => { writes += 1; },
+  });
+  patchNode(live, field('TEXTAREA', { text: 'typed so far' }));
+  check('and it is NOT rewritten when it already agrees, so typing keeps the caret', writes, 0);
+}
+{
+  const live = field('INPUT', { value: 'old' });
+  patchNode(live, field('INPUT', { attrs: { value: 'new' } }));
+  check('an input still follows its value ATTRIBUTE', live.value, 'new');
+}
+{
+  const live = field('INPUT', { value: 'what the user typed' });
+  patchNode(live, field('INPUT', {}));
+  check('an input the view does not drive is left alone', live.value, 'what the user typed');
+}
+
+console.log(failures ? `\n${failures} failure(s)` : '\nthe reconciler moves what moved and drives what the view drives');
 process.exit(failures ? 1 : 0);

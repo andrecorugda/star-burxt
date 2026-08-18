@@ -118,7 +118,7 @@ export function alignKeys(oldParent, newParent) {
   }
 }
 
-function patchNode(oldNode, newNode) {
+export function patchNode(oldNode, newNode) {
   // A different kind of node, or a different tag, cannot be updated into the
   // other — replace it and accept that its identity is gone. That is the honest
   // case; the point of the rest is that it is the rare one.
@@ -150,10 +150,25 @@ function patchNode(oldNode, newNode) {
   // even when it does, the attribute is the DEFAULT rather than the current
   // value. So the field is left alone unless the view is explicitly driving it —
   // otherwise every keystroke would fight the user for the caret.
-  if (oldNode.tagName === 'INPUT' || oldNode.tagName === 'TEXTAREA') {
+  if (oldNode.tagName === 'INPUT') {
     if (newNode.hasAttribute('value') && oldNode.value !== newNode.getAttribute('value')) {
       oldNode.value = newNode.getAttribute('value');
     }
+  }
+
+  // **A `<textarea>`'s value is its CHILD CONTENT, not an attribute, and that is why restoring a draft
+  // did nothing.** This branch used to ask both tags for a `value` attribute; a textarea rendered from
+  // `{{ model.text }}` has none, so a component that loaded a saved note reported "restored" with the
+  // field still empty — the state was right and the page was not. Worse than a visible failure, because
+  // the status line said it had worked.
+  //
+  // Assigning only on a DIFFERENCE is what keeps this from fighting the caret: after a keystroke the
+  // state and the field already agree, so nothing is written. That is the same reason the `input` case
+  // above compares first, and the text is patched into the child node either way — this is about the
+  // DOM's live value, which stops following its children the moment somebody types.
+  if (oldNode.tagName === 'TEXTAREA') {
+    const wanted = newNode.textContent;
+    if (oldNode.value !== wanted) oldNode.value = wanted;
   }
 
   patchChildren(oldNode, newNode);
