@@ -95,7 +95,14 @@ run "the guarantees"                 python3 test.py
 run "every documented example"       python3 verify-docs.py
 run "the highlighter"                node tools/paints.mjs
 run "the editor configuration"       node editors/vscode/config.mjs
-run "the showcase is current"        python3 tools/showcase.py
+# **A check that REGENERATES the artefact it is verifying cannot see a stale one**, and this line said
+# "the showcase is current" while quietly making it current. CI had it right — generate, then `git diff`
+# — and the local runner did not, so a stale `showcase.html` could be committed and every local run would
+# report it fine. The markup session hit the same shape in a packer that stamped the time into a zip and
+# said the sentence better than I would: a check that overwrites the evidence one line before looking for it.
+run "the showcase is current"        bash -c 'python3 tools/showcase.py >/dev/null && git diff --exit-code -- docs/_includes/showcase.html'
+run "the gallery page is current"    bash -c 'node tools/gallery.mjs --include-only >/dev/null && git diff --exit-code -- docs/_includes/gallery.html'
+
 run "every advertised ref exists"    python3 tools/refs.py
 run "every published limitation holds" ./star-limits
 run "the published surface is the real one" ./star-surface

@@ -29,6 +29,21 @@
 //
 // It is marked in the message when it happens, so nobody trusts a position further than it deserves.
 import { spawnSync } from 'child_process';
+
+import { readFileSync } from 'node:fs';
+
+// **The version is READ, not written here.** It said `0.1.0` while the released tag was `v0.2.0`, and a
+// client logs this field — so every bug report about a diagnostic would have named the wrong version. The
+// markup session found the identical defect in theirs and told me to grep for it; the reason it survives is
+// that its own test asserts the serverInfo NAME, which is the half that never changes.
+//
+// `burxt.package` is the one place a version lives now, because **a version that is expensive to change is a
+// version that does not change** — theirs was in a filename and appeared in seven places.
+const VERSION = (() => {
+  const manifest = readFileSync(new URL('../../burxt.package', import.meta.url), 'utf8');
+  const found = /^version\s+(\S+)/m.exec(manifest);
+  return found ? found[1] : '0.0.0';
+})();
 import { writeFileSync, mkdtempSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -69,7 +84,7 @@ function handle(message) {
       // does not ask for yet.
       send({ jsonrpc: '2.0', id: message.id, result: {
         capabilities: { textDocumentSync: 1, diagnosticProvider: { interFileDependencies: true, workspaceDiagnostics: false } },
-        serverInfo: { name: 'star-lsp', version: '0.1.0' },
+        serverInfo: { name: 'star-lsp', version: VERSION },
       }});
       break;
     case 'shutdown':

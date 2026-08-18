@@ -1,7 +1,7 @@
 // ============================================================================
 // star.bx — star-burxt: what gives a BMX document life.
 //
-//     dependency  star  https://github.com/andrecorugda/star-burxt  v0.1.0
+//     dependency  star  https://github.com/andrecorugda/star-burxt  v0.2.0
 //     use "star/star.bx";
 //
 // BMX describes where an expression goes. It does not know what `for` means, or

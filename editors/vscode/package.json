@@ -2,7 +2,7 @@
   "name": "star-burxt",
   "displayName": "star-burxt",
   "description": "Syntax highlighting and diagnostics for .sbmx components.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "andrecorugda",
   "license": "MIT",
   "engines": {

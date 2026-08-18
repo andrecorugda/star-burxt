@@ -174,6 +174,26 @@ pure function dependency_ref(manifest: String, name: String) -> String {
     return "";
 }
 
+// Every `dependency star … vN.N.N` a document names — the ref at the end of a star install line.
+pure function star_refs_in(text: String) -> [String] allocates {
+    let mutable out: [String] = [];
+    let rows: [String] = lines_of(text);
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        let line: String = string_trim(rows[i]);
+        let mutable body: String = line;
+        if starts_with(body, "//") { body = string_trim(substring(body, 2, len(body) - 2)); }
+        if starts_with(body, "dependency") && mentions(body, " star ") {
+            let mutable last: Int = len(body);
+            while last > 0 && byte_at(body, last - 1) != 32 { last -= 1; }
+            let ref: String = substring(body, last, len(body) - last);
+            if len(ref) > 1 && byte_at(ref, 0) == 118 { let a: Int = push(out, ref); }
+        }
+        i += 1;
+    }
+    return out;
+}
+
 // Every `burxt-N.N.N` a document names. Two dots required, so the dashed directory names under
 // `.burxt/packages` (`…-burxt-0-12-0`) are not mistaken for versions.
 pure function refs_in(text: String) -> [String] allocates {
@@ -279,6 +299,75 @@ if len(pinned) == 0 {
     if seen == 0 {
         let x: Int = push(failures, "no document names a BMX ref at all, so nothing tells a reader"
             + " which one to depend on — or the pattern has stopped matching");
+    }
+}
+
+// ---- what the package says its VERSION is, in every place it says it ----------------------------
+//
+// **Four claims, and they disagreed.** `burxt.package` said 0.1.0, the extension said 0.1.0, the language
+// server reported 0.1.0 — and the released tag was `v0.2.0`. Worse, `star.bx`'s own header carried
+// `dependency star … v0.1.0`, so a reader copying the install line out of the framework's first four lines
+// got the PREVIOUS release while the README next to it said the current one.
+//
+// The markup session found the identical defect and sent me the two greps that find it. Their diagnosis is
+// the part worth keeping: **a version that is expensive to change is a version that does not change** —
+// theirs lived in a filename and appeared in seven places. So there is one place now, and this holds
+// everything else to it.
+pure function version_of(text: String) -> String allocates {
+    let rows: [String] = lines_of(text);
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        if starts_with(rows[i], "version") {
+            return string_trim(substring(rows[i], 7, len(rows[i]) - 7));
+        }
+        i += 1;
+    }
+    return "";
+}
+
+let declared: String = version_of(manifest);
+if len(declared) == 0 {
+    let x: Int = push(failures, "burxt.package declares no `version`, so nothing else has anything to agree"
+        + " with");
+} else {
+    // The released tag is the outside world's answer, so the manifest has to match it.
+    let tag: String = string_trim(os_capture("git describe --tags --abbrev=0 2>/dev/null"));
+    if len(tag) > 0 && tag != "v" + declared {
+        let x: Int = push(failures, "burxt.package says version `" + declared + "` and the latest tag is `"
+            + tag + "`. One of them is what a consumer gets and the other is what this repository believes");
+    }
+
+    // The extension is static metadata a tool reads, so it cannot read the manifest — it is checked instead.
+    let ext: String = file_read("editors/vscode/package.json");
+    if !mentions(ext, "\"version\": \"" + declared + "\"") {
+        let x: Int = push(failures, "editors/vscode/package.json does not declare `" + declared
+            + "`. VS Code decides whether to offer an update by comparing versions, so a stale one there is"
+            + " an editor telling somebody they are current when their grammar is not");
+    }
+
+    // **A version hardcoded where one could be read is the defect, so it is refused by shape.**
+    let lsp: String = file_read("editors/lsp/star-lsp.mjs");
+    if mentions(lsp, "version: '0.") || mentions(lsp, "version: \"0.") {
+        let x: Int = push(failures, "editors/lsp/star-lsp.mjs writes a version literal into `serverInfo`."
+            + " A client LOGS that field, so a bug report about a diagnostic would name the wrong version —"
+            + " read it from burxt.package instead");
+    }
+
+    // And every install line the repository shows, wherever it shows it.
+    let mutable places: [String] = ["README.md", "star.bx", "docs/install.md"];
+    let mutable q: Int = 0;
+    while q < len(places) {
+        let text: String = file_read(places[q]);
+        let refs: [String] = star_refs_in(text);
+        let mutable r3: Int = 0;
+        while r3 < len(refs) {
+            if len(tag) > 0 && refs[r3] != tag {
+                let x: Int = push(failures, places[q] + " tells a reader to depend on star `" + refs[r3]
+                    + "` and the current release is `" + tag + "`");
+            }
+            r3 += 1;
+        }
+        q += 1;
     }
 }
 

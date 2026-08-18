@@ -5,6 +5,7 @@
 // layers, and asserts the diagnostics come back on the right lines.
 //
 //     STAR_CHECK=./star-check node editors/lsp/drive-lsp.mjs
+import { readFileSync } from 'node:fs';
 import { spawn } from 'child_process';
 
 const server = spawn('node', ['editors/lsp/star-lsp.mjs'], {
@@ -48,6 +49,17 @@ const uri = `file://${process.cwd()}/examples/.lsp-probe.sbmx`;
 send({ id: 1, method: 'initialize', params: { capabilities: {} } });
 const ready = await reply();
 is('the server answers initialize', ready.result.serverInfo.name, 'star-lsp');
+
+// **This asserted the NAME, which is the half that never changes.** The server reported version `0.1.0`
+// while the released tag was `v0.2.0`, and a client LOGS this field — so every bug report about a diagnostic
+// would have named the wrong version, and nothing here would have said so. The markup session hit the
+// identical defect in theirs and told me to grep for it.
+{
+  const manifest = readFileSync(new URL('../../burxt.package', import.meta.url), 'utf8');
+  const wanted = /^version\s+(\S+)/m.exec(manifest)[1];
+  is('and reports the version the package declares, rather than one of its own',
+     ready.result.serverInfo.version, wanted);
+}
 is('it offers text sync', ready.result.capabilities.textDocumentSync, 1);
 
 async function diagnosticsFor(text) {
