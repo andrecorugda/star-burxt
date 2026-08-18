@@ -147,57 +147,79 @@
  *
  * Every example, captured running, beside the markup that made it.
  *
- * **No JavaScript, and that is not a purity point.** `scroll-snap` plus anchor links is the whole
- * mechanism: following a fragment scrolls the nearest scrollable ancestor, so the strip moves and snaps
- * with nothing running. A carousel that needs a script is a carousel that is blank while the script
- * loads — on the page whose argument is that the component is already there. */
+ * **The first version was a strip of sixteen named pills with the capture squeezed into 46% of the column.**
+ * Andre: *"is that what you call carousel? the actual capture is so small I can't even see the code, I need to
+ * scroll — and I need to press each button to change."* Both halves were too small because they were side by
+ * side in a column that is only about 880px wide, and sixteen pills is a table of contents rather than
+ * navigation.
+ *
+ * So: one slide is the full width of the column, the capture on top at the size it was taken, the code beneath
+ * it at reading size. Arrows and a counter do the moving; the dots stay for jumping. The strip is still a
+ * `scroll-snap` container, so it drags and swipes whether or not the script loads. */
 
-.shelf { margin: 2rem 0 2.6rem; }
+.shelf { margin: 1.6rem 0 2.6rem; }
 
-.shelf-dots {
-  display: flex; flex-wrap: wrap; gap: .3rem;
-  margin: 0 0 .8rem;
+.shelf-bar {
+  display: flex; align-items: center; gap: .6rem;
+  margin: 0 0 .7rem;
 }
+
+.shelf-arrow {
+  flex: 0 0 auto;
+  width: 2rem; height: 2rem;
+  font: 500 1.1rem/1 var(--sans, ui-sans-serif), system-ui, sans-serif;
+  color: var(--ink); background: #fff;
+  border: 1px solid var(--hair); border-radius: 50%;
+  cursor: pointer;
+}
+.shelf-arrow:hover:not(:disabled) { border-color: #E8502A; color: #E8502A; }
+.shelf-arrow:disabled { opacity: .35; cursor: default; }
+
+.shelf-dots { display: flex; flex-wrap: wrap; gap: .3rem; flex: 1 1 auto; }
 .shelf-dots a {
-  font-size: .78rem; padding: .22rem .55rem; border-radius: 999px;
-  color: var(--ink-2); background: #f1f3f7; text-decoration: none;
-  border: 1px solid transparent;
+  width: .5rem; height: .5rem; border-radius: 50%;
+  background: #d6dbe3; text-decoration: none;
 }
-.shelf-dots a:hover { background: #fff; border-color: var(--hair); color: var(--ink); }
-.shelf-dots a:target { background: #E8502A; color: #fff; }
+.shelf-dots a:hover { background: #9aa1ad; }
+.shelf-dots a.on { background: #E8502A; }
+
+.shelf-count { flex: 0 0 auto; font-size: .78rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
 .shelf-track {
-  display: flex; gap: 1rem;
+  display: flex; gap: 1.2rem;
   overflow-x: auto; overscroll-behavior-x: contain;
   scroll-snap-type: x mandatory;
-  scroll-padding: 0;
-  padding-bottom: .6rem;
+  scrollbar-width: none;
+  outline: none;
 }
+.shelf-track::-webkit-scrollbar { display: none; }
+.shelf-track.dragging { scroll-snap-type: none; cursor: grabbing; }
 
-.shelf-slide {
-  flex: 0 0 100%;
-  scroll-snap-align: start;
-  display: grid; grid-template-columns: minmax(0, 1fr);
-  gap: 1rem; align-items: start;
-}
-
-/* Side by side once there is room for both halves to be legible; stacked before that, because a code
- * panel narrower than its longest head is worse than a code panel below the picture. */
-@media (min-width: 60rem) {
-  .shelf-slide { grid-template-columns: minmax(0, 46%) minmax(0, 54%); }
-}
+/* One slide fills the column, so nothing is ever squeezed beside anything. */
+.shelf-slide { flex: 0 0 100%; scroll-snap-align: start; min-width: 0; }
 
 .shelf-shot { margin: 0; }
 .shelf-shot img {
   display: block; width: 100%; height: auto;
-  border: 1px solid var(--hair); border-radius: 10px;
-  background: #f6f7fa;
+  border: 1px solid var(--hair); border-radius: 10px 10px 0 0;
+  border-bottom: 0; background: #f6f7fa;
 }
-.shelf-shot figcaption {
-  margin-top: .5rem; font-size: .82rem; color: var(--ink-2); line-height: 1.5;
-}
-.shelf-shot figcaption strong { color: var(--ink); font-weight: 600; }
-.shelf-shot figcaption span::before { content: " — "; }
 
-.shelf-code { margin: 0; min-width: 0; }
-.shelf-code pre { margin: 0; max-height: 27rem; overflow: auto; }
+.shelf-code { margin: 0; }
+.shelf-code figcaption {
+  display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap;
+  padding: .5rem .8rem;
+  font-size: .78rem; color: var(--ink-2);
+  background: #fbfcfe; border: 1px solid var(--hair); border-bottom: 0;
+}
+.shelf-code figcaption strong {
+  color: var(--ink); font-weight: 600; font-family: ui-monospace, Menlo, monospace;
+}
+.shelf-code pre {
+  margin: 0; border-radius: 0 0 10px 10px;
+  max-height: 26rem; overflow: auto;
+}
+
+@media (max-width: 640px) {
+  .shelf-code pre { max-height: 18rem; }
+}
