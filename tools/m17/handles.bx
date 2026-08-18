@@ -1,0 +1,15 @@
+// A module with handle entry points, built for wasm so a HOST can pass handles Burxt cannot fabricate.
+class Model { label: String, count: Int }
+
+public function start(count: Int) -> Handle<Model> allocates {
+    return handle_of(Model { label: "m", count: count });
+}
+
+public function bump(h: Handle<Model>) -> Handle<Model> allocates {
+    let old: Model = handle_value(h);
+    return handle_of(Model { label: old.label, count: old.count + 1 });
+}
+
+public function read(h: Handle<Model>) -> Int {
+    return handle_value(h).count;
+}
