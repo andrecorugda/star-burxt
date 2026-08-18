@@ -149,6 +149,35 @@ match file_walk(root) {
                         at = stop + 1;
                         number += 1;
                     }
+                    // **An asset link with no version, which is the defect Andre reported three times.**
+                    // GitHub Pages serves the stylesheets with `cache-control: max-age=600`, so for ten
+                    // minutes after a deploy a reader holds FRESH HTML against a STALE stylesheet — and new
+                    // markup with old CSS is not "unstyled", it is images at intrinsic size overlapping the
+                    // page. He was right every time and my own screenshots looked correct, because a headless
+                    // browser starts with no cache. **The two artefacts have to change URL together.**
+                    //
+                    // Checked in the layouts only: a page's own content does not link stylesheets.
+                    if string_contains(path, "/_layouts/") {
+                        let mutable a: Int = 0;
+                        let mutable line_no: Int = 1;
+                        while a < len(text) {
+                            let mutable stop: Int = a;
+                            while stop < len(text) && byte_at(text, stop) != 10 { stop += 1; }
+                            let row: String = substring(text, a, stop - a);
+                            let links: Bool = string_contains(row, "/assets/")
+                                && (string_contains(row, ".css") || string_contains(row, ".js"));
+                            if links && !string_contains(row, "?v=") {
+                                let p3: Int = push(problems, path + ":" + to_string(line_no)
+                                    + ": an asset link with no `?v=`. For ten minutes after a deploy this"
+                                    + " page's HTML can reach a reader beside the PREVIOUS version of this"
+                                    + " file, and new markup with old CSS renders images at their intrinsic"
+                                    + " size:\n    " + string_trim(row));
+                            }
+                            a = stop + 1;
+                            line_no += 1;
+                        }
+                    }
+
                     // **A raw block left OPEN, which is the defect that reached the live site.**
                     // A generated include named the tag inside an HTML comment; a comment is no
                     // shelter, so Liquid opened a block nothing closed and everything after it
