@@ -67,6 +67,31 @@ check('no attribute carries an unresolved interpolation',
 check('a state-chosen class is the COMPUTED value, not the expression',
       /class="row(?: done)?"/.test(first), first);
 
+// **TAINTED STATE CANNOT INJECT AN ATTRIBUTE OR AN ELEMENT**, and nothing asserted this until BMX
+// found the same hazard class on their side — a document's info string reaching a `class`, true and
+// tested by nothing.
+//
+// star's vector is stronger than a document's own bytes: **state arrives through `from_text`**, which
+// means it comes off the page, which means it may come from a server or a user. If it reached an
+// attribute unescaped, a value of `" onload="steal()` would close the attribute and open an event
+// handler. The guarantee is real — `html_attr` and `html_render` escape — and the point of asserting
+// it is that a regression would be silent and would look like nothing at all.
+const evil = '" onload="steal()';
+{
+  const dirty = fakeRoot();
+  await mount({ wasm: bytes, root: dirty, component,
+                initial: JSON.stringify({ tasks: [{ id: 1, label: evil, done: false }], left: 1 }) });
+  const html = String(dirty.innerHTML);
+  check('tainted state cannot close an attribute',
+        !html.includes('onload="steal()') && !/<[^>]*\sonload=/.test(html), html.slice(0, 200));
+  check('and it is escaped rather than dropped, so the text still shows',
+        html.includes('&quot;') || html.includes('&#34;'), html.slice(0, 200));
+  // The CONTROL: the same run must contain the harmless part of the value, or this passes because
+  // the component rendered nothing at all.
+  check('the control: the row rendered, so there was something to escape',
+        html.includes('onload=') || html.includes('steal()'), html.slice(0, 200));
+}
+
 // Click the third row — the one that is not done — by its key. `fire` is the fake DOM's way of
 // delivering a real delegated event, so this goes through the driver's own listener rather than
 // around it.

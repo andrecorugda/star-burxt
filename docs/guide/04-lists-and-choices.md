@@ -160,35 +160,41 @@ rather than a section that never shows up.
 
 ## A limit, said plainly
 
-**You cannot put a button inside a `for` yet.**
+**A button inside a `for` works, and the row it belongs to arrives as `key`.**
 
 ```sbmx
 :for: line in lines key line.id
-:button: on:click=line.id
+:button: on:click=Msg.Remove(string_to_int(key, 0))
 remove
 :!button:
 :!for:
 ```
 
+The `key` on the `for` is what makes it possible. A handler runs *later*, on its own, with the
+component's state — and by then `line` is gone, because `line` only existed while the page was being
+drawn. So the row's identity travels to the handler as text, in the `key` parameter, which is the
+same expression the loop was given.
+
+**Which is why naming the loop variable in a handler is refused**, rather than compiling into
+something that looks right and is not:
+
 ```
-an `on:` handler inside a `for` is not supported yet
+STAR-E007: this handler names `line`, which does not exist where handlers run — a handler is
+a function of (handler, key, state), and `line` was bound while drawing the page. Use `key`,
+which carries this row's `key` expression as text: `string_to_int(key, 0)` for a number
 ```
 
-Here is the honest reason. A handler runs later, on its own, with the component's state — and by
-then `line` is gone, because `line` only existed while the page was being drawn. The framework
-would have to remember *which row* rather than *which value*, and that is designed but not built.
-
-**What to do instead**, today: drive the change from the whole list rather than from one row. A
-"clear completed" button outside the loop works. A per-row delete does not, yet.
-
-This is on [what's not built yet](../not-done.html) with everything else in that state.
+**A `for` containing a handler must have a `key`** — without one, every row would dispatch
+identically and the page would have no way to say which was clicked. That is STAR-E018, and it is a
+refusal rather than a silent wrong answer for the usual reason: a button that looks like it works and
+deletes the wrong row is worse than one that will not build.
 
 ## What you have
 
 - `:for: x in xs key x.id` — a row per item
 - a key identifies the row, and it matters more than it looks
 - `:if: condition` — a section that appears when it should
-- buttons do not go inside loops yet
+- a button inside a loop gets its row as `key`, and the `for` must have one
 
 **[Chapter 5: Money →](05-money.html)**
 

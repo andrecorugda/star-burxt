@@ -56,6 +56,17 @@ def examples():
                 yield (os.path.relpath(path, ROOT), text[:m.start()].count("\n") + 1, body)
 
 
+# Messages the pages quote that belong to the COMPILER, not to star. Declared rather than skipped by
+# a pattern: a pattern broad enough to skip Burxt's messages also skips star's own stale ones, which
+# is exactly how chapter 4 went on teaching a limitation that had been lifted.
+BURXT_MESSAGES = (
+    "unknown variable:",        # a slot naming something the props do not declare
+    "unknown field:",           # a slot naming a field the type does not have
+    "cannot apply",             # a handler mixing Int and String
+    "this multiplication",      # money narrowed without a rounding rule
+)
+
+
 def quoted_messages():
     r"""Every refusal the pages QUOTE must be one the generator still emits.
 
@@ -74,6 +85,56 @@ def quoted_messages():
     said = said.replace('\\`', '`').replace('\\"', '"')
 
     wrong = []
+
+    # **An error message quoted WITHOUT its code is invisible to the check above**, and that is how a
+    # stale one survived: chapter 4 quoted `an \`on:\` handler inside a \`for\` is not supported yet`,
+    # a message star stopped emitting when the limitation was lifted — teaching a restriction that no
+    # longer existed, in a sentence no token search would flag. So an untagged fenced block that reads
+    # like a refusal is checked too: it must be something star or the compiler still says.
+    for base, _, names in os.walk(os.path.join(ROOT, "docs")):
+        for n in sorted(names):
+            if not n.endswith(".md"):
+                continue
+            path = os.path.join(base, n)
+            text = open(path, encoding="utf-8").read()
+            # **Both fences consumed in one match, with the tag captured.** `^```\n(.*?)^``` ` looks
+            # right and is the bug this file's own comment warns about: a CLOSING fence is also
+            # ``` followed by a newline, so the pattern pairs it with the next OPENING fence and
+            # captures the prose between two examples. I reintroduced it here and it reported a
+            # paragraph as a stale error message, which is exactly what the comment predicted.
+            for m in re.finditer(r"^```(\w*)\n(.*?)^```", text, re.S | re.M):
+                if m.group(1):
+                    continue
+                block = m.group(2).strip()
+                looks_like_prose = ":" not in block.split("\n")[0] or "{{" in block
+                if not block or looks_like_prose:
+                    continue
+                # **A message the COMPILER emits is Burxt's, and cannot be checked from here — so it
+                # is DECLARED rather than skipped by a pattern.** The difference matters: a pattern
+                # that skips anything unrecognised also skips star's own stale messages, which is how
+                # the chapter-4 one survived. Each entry says why it is not star's.
+                if block.startswith("error:") or block.startswith("warning:"):
+                    continue
+                if any(block.startswith(k) for k in BURXT_MESSAGES):
+                    continue
+                if block.startswith("STAR-E"):
+                    continue          # the coded case, handled above
+                # **ANY sentence-fragment must be findable, not the longest run.** Two things defeat
+                # a single-run comparison: a page WRAPS a message across lines, and star assembles one
+                # from several functions — `star_event_hint` supplies the second half of E002 — so no
+                # long run exists in either form. Fragments are what survive both.
+                #
+                # The first attempt took the text before the first backtick, which for
+                # `an \`on:\` handler …` is "an": two characters, below the length floor, silently
+                # passing every message shaped that way. That is this guard failing in the way it
+                # exists to catch, which is why it is written down rather than quietly fixed.
+                flat = re.sub(r"[`\n]+", " ", block)
+                pieces = [f.strip() for f in re.split(r"[.—:]", flat) if len(f.strip()) > 14]
+                if pieces and not any(f in source for f in pieces):
+                    wrong.append("%s:%d quotes a message star does not emit: %r"
+                                 % (os.path.relpath(path, ROOT),
+                                    text[:m.start()].count("\n") + 1, pieces[0][:56]))
+
     for base, _, names in os.walk(os.path.join(ROOT, "docs")):
         for n in sorted(names):
             if not n.endswith(".md"):
@@ -133,7 +194,12 @@ def main():
         "type here": "STAR-E004",
         "# Click me": "STAR-E005",
         ":if: ready key": "STAR-E006",
-        "remove": "STAR-E007",
+        # **Precise, not a word that could occur anywhere.** `"remove"` lived here and matched any
+        # example containing it — including, once
+        # chapter 4 stopped teaching a limitation that had been lifted, a CORRECT example. A marker
+        # loose enough to catch a working document is a marker that will eventually demand a refusal
+        # from one. `on:click=line.id` names the handler that IS refused and nothing else.
+        "on:click=line.id": "STAR-E007",
         "Msg.Toggle(todo.id)": "STAR-E007",
         "# A component with nothing declared": "STAR-E003",
     }

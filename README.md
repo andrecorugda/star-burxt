@@ -62,12 +62,19 @@ today, and the day one of those changes should not be the day somebody else's bu
 ## Testing
 
 ```sh
+./tools/check-all.sh     # everything, and it EXITS NON-ZERO when something fails
+
 python3 test.py          # the guarantees. The ACCEPTING case runs first and its failure is fatal.
 python3 verify-docs.py   # every .sbmx example on the site — generated AND compiled
 node tools/paints.mjs    # the site colours burxt, bmx, sbmx and css
 
 burxt build tools/liquid.bx -o star-liquid && ./star-liquid   # the site: raw blocks, front matter, CNAME
 ```
+
+`tools/check-all.sh` exists because **a pipeline's exit status is the last command's**: running
+`python3 test.py | tail -1` reports whether `tail` succeeded, so `set -e` never sees a failing suite.
+Three failures sat visible-but-unread that way. A verification script that cannot fail is the same
+defect this project keeps finding elsewhere, in the thing doing the finding.
 
 `test.py` is mostly refusals, and a suite of nothing but refusals is satisfied by a generator that
 refuses everything — so the accepting case runs first and nothing below it means anything if it

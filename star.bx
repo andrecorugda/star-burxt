@@ -1864,6 +1864,39 @@ pure function star_trailing_attribute(expr: String) -> Option<String> {
 }
 
 // A value with its surrounding quotes removed, if it has a matched pair.
+// Is there a `"` at the value's TOP LEVEL — outside any `{{ … }}` or `{ … }`?
+//
+// **The first version asked only whether a quote appeared anywhere, and that refused
+// `class={{ pick("\}\}", n) }}`** — a quote inside an interpolation, which is ordinary Burxt. So a
+// fix for a class of false refusals introduced one, and star's own suite caught it within the hour.
+// The rule is the same as everywhere else in this file: a delimiter is only a delimiter where nothing
+// protects it.
+pure function star_bare_quote(value: String) -> Bool {
+    let mutable i: Int = 0;
+    let mutable depth: Int = 0;
+    while i < len(value) {
+        if byte_at(value, i) == 34 {
+            // A quote at the top level is the mistake this refuses. A quote INSIDE braces opens a
+            // string, and the string is then skipped whole — because the `\}\}` in
+            // `{{ pick("\}\}", n) }}` would otherwise close the interpolation from inside a literal
+            // and make the next quote look bare. The counter needed the same protection rule as the
+            // scanners, which is the point at which "state it once" stopped being advice.
+            if depth <= 0 { return true; }
+            i += 1;
+            while i < len(value) && byte_at(value, i) != 34 {
+                if byte_at(value, i) == 92 && i + 1 < len(value) { i += 1; }
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+        if byte_at(value, i) == 123 { depth += 1; }
+        if byte_at(value, i) == 125 { depth -= 1; }
+        i += 1;
+    }
+    return false;
+}
+
 pure function star_unquoted(raw: String) -> String {
     if len(raw) >= 2 && byte_at(raw, 0) == 34 && byte_at(raw, len(raw) - 1) == 34 {
         return substring(raw, 1, len(raw) - 2);
@@ -2024,6 +2057,14 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
                     i += 1;
                 }
                 let written_value: String = substring(head, from, i - from);
+                // **A quote inside an UNQUOTED value is refused here, or the compiler refuses it.**
+                // It used to emit `html_attr("class", "x" onload="steal()")` — a Burxt syntax error
+                // about generated code, pointing at a line the author never wrote. Safe, since it
+                // never compiles, and useless, since the message is about somebody else's file.
+                if star_bare_quote(written_value) {
+                    return Result.Error("STAR-E024: the value of `" + name + "` has a quote in it but"
+                        + " does not start with one. Wrap the whole value: `" + name + "=\"…\"`");
+                }
                 // **A single-brace value in an attribute WORKS BY ACCIDENT, so it is refused.**
                 // `class={mark(x)}` reaches Burxt as the string literal `"{mark(x)}"` and produces
                 // the right class only because Burxt interpolates braces inside its own string
