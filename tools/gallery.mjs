@@ -25,6 +25,9 @@ const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 const WORK = join(tmpdir(), 'star-gallery');
 const SHOTS = join(ROOT, 'docs', 'assets', 'gallery');
 const WIDTH = 720, HEIGHT = 470;
+// `--include-only` rewrites the page from the captures already on disk. The capture pass takes minutes and
+// the include is the half that changes when the markup or the wording does.
+const INCLUDE_ONLY = process.argv.includes('--include-only');
 
 const chrome = () => {
   // A CI runner has one on PATH; this machine has them in a cache. Both, because a tool that only works
@@ -97,7 +100,7 @@ const shown = names.filter(mountable);
 console.log(`${shown.length} of ${names.length} components are mountable on their own`);
 if (skipped.length) console.log(`  not in the carousel, and each is a CHILD component: ${skipped.join(', ')}`);
 
-for (const name of shown) {
+for (const name of INCLUDE_ONLY ? [] : shown) {
   const low = name.toLowerCase();
   execFileSync(join(ROOT, 'star-build'), [`examples/${name}.sbmx`, low, WORK],
                { cwd: ROOT, stdio: 'pipe' });
@@ -156,7 +159,7 @@ const run = (args, capture) => new Promise((resolve) => {
 });
 
 let failures = 0;
-for (const name of shown) {
+for (const name of INCLUDE_ONLY ? [] : shown) {
   const low = name.toLowerCase();
   const url = `http://127.0.0.1:${port}/${low}.html`;
   const flags = ['--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
@@ -242,7 +245,11 @@ const slides = shown.map((name) => {
       <figcaption><strong>${name}.sbmx</strong> <span>${escape(reasons[name] || '')}</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">${escape(markup(name))}</code></pre>
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">${escape(markup(name))}</code></pre>{% endraw %}
     </figure>
   </section>`;
 }).join('\n');
@@ -263,5 +270,9 @@ ${slides}
   </div>
 </div>
 `);
-console.log(`\n${shown.length} captures, every one verified against the page it came from`);
+// **Say which run this was.** `--include-only` printed "16 captures, every one verified" while capturing
+// nothing, which is the exact shape of claim this tool exists to refuse.
+console.log(INCLUDE_ONLY
+  ? `\nreused ${shown.length} captures already on disk — nothing was re-captured or re-verified`
+  : `\n${shown.length} captures, every one verified against the page it came from`);
 console.log('wrote docs/_includes/gallery.html');

@@ -28,7 +28,11 @@
       <figcaption><strong>Todos.sbmx</strong> <span>a list, a text field, and state carried as text</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 :div: class=bx-card
@@ -52,7 +56,7 @@
     :div: class=bx-row
         :button: class="bx-btn bx-btn-primary" child={"add one"} on:click=Msg.Add :!button:
     :!div:
-:!div:</code></pre>
+:!div:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-form">
@@ -62,7 +66,11 @@
       <figcaption><strong>Form.sbmx</strong> <span>`on:submit`, `on:input`, and a field the view drives</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 :div: class=bx-card
@@ -84,7 +92,7 @@
     :p: class=bx-muted
     draft: {{ model.draft }} — last saved: {{ model.saved }}
     :!p:
-:!div:</code></pre>
+:!div:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-hero">
@@ -94,7 +102,11 @@
       <figcaption><strong>Hero.sbmx</strong> <span>the landing page's component: a keyed `:for:`, `===style.local`, a pseudo-element checkbox</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 :section: class=card
@@ -105,7 +117,7 @@
             {{ task.label }}
         :!button:
     :!for:
-:!section:</code></pre>
+:!section:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-showcase">
@@ -115,7 +127,11 @@
       <figcaption><strong>Showcase.sbmx</strong> <span>the biggest one — every block form on one page</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 :section: class=card
@@ -199,7 +215,7 @@ Clear done
 
 :!div:
 
-:!section:</code></pre>
+:!section:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-served">
@@ -209,7 +225,11 @@ Clear done
       <figcaption><strong>Served.sbmx</strong> <span>`load(request)`, so the page is rendered where the data is</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 # Hello {{ model.user }}
@@ -220,7 +240,7 @@ Clear done
 
 :button: on:click=Msg.Clear
 clear
-:!button:</code></pre>
+:!button:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-feed">
@@ -230,7 +250,11 @@ clear
       <figcaption><strong>Feed.sbmx</strong> <span>fetching, polling with `after`, and a subscription that stops itself</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 # Feed — {{ to_string(model.items) }} items
@@ -241,7 +265,7 @@ refresh
 
 :button: on:click=Msg.TogglePolling
 toggle polling
-:!button:</code></pre>
+:!button:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-poster">
@@ -251,14 +275,18 @@ toggle polling
       <figcaption><strong>Poster.sbmx</strong> <span>`StarCmd.Send` — saving to a server that enforces CSRF</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 # Status — {{ model.status }}
 
 :button: on:click=Msg.Save
 save
-:!button:</code></pre>
+:!button:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-echo">
@@ -268,7 +296,11 @@ save
       <figcaption><strong>Echo.sbmx</strong> <span>what every event kind gives you as `value`, one element per channel</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 # Last — {{ model.last }}
@@ -286,7 +318,7 @@ wheel here
 
 :div: class=keys on:keydown=Msg.Got(value)
 type here
-:!div:</code></pre>
+:!div:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-rows">
@@ -296,7 +328,11 @@ type here
       <figcaption><strong>Rows.sbmx</strong> <span>a keyed list whose rows hold focus, reordered while you type in one</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 :div: class=bx-card
@@ -319,7 +355,7 @@ type here
             :button: class="bx-btn lift" child={"move up"} on:click=Msg.Lift(string_to_int(key, 0)) :!button:
         :!div:
     :!for:
-:!div:</code></pre>
+:!div:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-grid">
@@ -329,7 +365,11 @@ type here
       <figcaption><strong>Grid.sbmx</strong> <span>a **nested `:for:`** — a loop inside a loop, and which key wins</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 :div: class=bx-card
@@ -352,7 +392,7 @@ type here
             :!div:
         :!for:
     :!div:
-:!div:</code></pre>
+:!div:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-choices">
@@ -362,7 +402,11 @@ type here
       <figcaption><strong>Choices.sbmx</strong> <span>every form control: select, radio, checkbox, textarea</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 :div: class=bx-card
@@ -409,7 +453,7 @@ type here
         {{ model.note }}
         :!textarea:
     :!div:
-:!div:</code></pre>
+:!div:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-notes">
@@ -419,7 +463,11 @@ type here
       <figcaption><strong>Notes.sbmx</strong> <span>`Store`, `Load` and `Focus` — the browser's own storage, and a caret</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 :div: class=bx-card
@@ -444,7 +492,7 @@ type here
     It survives a reload — `Store` and `Load` are the browser's own storage, and `clear` puts the caret
     back in the field.
     :!p:
-:!div:</code></pre>
+:!div:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-clock">
@@ -454,7 +502,11 @@ type here
       <figcaption><strong>Clock.sbmx</strong> <span>a `pure` view cannot read a clock, so a tick asks the server</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 :div: class=bx-card
@@ -473,7 +525,7 @@ type here
     A `pure` view cannot read a clock, and a tick carries no payload — so the time comes from where time
     lives.
     :!p:
-:!div:</code></pre>
+:!div:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-snake">
@@ -483,7 +535,11 @@ type here
       <figcaption><strong>Snake.sbmx</strong> <span>a game: a tick, four global keys, a list that moves every frame</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 :div: class=bx-card
@@ -507,7 +563,7 @@ type here
     :div: class=bx-row
         :button: class="bx-btn bx-btn-primary" child={"new game"} on:click=Msg.Again :!button:
     :!div:
-:!div:</code></pre>
+:!div:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-cart">
@@ -517,7 +573,11 @@ type here
       <figcaption><strong>Cart.sbmx</strong> <span>money: `Decimal&lt;2&gt;`, a percent literal, and `money_split` placing the odd penny</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 :div: class=bx-card
@@ -557,7 +617,7 @@ type here
         :button: class=bx-btn child={"three ways"} on:click=Msg.Split(3) :!button:
     :!div:
     :p: class="shares bx-mono" child={shares(model)} :!p:
-:!div:</code></pre>
+:!div:</code></pre>{% endraw %}
     </figure>
   </section>
   <section class="shelf-slide" id="shelf-board">
@@ -567,7 +627,11 @@ type here
       <figcaption><strong>Board.sbmx</strong> <span>noughts and crosses: rules as a pure function, a winner derived rather than trusted</span></figcaption>
     </figure>
     <figure class="shelf-code">
-      <pre><code class="language-sbmx">:props: model: Model
+      <!-- Wrapped in raw, or Jekyll eats the markup: a double brace is a slot in a star document and a
+           Liquid expression to Jekyll, so an unwrapped panel either fails the build or renders the wrong
+           thing silently. tools/liquid.bx caught it the moment the page was generated, which is the gate
+           earning its place — I had already pushed. -->
+      {% raw %}<pre><code class="language-sbmx">:props: model: Model
 :!props:
 
 :div: class=bx-card
@@ -587,7 +651,7 @@ type here
     :div: class=bx-row
         :button: class=bx-btn child={"new game"} on:click=Msg.Again :!button:
     :!div:
-:!div:</code></pre>
+:!div:</code></pre>{% endraw %}
     </figure>
   </section>
   </div>
