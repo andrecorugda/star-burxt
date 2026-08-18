@@ -236,6 +236,19 @@ jobs:
           ./star-build examples/Feed.sbmx feed /tmp/build
           node examples/drive-feed.mjs /tmp/build/feed.wasm
 
+      # **What a component RECEIVES from an event, one channel at a time.** The fake DOM pinned
+      # `clientX` to `undefined` and never supplied `clientY`, so every pointer event took the empty
+      # arm of the driver's `valueOf` and the coordinate path had no coverage to lose. Proved by
+      # breaking the subject: swapping x for y and deleting the rounding broke NOTHING across five test
+      # programs. Third instance of one shape here — a stub that discards what the code reads, which a
+      # search for unused parameters cannot find, because the parameter is absent from the signature
+      # rather than unused.
+      - name: Every event channel carries what the component reads
+        run: |
+          set -eux
+          ./star-build examples/Echo.sbmx echo /tmp/build
+          node tools/values.mjs /tmp/build/echo.wasm
+
       # **What a SERVER receives, at a real HTTP server rather than a stub.** `drive-feed.mjs` fakes
       # the browser with `globalThis.fetch = (url) => …` — one parameter, so the options object
       # carrying method, body and headers goes on the floor. Commands have been tested since they

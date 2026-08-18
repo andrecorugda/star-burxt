@@ -1,0 +1,57 @@
+===bx
+// What a component RECEIVES from an event — one element per channel.
+//
+// The driver turns each event kind into one text `value`: a pointer gives `"x,y"`, a key gives the
+// key, a wheel gives its delta, an input gives what is typed. **None of it was tested**, because the
+// fake DOM pinned `clientX` to `undefined` and never supplied `clientY` at all — so every pointer
+// event took the empty branch and the coordinate path had no coverage to lose.
+use "std/string.bx";
+use "std/json.bx";
+
+class Model { last: String }
+enum Msg { Got(String) }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg { Got(v) => { return Model { last: v }; } }
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable f: [Field] = [];
+    let a: Int = push(f, json_field("last", json_text(m.last)));
+    return json_render(json_object(f));
+}
+
+function from_text(text: String) -> Model {
+    let mutable last: String = "";
+    match json_parse(text) {
+        Error(e) => { }
+        Ok(v) => {
+            match json_at(v, "last") {
+                None => { }
+                Some(x) => { match json_as_text(x) { None => { } Some(t) => { last = t; } } }
+            }
+        }
+    }
+    return Model { last: last };
+}
+===
+
+:props: model: Model
+:!props:
+
+# Last — {{ model.last }}
+
+:button: class=tap on:click=Msg.Got(value)
+tap
+:!button:
+
+:input: type=text class=typed on:input=Msg.Got(value)
+:!input:
+
+:div: class=wheel on:wheel=Msg.Got(value)
+wheel here
+:!div:
+
+:div: class=keys on:keydown=Msg.Got(value)
+type here
+:!div:

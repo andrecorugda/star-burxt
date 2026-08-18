@@ -23,9 +23,18 @@ export function fakeRoot() {
     // it. That is what a real browser then did: `on:click` ran on `mouseover`. It defaults to `kind`
     // because a test firing the event an element asked for is the ordinary case; pass them
     // DIFFERENTLY to check that the wrong event is ignored.
-    fire(kind, handler, { key = null, value = '', on = kind } = {}) {
+    // `at`, `checked`, `scroll`, `deltaY`, `animationName` and `propertyName` exist because the
+    // driver READS them, and pinning any of them to a constant deletes a branch from every test at
+    // once. **`clientX: undefined` was hard-coded here**, which sent every pointer event down the
+    // `=== undefined` arm of `valueOf` — so the coordinate channel had never once been exercised, and
+    // `clientY` was not even supplied. Proved by breaking the subject: swapping x for y and removing
+    // the rounding broke NOTHING across five test programs. The comment above this used to say
+    // "everything the driver reads off an event", and it was wrong when it was written.
+    fire(kind, handler, { key = null, value = '', on = kind,
+                          at = null, checked = false, scroll = 0, deltaY = 0,
+                          animationName = '', propertyName = '', type = 'text' } = {}) {
       const el = {
-        type: 'text', value,
+        type, value, checked, scrollTop: scroll,
         getAttribute: (n) => (n === 'data-star-h' ? String(handler)
                            : n === 'data-star-on' ? on
                            : n === 'data-star-key' ? (key === null ? null : String(key)) : null),
@@ -33,9 +42,13 @@ export function fakeRoot() {
       };
       (kinds[kind] || []).forEach((fn) => fn({
         target: { closest: () => el },
-        // Everything the driver reads off an event. Missing any of these is what broke `drive.mjs`.
-        preventDefault() {}, key: value, clientX: undefined, deltaY: 0,
-        animationName: '', propertyName: '',
+        preventDefault() {},
+        key: value,
+        // A pointer event with no position is a real case — a keyboard-activated button — so `null`
+        // still means "no coordinates". It is a CHOICE here rather than the only thing available.
+        clientX: at ? at[0] : undefined,
+        clientY: at ? at[1] : undefined,
+        deltaY, animationName, propertyName,
       }));
     },
   };
