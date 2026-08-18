@@ -710,6 +710,26 @@ def main():
     check("and the control: the same view with a `pure` helper compiles",
           "no errors" in fine, fine[:220])
 
+    # ---- a refusal whose advice CANNOT be followed ---------------------------------------------
+    #
+    # `on:input=… on:keydown=…` was told to "put every attribute BEFORE the `on:` binding" — advice
+    # that cannot work, because a second `on:` is not an attribute out of order and no ordering helps:
+    # whichever comes first takes the rest of the line. Same shape as telling `xml:lang` to add quotes.
+    #
+    # **A refusal whose remedy does not work is worse than one that only says no**, because the reader
+    # does the work and lands somewhere else.
+    two_events = generate(":props: n: Int\n:!props:\n\n"
+                          ":input: on:input=Msg.Draft(value) on:keydown=Msg.Add\n:!input:\n")
+    said = two_events.stderr + two_events.stdout
+    check("two `on:` bindings are refused as TWO EVENTS, not as bad ordering",
+          "STAR-E022" in said and "ONE `on:` binding" in said and "wrapper" in said, said[:220])
+    check("and it does not tell the author to reorder, which would not help",
+          "attribute" not in said.split("STAR-E022")[1][:200], said[:220])
+    order = generate(":props: n: Int\n:!props:\n\n:button: on:click=n + 1 class=danger\nx\n:!button:\n")
+    ordered = order.stderr + order.stdout
+    check("an attribute after `on:` still gets the ordering advice, which does work",
+          "STAR-E022" in ordered and "BEFORE the `on:` binding" in ordered, ordered[:220])
+
     shutil.rmtree(work, ignore_errors=True)
 
     if failures:

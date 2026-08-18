@@ -150,6 +150,12 @@ jobs:
       # had one, the server had one; `language-configuration.json` keyed folding on `:::` and BMX
       # respelled the fence in 0.7, so folding a block was silently dead in the shipped extension. A
       # fold that does not appear looks like a feature that was never there, so nobody reports it.
+      # **A version claim is a claim like any other.** The README told readers to depend on `v0.2.0`,
+      # a tag that does not exist, while the install page said `v0.1.0` — 55 commits behind and unable
+      # to read a single example on the site. Two pages, two answers, neither true, nothing checking.
+      - name: Every ref the documentation advertises exists
+        run: python3 tools/refs.py
+
       - name: The editor configuration behaves
         run: node editors/vscode/config.mjs
 

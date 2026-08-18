@@ -22,7 +22,7 @@ has_branding: true
 # purity is transitive, so on that release a `pure` view cannot be written at all.
 star_version:  "0.2.0"
 star_series:   "0.2"
-star_requires: "1.2 (from source — see the set-up page)"
+star_requires: "1.3.0"
 
 # **Every documented version, newest first. The first entry is the live one.**
 #

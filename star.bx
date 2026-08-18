@@ -809,6 +809,20 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                         match star_trailing_attribute(star_event_expression(part)) {
                             None => { }
                             Some(name) => {
+                                // **Two causes again, and one of the two answers cannot be followed.**
+                                // A second `on:` is not an attribute out of order — it is a second
+                                // event, and no ordering fixes it, because whichever comes first
+                                // swallows the rest of the line. Telling that author to "put
+                                // attributes first" is advice that cannot work, which is the failure
+                                // `xml:lang` had an hour ago and STAR-E020 now avoids.
+                                if star_mentions(name, "on:") {
+                                    return Result.Error("STAR-E022 at " + star_at(source, fenced.offset)
+                                        + ": an element takes ONE `on:` binding, and this head has two"
+                                        + " — `on:" + event + "` and `" + name + "`. A handler is an"
+                                        + " expression with no end marker, so the first one takes the"
+                                        + " rest of the line. Put the second event on a wrapper, or"
+                                        + " handle both in the one you keep");
+                                }
                                 return Result.Error("STAR-E022 at " + star_at(source, fenced.offset)
                                     + ": `on:" + event + "` runs to the end of the head, so `"
                                     + name + "=` after it becomes part of the handler instead of an"

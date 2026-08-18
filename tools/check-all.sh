@@ -26,6 +26,7 @@ run "every documented example"       python3 verify-docs.py
 run "the highlighter"                node tools/paints.mjs
 run "the editor configuration"       node editors/vscode/config.mjs
 run "the showcase is current"        python3 tools/showcase.py
+run "every advertised ref exists"    python3 tools/refs.py
 
 printf '  %-46s' "every component checks clean"
 for doc in examples/*.sbmx; do

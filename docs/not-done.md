@@ -17,9 +17,10 @@ useful to you than a feature list.
 `from_text`, because nothing in Burxt holds state between two calls. That is a gap rather than a
 decision, and it is being worked on.
 
-**One event per element.** `on:input=…` and `on:keydown=…` on the same element is not supported yet —
-the head reads one `on:` binding and the rest of the line is the expression. Put the second event on
-a wrapper, or handle it in the one you have.
+**One event per element**, and it is refused by name rather than silently taking the first. A handler
+is an expression with no end marker, so the first `on:` takes the rest of the line — STAR-E022 says
+so and tells you what to do instead. Put the second event on a wrapper, or handle both in the one you
+keep.
 
 **`template` and `svg` are not elements star knows**, and both are decisions rather than omissions.
 A `template`'s children are inert and star renders children as live content, so admitting it would
