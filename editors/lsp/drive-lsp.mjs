@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { spawn } from 'child_process';
 
-const server = spawn('node', ['editors/lsp/star-lsp.mjs'], {
+const server = spawn('node', ['editors/vscode/server/star-lsp.mjs'], {
   stdio: ['pipe', 'pipe', 'inherit'],
   env: { ...process.env, STAR_CHECK: process.env.STAR_CHECK || 'star-check' },
 });

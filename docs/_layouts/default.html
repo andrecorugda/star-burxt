@@ -29,7 +29,16 @@
 <link rel="stylesheet" href="{{ site.baseurl }}/assets/code.css?v={{ v }}">
 <link rel="stylesheet" href="{{ site.baseurl }}/assets/star.css?v={{ v }}">
 {%- if site.has_branding %}
-<link rel="icon" href="{{ site.baseurl }}/assets/favicon.ico">
+{%- comment -%}
+  The browser icon is the GEAR, not the wordmark — Andre: "the browser icon should change also". A tab
+  favicon is 16px, which is the same argument as a file tree: at that size letters have nothing to carry the
+  identity with and a shape does. The `.ico` holds the 48 and 128 PNGs for the browsers that still ask for
+  one; the `link`s below are what everything current actually uses.
+{%- endcomment -%}
+<link rel="icon" href="{{ site.baseurl }}/assets/favicon.ico?v={{ v }}" sizes="any">
+<link rel="icon" type="image/png" sizes="48x48" href="{{ site.baseurl }}/assets/brand/sbmx-gear-icon-48.png?v={{ v }}">
+<link rel="icon" type="image/png" sizes="128x128" href="{{ site.baseurl }}/assets/brand/sbmx-gear-icon-128.png?v={{ v }}">
+<link rel="apple-touch-icon" href="{{ site.baseurl }}/assets/brand/sbmx-gear-icon-128.png?v={{ v }}">
 {%- endif %}
 
 <meta property="og:title" content="{{ page.title | default: 'star-burxt' }}">
@@ -87,6 +96,7 @@
     <a href="{{ site.baseurl }}/how-do-i.html" class="{% if page.title == 'How do I…?' %}here{% endif %}">How do I…?</a>
     <a href="{{ site.baseurl }}/blocks.html"   class="{% if page.title == 'Blocks' %}here{% endif %}">Blocks</a>
     <a href="{{ site.baseurl }}/install.html"  class="{% if page.title == 'Set up' %}here{% endif %}">Set up</a>
+    <a href="{{ site.baseurl }}/editor.html"   class="{% if page.title == 'In your editor' %}here{% endif %}">Editor</a>
     <a href="https://github.com/andrecorugda/star-burxt">GitHub</a>
     <!-- Andre: "on bmx and star there is a burxt nav at the right side, we need to replace it with burxt
          wordmark with icon like you have on burxt navbar." The lockup is already 100% ink, so it needs no
@@ -134,6 +144,7 @@
     <div class="group">
       <h2>Look things up</h2>
       <ul>
+        <li class="topic"><a href="{{ site.baseurl }}/editor.html"{% if page.title == "In your editor" %} class="here" aria-current="page"{% endif %}><span>In your editor</span></a></li>
         <li class="topic"><a href="{{ site.baseurl }}/gallery.html"{% if page.title == "Gallery" %} class="here" aria-current="page"{% endif %}><span>Gallery</span></a></li>
         <li class="topic"><a href="{{ site.baseurl }}/how-do-i.html"{% if page.title == "How do I…?" %} class="here" aria-current="page"{% endif %}><span>How do I…?</span></a></li>
         <li class="topic"><a href="{{ site.baseurl }}/blocks.html"{% if page.title == "Blocks" %} class="here" aria-current="page"{% endif %}><span>Blocks</span></a></li>

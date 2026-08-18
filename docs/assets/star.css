@@ -148,6 +148,30 @@
 .bar .burxt img { height: 22px; width: auto; display: block; }
 @media (max-width: 640px) { .bar .burxt img { height: 20px; } }
 
+/* ---- the file-tree illustration on the editor page --------------------------------------------- *
+ *
+ * **16px, because that is the box VS Code's explorer gives an icon**, and showing it larger would hide the
+ * thing these icons were fixed for: at 86% ink the first one sat against its filename. A page that shows an
+ * icon at 48px cannot show that problem or its fix. Agreed with the BMX session so both editor pages present
+ * the family the same way.
+ *
+ * A drawn frame around real assets, and the caption says so. */
+.tree { margin: 1.4rem 0 1.8rem; }
+.tree-rows {
+  display: inline-block; min-width: 16rem;
+  padding: .5rem .4rem; background: #fff;
+  border: 1px solid var(--hair); border-radius: 8px;
+}
+.tree-row {
+  display: flex; align-items: center; gap: .5rem;
+  height: 22px; padding: 0 .45rem;
+  font: 13px/22px ui-sans-serif, system-ui, sans-serif; color: var(--ink);
+}
+.tree-row:hover { background: #f4f6fa; border-radius: 4px; }
+.tree-row img { width: 16px; height: 16px; flex: 0 0 auto; }
+.tree figcaption { margin-top: .6rem; font-size: .84rem; line-height: 1.55; color: var(--ink-2); }
+.tree figcaption strong { color: var(--ink); }
+
 /* ---- the gallery shelf ------------------------------------------------------------------------- *
  *
  * Every example, captured running, beside the markup that made it.

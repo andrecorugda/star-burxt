@@ -9,13 +9,43 @@
 // alone are not.
 const { workspace, languages, window, Uri, Range, Diagnostic, DiagnosticSeverity } = require('vscode');
 const { spawn } = require('child_process');
+const { existsSync } = require('fs');
+
+// **Where the server is, tried rather than assumed.** This was a bare
+// `asAbsolutePath('../lsp/star-lsp.mjs')` — a path OUTSIDE the extension folder, which works only when the
+// extension is the repository's own `editors/vscode`. Copy that folder into `~/.vscode/extensions` and the
+// server is not there; package it with `vsce` and the file is not in the archive. Either way the extension
+// installs, activates, colours a document and silently never reports a single error — which is the worst
+// shape available, because the half that still works looks like the whole thing working.
+//
+// **Tested, and the first fix was still wrong.** I moved the sibling path to a candidate list and documented
+// a symlink install — then checked it, and `path.join('/ext', '../lsp/x')` normalises the `..` LEXICALLY, so
+// it resolves outside the symlink too. A symlink install would have coloured and never checked, exactly like
+// a copy. The server had to move INSIDE the extension; nothing else makes every install method work.
+function serverPath(context) {
+  // Inside the extension first, because that is where it lives now. The old sibling path stays as a
+  // fallback for anyone who symlinked an older checkout.
+  const candidates = ['server/star-lsp.mjs', '../lsp/star-lsp.mjs'];
+  for (const rel of candidates) {
+    const full = context.asAbsolutePath(rel);
+    if (existsSync(full)) return full;
+  }
+  return null;
+}
 
 let server = null;
 const collection = languages.createDiagnosticCollection('star');
 
 function activate(context) {
   const checker = workspace.getConfiguration('starBurxt').get('check') || 'star-check';
-  server = spawn('node', [context.asAbsolutePath('../lsp/star-lsp.mjs')], {
+  const found = serverPath(context);
+  if (!found) {
+    window.showErrorMessage(
+      'star-burxt: the language server is missing, so `.sbmx` files will be coloured but never checked. '
+      + 'Expected it beside the extension at ../lsp/star-lsp.mjs, or inside it at server/star-lsp.mjs.');
+    return;
+  }
+  server = spawn('node', [found], {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, STAR_CHECK: checker },
   });

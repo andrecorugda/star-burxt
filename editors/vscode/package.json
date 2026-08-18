@@ -11,10 +11,6 @@
   "categories": [
     "Programming Languages"
   ],
-  "extensionDependencies": [
-    "andrecorugda.bmx",
-    "andrecorugda.burxt"
-  ],
   "contributes": {
     "languages": [
       {
