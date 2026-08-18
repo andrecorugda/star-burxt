@@ -33,7 +33,12 @@
 
 const STACK_SIZE = 1048576;
 
-export async function mount({ wasm, root, initial = "{}", component = "app", reconcile }) {
+// `headers` and `credentials` are the PAGE's, for the same reason the token is: a component that
+// knew about either would carry the transport in its state. `credentials` defaults to the browser's
+// own `same-origin`, which is what carries a session cookie to the app that served the page —
+// `"include"` is for a front end on a different origin from its API, as Sanctum's SPA mode is.
+export async function mount({ wasm, root, initial = "{}", component = "app", reconcile,
+                              headers, credentials = "same-origin" }) {
   let state = initial;
   let mem = null;
   let brk = 0;
@@ -283,6 +288,64 @@ export async function mount({ wasm, root, initial = "{}", component = "app", rec
   // it, a dropped file would be opened, a context menu would appear over your own.
   const PREVENT = new Set(["submit", "reset", "drop", "dragover", "contextmenu"]);
 
+  // **What a server needs in order to understand a request, and none of it is the component's
+  // business.** A `send` used to go out as `text/plain` with no token, which fails three ways against
+  // a normal backend and only one of them is loud. Measured against a real Laravel app: no
+  // `X-CSRF-TOKEN` is 419 on any `web` route; `text/plain` means `$request->input('label')` is EMPTY
+  // with nothing reported anywhere, because the framework never parses a body it was not told about;
+  // and `Accept: */*` turns a validation failure into a 302 carrying HTML instead of 422 carrying the
+  // fields. The middle one is why this is tested rather than noted — a silent empty body looks like
+  // the user typed nothing, and the place you would go looking is the component.
+  //
+  // **The token is read from the PAGE, and every framework hides it somewhere different.** That is the
+  // whole reason this lives in the driver: a CSRF token belongs to the session, so a component
+  // receiving one would carry a field about the transport in its own state, and every component would
+  // have that field. The page is where framework knowledge already lives — it is a Blade, ERB or
+  // Django template — so the page is where this looks.
+  //
+  //   `<meta name="csrf-token">`   →  `X-CSRF-TOKEN`    Laravel (web), Rails
+  //   cookie `XSRF-TOKEN`          →  `X-XSRF-TOKEN`    Laravel Sanctum, Spring, the axios convention
+  //   cookie `csrftoken`           →  `X-CSRFToken`     Django
+  //
+  // Anything else — ASP.NET's `RequestVerificationToken`, a bearer token, a tenant id — is passed to
+  // `mount({ headers })` by the page and merged over these. An escape hatch at the page rather than a
+  // new word in the component's vocabulary, because it is not the component that knows.
+  const cookie = (name) => {
+    if (typeof document === "undefined" || typeof document.cookie !== "string") return "";
+    for (const part of document.cookie.split(";")) {
+      const at = part.indexOf("=");
+      if (at > 0 && part.slice(0, at).trim() === name) {
+        return decodeURIComponent(part.slice(at + 1).trim());
+      }
+    }
+    return "";
+  };
+
+  const metaToken = () => {
+    const el = typeof document !== "undefined" && document.querySelector
+      ? document.querySelector('meta[name="csrf-token"]') : null;
+    return el && el.getAttribute ? (el.getAttribute("content") || "") : "";
+  };
+
+  // What axios sends by default, and it is the value rather than a preference: `application/json`
+  // first makes Laravel's `wantsJson()` true, and `*/*` present makes `acceptsAnyContentType()` true,
+  // so an error arrives as data both ways — while a plain-text reply is still not refused.
+  const ACCEPT = "application/json, text/plain, */*";
+
+  const requestHeaders = (withBody) => {
+    const h = { "accept": ACCEPT, "x-requested-with": "XMLHttpRequest" };
+    if (withBody) {
+      h["content-type"] = "application/json";
+      const meta = metaToken();
+      const xsrf = cookie("XSRF-TOKEN");
+      const django = cookie("csrftoken");
+      if (meta) h["x-csrf-token"] = meta;
+      if (xsrf) h["x-xsrf-token"] = xsrf;
+      if (django) h["x-csrftoken"] = django;
+    }
+    return { ...h, ...(headers || {}) };
+  };
+
   // ---- commands: what the component asked the driver to go and do ------------------------------
   //
   // A command arrives as one tab-separated line, encoded by the component in Burxt — so the encoding
@@ -309,7 +372,7 @@ export async function mount({ wasm, root, initial = "{}", component = "app", rec
       case "fetch": {
         const ctrl = new AbortController();
         inFlight.set(tag, ctrl);
-        fetch(rest[0], { signal: ctrl.signal })
+        fetch(rest[0], { headers: requestHeaders(false), credentials, signal: ctrl.signal })
           .then((r) => r.text())
           .then((body) => { inFlight.delete(tag); deliver(tag, body); })
           // A failed fetch is still an ANSWER, delivered with an empty body. Swallowing it would
@@ -321,7 +384,8 @@ export async function mount({ wasm, root, initial = "{}", component = "app", rec
       case "send": {
         const ctrl = new AbortController();
         inFlight.set(tag, ctrl);
-        fetch(rest[0], { method: "POST", body: rest[1] ?? "", signal: ctrl.signal })
+        fetch(rest[0], { method: "POST", body: rest[1] ?? "",
+                         headers: requestHeaders(true), credentials, signal: ctrl.signal })
           .then((r) => r.text())
           .then((body) => { inFlight.delete(tag); deliver(tag, body); })
           .catch(() => { inFlight.delete(tag); deliver(tag, ""); });
@@ -414,6 +478,20 @@ export async function mount({ wasm, root, initial = "{}", component = "app", rec
       // element are two handlers, and the attribute names which.
       const attr = el.getAttribute("data-star-h");
       if (attr === null) return;
+
+      // **The event the document asked for, or nothing.** Without this the index alone decided, so
+      // every one of the kinds below reached every handler: `on:click` ran on `mouseover`, on
+      // `keydown`, on `focus`. In a real app that is a save button firing because the pointer crossed
+      // it — and once the reconciler patches the DOM under the cursor, the resulting `mouseover`
+      // starts the next one. Measured against a real Laravel route: 495 writes, no click.
+      // **Strict, and a missing attribute fires NOTHING.** Treating absence as permission is the
+      // hole this closes: `data-star-on` is emitted for every handler star generates, so the only
+      // markup without it is stale or hand-written, and firing an unknown handler on an unknown event
+      // is how a save button came to run on `mouseover`. The client repaints from the module on mount,
+      // so server HTML from an older build carries the attribute a moment later — losing a click
+      // during load is the cheaper failure by a wide margin.
+      if (el.getAttribute("data-star-on") !== kind) return;
+
       const handler = BigInt(attr);
 
       // WHICH ROW, read from the DOM rather than remembered: rows move, and the key moves with them.

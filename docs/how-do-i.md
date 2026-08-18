@@ -385,6 +385,65 @@ never call `load`, so the linker drops it, its string data and the network impor
 a password inside `load` is present in the wasm object file and absent from the linked module. It is
 checked on every push, with a control that proves the check can find things.
 
+## …use star as the front end of Laravel, Rails or Django?
+
+Two things, and neither needs your backend to know what star is.
+
+**1. Render the first paint on the server.** `--fragment` builds a native binary: state JSON in on
+stdin, that component's HTML out on stdout. Nothing else — no doctype, no head, no script tag,
+because your layout already has all three.
+
+```sh
+star-generate Poster.sbmx poster --fragment > render.bx
+burxt build render.bx -o bin/poster-render
+echo '{"status":"idle"}' | bin/poster-render
+```
+
+Any backend that can run a subprocess can call it. In Laravel:
+
+```php
+$state = ['status' => 'idle'];
+$html = Process::input(json_encode($state))->run(base_path('bin/poster-render'))->output();
+
+return view('page', ['state' => $state, 'rendered' => $html]);
+```
+
+```
+<div id="root">{!! $rendered !!}</div>
+<script type="application/json" id="star-state">@json($state)</script>
+```
+
+**One value, used twice** — the server renders from it and the page hands the same text to the
+browser. That is what makes a hydration mismatch impossible rather than unlikely, and it is checked
+on every push: the native binary and the wasm module must produce the **same bytes** from the same
+state.
+
+**Without this the page is blank until the wasm arrives** — 54 KB of module plus 28 KB of driver
+before the first pixel. That gap is the flash, and it is not reactivity: a plain React or Vue SPA has
+exactly the same one. Next, Nuxt and Inertia render first and hydrate after; Alpine avoids it by never
+being the thing that produces the HTML.
+
+**2. Put the CSRF token in the page and stop thinking about it.** A `StarCmd.Send` goes out as
+`application/json`, asks for JSON back, and carries whatever token the page is holding:
+
+| where you put it | what star sends | who does this |
+|---|---|---|
+| `<meta name="csrf-token">` | `X-CSRF-TOKEN` | Laravel (`web`), Rails |
+| cookie `XSRF-TOKEN` | `X-XSRF-TOKEN` | Laravel Sanctum, Spring |
+| cookie `csrftoken` | `X-CSRFToken` | Django |
+
+Anything else — ASP.NET's `RequestVerificationToken`, a bearer token, a tenant id — goes to `mount`:
+
+```js
+await mount({ wasm, root, component: 'poster', initial, reconcile,
+              headers: { 'Authorization': 'Bearer ' + token },
+              credentials: 'include' });   // only when the API is on another origin
+```
+
+**The token never reaches your component, and that is deliberate.** It belongs to the session, not to
+your state — a component that received one would carry a field about the transport, and then every
+component would. The page is already where framework knowledge lives.
+
 ## …run a real app in a browser?
 
 Give your component a way to carry its state as text, and the driver does the rest:

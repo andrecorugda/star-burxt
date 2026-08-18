@@ -834,7 +834,17 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                             event: event,
                             expression: star_event_expression(part),
                         });
+                        // **The EVENT travels with the index, and it has to.** The index alone says
+                        // which handler; it does not say which event asked for it — and the driver
+                        // wires every kind star accepts on one delegated listener, so an element
+                        // carrying `data-star-h` used to run its handler for ANY of them. A `save`
+                        // button fired on `mouseover`, and with a reconciler patching the DOM under
+                        // the cursor it fired again, and again: found by pointing a real browser at a
+                        // real Laravel app, where **495 rows were written while nobody touched the
+                        // mouse.** One `on:` per element is what hid it — with a single index per
+                        // element, the driver had nothing to compare against and nothing looked wrong.
                         attrs = "[html_attr(\"data-star-h\", \"" + to_string(index) + "\")"
+                            + ", html_attr(\"data-star-on\", \"" + event + "\")"
                             + star_joined(key_attr) + star_joined(written)
                             + star_joined(mark_attr) + "]";
                     }

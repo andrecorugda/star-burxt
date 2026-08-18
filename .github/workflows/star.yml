@@ -236,6 +236,30 @@ jobs:
           ./star-build examples/Feed.sbmx feed /tmp/build
           node examples/drive-feed.mjs /tmp/build/feed.wasm
 
+      # **What a SERVER receives, at a real HTTP server rather than a stub.** `drive-feed.mjs` fakes
+      # the browser with `globalThis.fetch = (url) => …` — one parameter, so the options object
+      # carrying method, body and headers goes on the floor. Commands have been tested since they
+      # existed and the wire had never been looked at, which is how a `send` reached a real Laravel app
+      # as `text/plain` with no CSRF token: 419 on any `web` route, and on an `api` one
+      # `$request->input('label')` came back EMPTY with nothing reported anywhere.
+      - name: What a server receives when a component saves
+        run: |
+          set -eux
+          ./star-build examples/Poster.sbmx poster /tmp/build
+          node tools/posts.mjs /tmp/build/poster.wasm
+
+      # **A component rendered where the BACKEND owns the page.** The browser build alone ships an
+      # empty `<div id="root">`, so the first paint waits on 54 KB of wasm — the flash SSR exists to
+      # remove. This checks the native renderer and the wasm module produce the SAME bytes from the
+      # same state, which is what makes a hydration mismatch impossible rather than unlikely.
+      - name: A server-rendered fragment matches what the browser renders
+        run: |
+          set -eux
+          ./star-generate examples/Poster.sbmx poster --fragment > /tmp/build/render.bx
+          burxt build /tmp/build/render.bx -o /tmp/build/poster-render
+          echo '{"status":"idle","url":"/tasks"}' | /tmp/build/poster-render > /tmp/build/served.html
+          node tools/hydrates.mjs /tmp/build/poster.wasm poster /tmp/build/served.html
+
       # **The component in the landing page's picture, run.** The screenshot is the strongest claim
       # the site makes, and a hero that stopped working would keep looking correct — the image is a
       # file. So the same `.sbmx` is built and mounted here, which is what makes the picture evidence

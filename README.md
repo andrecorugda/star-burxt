@@ -31,7 +31,7 @@ One line in your project's `burxt.package`:
 
 ```
 dependency  star  https://github.com/andrecorugda/star-burxt  v0.2.0
-dependency  bmx   https://github.com/andrecorugda/bmx         burxt-0.12.0
+dependency  bmx   https://github.com/andrecorugda/bmx         burxt-0.12.1
 ```
 
 `burxt fetch` writes the exact commit into `burxt.lock`, so a checkout is reproducible.

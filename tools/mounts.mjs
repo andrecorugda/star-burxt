@@ -100,5 +100,27 @@ root.fire('click', 0, { key: 3 });
 const after = String(root.innerHTML);
 check('clicking a row changes the page', after !== before, 'the page did not change');
 
+// **AN EVENT THE DOCUMENT DID NOT ASK FOR MUST DO NOTHING**, and nothing checked this until a real
+// browser pointed at a real Laravel app wrote 495 rows while nobody touched the mouse. The driver
+// wires all 39 kinds star accepts on one delegated listener and used to resolve the handler from
+// `data-star-h` alone — so `on:click` ran on `mouseover`, on `keydown`, on `focus`. With a reconciler
+// patching the DOM under the cursor, the resulting `mouseover` started the next one.
+//
+// One `on:` per element is what hid it: with a single index per element there was nothing to compare
+// the event against, and no output looked wrong.
+for (const kind of ['mouseover', 'mousemove', 'keydown', 'focus', 'pointerenter']) {
+  const quiet = String(root.innerHTML);
+  root.fire(kind, 0, { key: 3, on: 'click' });
+  check(`a ${kind} does not run an on:click handler`,
+        String(root.innerHTML) === quiet, `${kind} changed the page`);
+}
+
+// The CONTROL: the same element, the event it DID declare, still works — or the check above passes
+// because nothing fires at all any more.
+const quiet = String(root.innerHTML);
+root.fire('click', 0, { key: 3, on: 'click' });
+check('the control: its declared event still runs', String(root.innerHTML) !== quiet,
+      'nothing fires at all now, so the check above proves nothing');
+
 console.log(failures ? `\n${failures} failure(s)` : '\nthe showcase component mounts and responds');
 process.exit(failures ? 1 : 0);

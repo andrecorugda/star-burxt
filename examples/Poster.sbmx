@@ -1,0 +1,70 @@
+===bx
+// Saving to a server — the half of the story `Feed` does not tell.
+//
+// `Feed` fetches. This one SENDS, and what goes on the wire is the part no fake could check:
+// `drive-feed.mjs` stubs `fetch` as `(url) => …` and throws the options object away, so for as long
+// as commands have been tested, the headers were invisible. `tools/posts.mjs` drives this component
+// at a real HTTP server and reads what arrives.
+use "std/string.bx";
+use "std/json.bx";
+
+class Model { status: String, url: String }
+enum Msg { Save }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg { Save => { return Model { status: "sending", url: m.url }; } }
+}
+
+// The tag is mine — 11 means "this is the save reply".
+pure function commands(msg: Msg, m: Model) -> [StarCmd] allocates {
+    let mutable out: [StarCmd] = [];
+    match msg {
+        Save => {
+            let mutable f: [Field] = [];
+            let b: Int = push(f, json_field("label", json_text("buy milk")));
+            let a: Int = push(out, StarCmd.Send(11, m.url, json_render(json_object(f))));
+        }
+    }
+    return out;
+}
+
+pure function arrived(tag: Int, value: String, m: Model) -> Model {
+    if tag == 11 { return Model { status: value, url: m.url }; }
+    return m;
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable f: [Field] = [];
+    let a: Int = push(f, json_field("status", json_text(m.status)));
+    let b: Int = push(f, json_field("url", json_text(m.url)));
+    return json_render(json_object(f));
+}
+
+function from_text(text: String) -> Model {
+    let mutable status: String = "idle";
+    let mutable url: String = "/tasks";
+    match json_parse(text) {
+        Error(e) => { }
+        Ok(v) => {
+            match json_at(v, "status") {
+                None => { }
+                Some(x) => { match json_as_text(x) { None => { } Some(t) => { status = t; } } }
+            }
+            match json_at(v, "url") {
+                None => { }
+                Some(x) => { match json_as_text(x) { None => { } Some(t) => { url = t; } } }
+            }
+        }
+    }
+    return Model { status: status, url: url };
+}
+===
+
+:props: model: Model
+:!props:
+
+# Status — {{ model.status }}
+
+:button: on:click=Msg.Save
+save
+:!button:

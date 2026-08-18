@@ -14,12 +14,25 @@ use "std/os.bx";
 use "std/files.bx";
 
 if os_arg_count() < 3 {
-    print_error("usage: star-generate <component.sbmx> <component-name>");
+    print_error("usage: star-generate <component.sbmx> <component-name> [--fragment]");
     exit(2);
 }
 
 let path: String = os_arg(1);
 let name: String = os_arg(2);
+
+// **`--fragment` is what makes star a front end for a backend that already owns the page.**
+// Measured against a real Laravel app: with the browser build alone the server ships
+// `<div id="root"></div>` and the first paint waits for 54 KB of wasm and 28 KB of JavaScript, so the
+// page is BLANK and then fills — the flash that SSR exists to remove. A plain React or Vue SPA does
+// exactly the same; it is Next, Nuxt and Inertia that render first and hydrate after, and Alpine
+// avoids it by never being the thing that produces the HTML.
+//
+// The existing `--server` half cannot do this job, and the reason is a boundary rather than an
+// omission: it returns a WHOLE DOCUMENT — doctype, head, stylesheet, mount script — which is right
+// when star owns the page and wrong when Blade, ERB or a Django template does. A backend with a
+// layout, a nav and a session needs one thing from star: this component, with this state, as HTML.
+let fragment: Bool = os_arg_count() > 3 && os_arg(3) == "--fragment";
 
 // ---- resolving components ---------------------------------------------------------------------
 //
@@ -58,10 +71,45 @@ match file_read_maybe(path) {
                 print("// The view and the dispatch are both `pure`, so `burxt effects --allow \"\"`");
                 print("// confirms this component reaches nothing. A handler is an expression");
                 print("// producing the next state — there are no closures to hide it in.");
+                // `use` lines must LEAD the file, so this one goes before the component's own
+                // hoisted imports rather than beside the code that needs it.
+                if fragment { print("use \"std/os.bx\";"); print(star_source_of(component, name)); }
                 // **`use` lines lead the file, so the author's imports are hoisted out of the
                 // `===bx` section and emitted first.** Burxt scans only the leading lines for
                 // imports — a `use` after a declaration is a syntax error — so a component's
                 // `use "./Badge.sbmx"` cannot simply sit where it was written.
+                if fragment {
+                    // The state has to come from somewhere the backend controls, which means
+                    // `from_text` — a props-only document has no state to be given and cannot be
+                    // rendered this way. Refused by name rather than emitting a program that will
+                    // not compile.
+                    if !star_mentions(component.code, "function from_text(") {
+                        print_error("STAR-E025 at " + path + ": `--fragment` renders a component from"
+                            + " STATE, so the document needs a `===bx` section declaring `from_text`."
+                            + " A document with only a `:props:` line has nothing to be given — build"
+                            + " it for the browser instead, or add `from_text` and `to_text`");
+                        exit(1);
+                    }
+                    print("// ---- rendered where the backend owns the page -----------------------");
+                    print("//");
+                    print("// State in on stdin, this component's HTML out on stdout. No document, no");
+                    print("// head, no script tag — the caller has all three already. Any backend that");
+                    print("// can run a subprocess can render a star component: Laravel, Rails,");
+                    print("// Django, Express. The state it passes in is the SAME text the page hands");
+                    print("// the browser, so the first paint and the first frame are one value and a");
+                    print("// hydration mismatch has nowhere to come from.");
+                    print("function " + name + "_emit(state: String) -> Int \{");
+                    print("    region frame \{");
+                    print("        let m: Model = from_text(state);");
+                    print("        print(html_render(" + name + "(m)));");
+                    print("        return 0;");
+                    print("    \}");
+                    print("\}");
+                    print("");
+                    print("let given: String = os_read_all();");
+                    print("let shown: Int = " + name + "_emit(given);");
+                    exit(0);
+                }
                 print(star_source_of(component, name));
                 // The runtime entry point, emitted rather than hand-written so the
                 // per-frame region and the host call cannot be got wrong by a user.

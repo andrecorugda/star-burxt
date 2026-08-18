@@ -16,10 +16,18 @@ export function fakeRoot() {
     // How many event kinds the driver asked for — the number that must match star's wired list.
     get wired() { return Object.keys(kinds).length; },
     // An event on an element carrying `data-star-h`, and optionally a row key and a value.
-    fire(kind, handler, { key = null, value = '' } = {}) {
+    //
+    // **`on` is what the DOCUMENT declared, and `kind` is what happened — they are not the same
+    // question.** This faked them as one for as long as it existed, returning null for
+    // `data-star-on`, so every test here agreed that an element responds to any event that reaches
+    // it. That is what a real browser then did: `on:click` ran on `mouseover`. It defaults to `kind`
+    // because a test firing the event an element asked for is the ordinary case; pass them
+    // DIFFERENTLY to check that the wrong event is ignored.
+    fire(kind, handler, { key = null, value = '', on = kind } = {}) {
       const el = {
         type: 'text', value,
         getAttribute: (n) => (n === 'data-star-h' ? String(handler)
+                           : n === 'data-star-on' ? on
                            : n === 'data-star-key' ? (key === null ? null : String(key)) : null),
         closest: (sel) => (sel === '[data-star-key]' ? (key === null ? null : el) : el),
       };

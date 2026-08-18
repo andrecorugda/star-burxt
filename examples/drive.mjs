@@ -25,7 +25,7 @@ const strip = (s) => s.replace(/<div class="star">|<\/div>$/g, '');
 const { is, done } = checker();
 
 is('an empty list renders', strip(root.innerHTML),
-   '<h1>Todos</h1><ul></ul><button data-star-h="1">add one</button>');
+   '<h1>Todos</h1><ul></ul><button data-star-h="1" data-star-on="click">add one</button>');
 
 root.fire('click', 1);
 is('a click adds a row and the state comes back', app.state,
@@ -40,8 +40,8 @@ is('a per-row click toggles the row its KEY names', app.state,
    '{"todos":[{"id":1,"label":"task 1","done":false},{"id":2,"label":"task 2","done":true}],"next_id":3}');
 
 is('the page shows both rows, each carrying its key', strip(root.innerHTML),
-   '<h1>Todos</h1><ul><li data-star-key="1"><button data-star-h="0">task 1</button></li>'
-   + '<li data-star-key="2"><button data-star-h="0">task 2</button></li></ul>'
-   + '<button data-star-h="1">add one</button>');
+   '<h1>Todos</h1><ul><li data-star-key="1"><button data-star-h="0" data-star-on="click">task 1</button></li>'
+   + '<li data-star-key="2"><button data-star-h="0" data-star-on="click">task 2</button></li></ul>'
+   + '<button data-star-h="1" data-star-on="click">add one</button>');
 
 done('the driver carries the state');
