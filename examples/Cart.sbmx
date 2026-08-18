@@ -1,0 +1,205 @@
+===bx
+// Money, which is the thing Burxt is least willing to guess about.
+//
+// A price is `Decimal<2>` — exactly two places, not a float that usually looks like one. Multiplying
+// two of them has an exact product with FOUR places, so reaching two means rounding, and the compiler
+// will not pick a direction for you: `Decimal<2, RoundHalfEven>` says how, and `Decimal<4>` keeps the
+// exact answer. Nothing else in this collection makes the compiler refuse arithmetic.
+//
+// **`money_split` is the other half of the same idea.** Dividing £10 three ways cannot be done in two
+// decimal places — 3.33 three times is 9.99, and a penny has to go somewhere. It returns the shares,
+// so the penny is placed rather than lost.
+use "std/string.bx";
+use "std/json.bx";
+use "std/decimal.bx";
+
+class Line  { id: Int, name: String, each: Decimal<2>, count: Int }
+class Model { lines: [Line], ways: Int }
+enum Msg { More(Int), Fewer(Int), Split(Int) }
+
+// A price times a COUNT needs no rounding decision: the scale does not move. It is multiplying two
+// Decimals that has an exact product with four places, and that is where the compiler asks.
+pure function line_total(l: Line) -> Decimal<2> {
+    return l.each * l.count;
+}
+
+pure function subtotal(lines: [Line]) -> Decimal<2> allocates {
+    let mutable sum: Decimal<2> = 0.00;
+    let mutable i: Int = 0;
+    while i < len(lines) { sum = sum + line_total(lines[i]); i += 1; }
+    return sum;
+}
+
+// **`12.5%` and `12.5` are different numbers, and both typecheck here.** A percent literal is a
+// `Decimal<4>` holding `0.125`, so `decimal2_percent_of(80.00, 12.5)` is not twelve and a half percent —
+// it is one thousand two hundred and fifty percent, and the answer comes back as £1000.00 rather than
+// £10.00. It typechecks because widening a scale is safe. The `%` is the whole difference.
+const SERVICE: Decimal<4> = 12.5%;
+
+pure function service(lines: [Line]) -> Decimal<2> allocates {
+    return decimal2_percent_of(subtotal(lines), SERVICE);
+}
+
+pure function cart_total(lines: [Line]) -> Decimal<2> allocates {
+    return subtotal(lines) + service(lines);
+}
+
+pure function changed(lines: [Line], id: Int, by: Int) -> [Line] allocates {
+    let mutable out: [Line] = [];
+    let mutable i: Int = 0;
+    while i < len(lines) {
+        let l: Line = lines[i];
+        if l.id == id {
+            let mutable n: Int = l.count + by;
+            if n < 0 { n = 0; }
+            let a: Int = push(out, Line { id: l.id, name: l.name, each: l.each, count: n });
+        } else {
+            let b: Int = push(out, l);
+        }
+        i += 1;
+    }
+    return out;
+}
+
+pure function update(msg: Msg, m: Model) -> Model allocates {
+    match msg {
+        More(id)  => { return Model { lines: changed(m.lines, id, 1), ways: m.ways }; }
+        Fewer(id) => { return Model { lines: changed(m.lines, id, 0 - 1), ways: m.ways }; }
+        Split(n)  => { return Model { lines: m.lines, ways: n }; }
+    }
+}
+
+pure function money(d: Decimal<2>) -> String allocates {
+    return "£" + to_string(d);
+}
+
+pure function line_label(l: Line) -> String allocates {
+    return l.name + " × " + to_string(l.count) + "  " + money(line_total(l));
+}
+
+// The shares, so the odd penny is PLACED rather than lost. `10.00` three ways is 3.34, 3.33, 3.33.
+pure function shares(m: Model) -> String allocates {
+    if m.ways < 2 { return "one bill"; }
+    let parts: [Decimal<2>] = money_split(cart_total(m.lines), m.ways);
+    let mutable out: String = "";
+    let mutable i: Int = 0;
+    while i < len(parts) {
+        if i > 0 { out = out + " + "; }
+        out = out + "£" + to_string(parts[i]);
+        i += 1;
+    }
+    return out;
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable rows: [Json] = [];
+    let mutable i: Int = 0;
+    while i < len(m.lines) {
+        let mutable f: [Field] = [];
+        let a: Int = push(f, json_field("id", json_int(m.lines[i].id)));
+        let b: Int = push(f, json_field("name", json_text(m.lines[i].name)));
+        // Cents as an Int, because that is what money IS on the wire — a text price would have to be
+        // parsed back, and a float would be the one thing `Decimal` exists to avoid.
+        let c: Int = push(f, json_field("cents", json_int(decimal2_cents(m.lines[i].each))));
+        let d: Int = push(f, json_field("count", json_int(m.lines[i].count)));
+        let r: Int = push(rows, json_object(f));
+        i += 1;
+    }
+    let mutable top: [Field] = [];
+    let e: Int = push(top, json_field("lines", json_list(rows)));
+    let g: Int = push(top, json_field("ways", json_int(m.ways)));
+    return json_render(json_object(top));
+}
+
+pure function opening() -> [Line] allocates {
+    let mutable out: [Line] = [];
+    let a: Int = push(out, Line { id: 1, name: "flat white", each: 3.40, count: 2 });
+    let b: Int = push(out, Line { id: 2, name: "cinnamon bun", each: 2.95, count: 1 });
+    let c: Int = push(out, Line { id: 3, name: "orange juice", each: 2.20, count: 0 });
+    return out;
+}
+
+function from_text(text: String) -> Model allocates {
+    let mutable ways: Int = 1;
+    let mutable lines: [Line] = [];
+    match json_parse(text) {
+        Error(e) => { }
+        Ok(v) => {
+            match json_at(v, "ways") {
+                None => { }
+                Some(x) => { match json_as_int(x) { None => { } Some(n) => { ways = n; } } }
+            }
+            match json_at(v, "lines") {
+                None => { }
+                Some(list) => {
+                    match list {
+                        Null => { } Truth(b) => { } Number(n) => { } Text(t) => { } Object(o) => { }
+                        List(items) => {
+                            let mutable i: Int = 0;
+                            while i < len(items) {
+                                let mutable id: Int = 0;
+                                let mutable name: String = "";
+                                let mutable cents: Int = 0;
+                                let mutable count: Int = 0;
+                                match json_at(items[i], "id") {
+                                    None => { }
+                                    Some(x) => { match json_as_int(x) { None => { } Some(k) => { id = k; } } }
+                                }
+                                match json_at(items[i], "name") {
+                                    None => { }
+                                    Some(x) => { match json_as_text(x) { None => { } Some(t) => { name = t; } } }
+                                }
+                                match json_at(items[i], "cents") {
+                                    None => { }
+                                    Some(x) => { match json_as_int(x) { None => { } Some(k) => { cents = k; } } }
+                                }
+                                match json_at(items[i], "count") {
+                                    None => { }
+                                    Some(x) => { match json_as_int(x) { None => { } Some(k) => { count = k; } } }
+                                }
+                                let a: Int = push(lines, Line { id: id, name: name,
+                                                                each: decimal2_from_cents(cents),
+                                                                count: count });
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if len(lines) == 0 { return Model { lines: opening(), ways: ways }; }
+    return Model { lines: lines, ways: ways };
+}
+===
+
+===style.local
+.row   { display: flex; gap: .5rem; align-items: center; margin: .3rem 0; }
+.row button { font: inherit; width: 1.8rem; }
+.name  { min-width: 14rem; font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; }
+.total { font: 600 1.2rem/1.6 ui-sans-serif, system-ui, sans-serif; margin-top: .8rem; }
+.split { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; color: #6b7280; }
+.ways button { font: inherit; padding: .2rem .7rem; margin-right: .3rem; }
+===
+
+:props: model: Model
+:!props:
+
+:for: line in model.lines key to_string(line.id)
+    :div: class=row
+        :button: child={"−"} on:click=Msg.Fewer(string_to_int(key, 0)) :!button:
+        :button: child={"+"} on:click=Msg.More(string_to_int(key, 0)) :!button:
+        :span: class=name child={line_label(line)} :!span:
+    :!div:
+:!for:
+
+:p: class=split child={"subtotal " + money(subtotal(model.lines)) + " + service " + money(service(model.lines))} :!p:
+:p: class=total child={"total " + money(cart_total(model.lines))} :!p:
+
+:div: class=ways
+    :button: child={"one bill"} on:click=Msg.Split(1) :!button:
+    :button: child={"split 2"} on:click=Msg.Split(2) :!button:
+    :button: child={"split 3"} on:click=Msg.Split(3) :!button:
+:!div:
+
+:p: class=split child={shares(model)} :!p:

@@ -28,6 +28,7 @@ document listed exists and checks clean, and every row says what it is for.
 | `Notes.sbmx` | `Store`, `Load` and `Focus` — the browser's own storage, and a caret | a restored draft reported success with the field still **empty**: a textarea's value is its children, not an attribute |
 | `Clock.sbmx` | a `pure` view cannot read a clock, so a tick asks the server | not expressible at all until `after` existed |
 | `Snake.sbmx` | a game: a tick, four global keys, a list that moves every frame | **a save button fired on `mouseover`** — 495 writes with nobody touching the mouse; and the tick never stopped when the game ended |
+| `Cart.sbmx` | money: `Decimal<2>`, a percent literal, and `money_split` placing the odd penny | `12.5` where `12.5%` was meant is **1250%** and typechecks — £1000.00 instead of £10.00 |
 | `Board.sbmx` | noughts and crosses: rules as a pure function, a winner derived rather than trusted | |
 
 ## Running one
