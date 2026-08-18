@@ -1,0 +1,17 @@
+<!-- viewBox CROPPED to the ink, and that is the whole reason this file differs from the drop.
+
+     As delivered the box was 385x240 with the letters occupying only 319x97 of it — 60% of the height
+     was empty, 33 px of it on the left alone. A stylesheet setting `height` then sized mostly
+     nothing: at 15px the letters came out 6px tall beside 14px text, and the mark read as an
+     afterthought rather than a name.
+
+     BMX found this by pointing my own icon rule at my asset — "crop to the ink first, two of the
+     three sources had different built-in slack, which is exactly how a family drifts" — which was
+     about the file icons and was truer of the wordmarks. Cropping DELETES a per-mark height
+     override rather than adding one: one shared height is now correct for every mark, because
+     every box is now exactly its letters.
+
+     Measured from the 1:1 transparent PNG, not from getBBox — getBBox on a `<text>` returns the
+     layout box including the full em, which reads 138 tall where the inked pixels are 138. An eye
+     compares letters, so ink is the number that matters. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="33 72 319 97" width="319" height="97"><text x="30" y="168" font-family="Liberation Sans, Helvetica, Arial, sans-serif" font-size="118" font-weight="500" fill="#E8502A" letter-spacing="0.5">star-</text><g transform="translate(315,120) scale(0.52) translate(-100,-110)"><rect x="34" y="18" width="26" height="184" rx="6" fill="#E8502A"/><circle cx="109" cy="139" r="62" fill="#E8502A"/><g fill="#FFFFFF"><polygon points="78,106 94,106 140,166 124,166"/><polygon points="140,106 124,106 78,166 94,166"/></g></g></svg>

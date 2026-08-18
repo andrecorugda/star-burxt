@@ -30,11 +30,15 @@
 <a class="skip" href="#top">Skip to content</a>
 
 <nav class="bar">
-  <!-- The mark. A wordmark until the lockup exists: a missing <img> is worse than no <img>, so the
-       image only appears once `has_branding` is set in _config.yml. -->
+  <!-- The mark, and it is Andre's own now rather than a placeholder: `star-[b]` — Burxt's `b` logo standing
+       in for the letter, so star is that letter INSIDE its own name rather than a separate identity with a
+       family resemblance. Delivered by the language session in the burxt repo; the transparent SVG, because
+       the opaque one carries a white `<rect>` that shows as a box on any tinted surface.
+
+       Still behind `has_branding`: a missing <img> is worse than no <img>. -->
   <a class="mark" href="{{ site.baseurl }}/">
     {%- if site.has_branding %}
-    <img src="{{ site.baseurl }}/assets/star-burxt-lockup.png" alt="star-burxt">
+    <img src="{{ site.baseurl }}/assets/brand/starb_logo_transparent.svg" alt="star-burxt">
     {%- else %}
     <strong class="wordmark">star-burxt</strong>
     {%- endif %}

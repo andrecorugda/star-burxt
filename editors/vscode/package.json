@@ -26,7 +26,11 @@
         "extensions": [
           ".sbmx"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/sbmx-gear-icon-128.png",
+          "dark": "./icons/sbmx-gear-icon-128.png"
+        }
       }
     ],
     "grammars": [
@@ -64,5 +68,6 @@
   "main": "./client.js",
   "activationEvents": [
     "onLanguage:sbmx"
-  ]
+  ],
+  "icon": "icons/sbmx-gear-icon-128.png"
 }
