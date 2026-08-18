@@ -208,5 +208,4 @@ pre code[data-painted] {
 
 @media (prefers-color-scheme: dark) {
   pre code .cl::before { color: #6b7280; }
-  pre:has(code .cl)::before { background: #2b3038; }
 }
