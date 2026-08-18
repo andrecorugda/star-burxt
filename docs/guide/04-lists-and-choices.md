@@ -47,6 +47,13 @@ show row 2's text with row 3's checkbox ticked.
 A key is a promise: *this row is that item, wherever it ends up*. Give it one that does not change.
 `line.id` is right. A row number is not.
 
+**And the promise is kept by the page, not only by the state — which took until 2026-08-18 to be
+true.** This paragraph was here first: the reconciler matched children by position and ignored the key
+this very page told you to write. The state was always right; the DOM was always right; but a row you
+were TYPING in that moved put your caret on the row that took its place, so the next keystroke edited a
+different record. Nothing looked broken. It is checked now — `tools/orders.mjs` on every push for the
+ordering, and the caret measured in a real browser.
+
 Get the field name wrong and you are told:
 
 ```
