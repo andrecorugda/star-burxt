@@ -358,10 +358,20 @@ export async function mount({ wasm, root, initial = "{}", component = "app", rec
   const watch = instance.exports[`bx.${component}_watch`];
   const inFlight = new Map();
 
+  // **A reply settles the subscriptions, exactly as an event does.** This did not, and neither did
+  // the module's `_arrived` — so nothing that changed the state through a subscription could change
+  // which subscriptions were running. A game whose `watch` stops asking for its tick when the player
+  // dies kept ticking for ever, because the death arrived ON the tick.
+  //
+  // `asked` is emptied first and refilled by the module's `host_watch` calls, so what survives is
+  // what this state asks for. A component with no `watch` export fills nothing and has started
+  // nothing, which is why an empty map is safe rather than a mass cancellation.
   const deliver = (tag, text) => {
     if (!arrived) return;
+    asked = new Map();
     arrived(BigInt(tag), write("reply", String(text)), write("state", state));
     paint();
+    settleWatches();
     while (pending.length) perform(pending.shift());
   };
 

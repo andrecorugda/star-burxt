@@ -1,0 +1,229 @@
+===bx
+// Snake — a game, because a form does not ask the hard questions.
+//
+// A form is one event and one shape of state. A game is a TICK, four global keys, a list that grows
+// and moves every frame, and a rule that ends it. That is the part of star nothing else here exercises.
+//
+// **No randomness, and that is a feature rather than a workaround.** `update` is `pure`, so it cannot
+// reach a clock — the seed lives in the state and advances by a congruential step. The whole game is
+// therefore a function of its state, which is why `tools/plays.mjs` can play it and assert the board.
+//
+// **Modulo is `remainder(a, b)`, because `%` is the percent literal.** Burxt has money and percent
+// literals, so the symbol was already spoken for — a deliberate decision, documented in its
+// `limitations.md`. Worth writing down here because the compiler says `unexpected character: '%'` and
+// never mentions `remainder`, which cost me a few minutes of thinking a language without modulo was
+// the finding.
+use "std/string.bx";
+use "std/json.bx";
+
+class Cell  { x: Int, y: Int }
+class Model { body: [Cell], dx: Int, dy: Int, food: Cell, alive: Bool, score: Int, seed: Int }
+enum Msg { Up, Down, Left, Right, Tick, Again }
+
+const WIDTH: Int = 16;
+const HEIGHT: Int = 16;
+
+pure function stepped(seed: Int) -> Int { return remainder(seed * 1103515245 + 12345, 2147483648); }
+
+pure function occupied(body: [Cell], x: Int, y: Int) -> Bool {
+    let mutable i: Int = 0;
+    while i < len(body) {
+        if body[i].x == x && body[i].y == y { return true; }
+        i += 1;
+    }
+    return false;
+}
+
+// The next free square, walked forward from wherever the seed lands — so a full board terminates
+// instead of looping forever looking for a hole that is not there.
+pure function next_food(body: [Cell], seed: Int) -> Cell {
+    let squares: Int = WIDTH * HEIGHT;
+    let start: Int = remainder(seed, squares);
+    let mutable tries: Int = 0;
+    while tries < squares {
+        let at: Int = remainder(start + tries, squares);
+        let x: Int = remainder(at, WIDTH);
+        let y: Int = divide_floor(at, WIDTH);
+        if !occupied(body, x, y) { return Cell { x: x, y: y }; }
+        tries += 1;
+    }
+    return Cell { x: 0, y: 0 };
+}
+
+pure function fresh(seed: Int) -> Model allocates {
+    let mutable body: [Cell] = [];
+    let a: Int = push(body, Cell { x: 8, y: 8 });
+    let b: Int = push(body, Cell { x: 7, y: 8 });
+    let c: Int = push(body, Cell { x: 6, y: 8 });
+    return Model { body: body, dx: 1, dy: 0, food: next_food(body, seed), alive: true,
+                   score: 0, seed: stepped(seed) };
+}
+
+// A turn is refused when it reverses, because a snake cannot walk into its own neck — and doing it by
+// ignoring the key rather than by dying is what makes the game feel fair.
+pure function turned(m: Model, dx: Int, dy: Int) -> Model {
+    if m.dx + dx == 0 && m.dy + dy == 0 { return m; }
+    return Model { body: m.body, dx: dx, dy: dy, food: m.food, alive: m.alive,
+                   score: m.score, seed: m.seed };
+}
+
+pure function advanced(m: Model) -> Model allocates {
+    if !m.alive { return m; }
+    let head: Cell = m.body[0];
+    let nx: Int = head.x + m.dx;
+    let ny: Int = head.y + m.dy;
+
+    // A wall or itself ends it. The tail square is a hit too: the tail has not moved yet this frame.
+    if nx < 0 || ny < 0 || nx >= WIDTH || ny >= HEIGHT || occupied(m.body, nx, ny) {
+        return Model { body: m.body, dx: m.dx, dy: m.dy, food: m.food, alive: false,
+                       score: m.score, seed: m.seed };
+    }
+
+    let eating: Bool = nx == m.food.x && ny == m.food.y;
+    let mutable body: [Cell] = [];
+    let added: Int = push(body, Cell { x: nx, y: ny });
+    let keep: Int = len(m.body) - 1;
+    let mutable i: Int = 0;
+    while i < len(m.body) {
+        if eating || i < keep { let k: Int = push(body, m.body[i]); }
+        i += 1;
+    }
+
+    if eating {
+        return Model { body: body, dx: m.dx, dy: m.dy, food: next_food(body, m.seed), alive: true,
+                       score: m.score + 1, seed: stepped(m.seed) };
+    }
+    return Model { body: body, dx: m.dx, dy: m.dy, food: m.food, alive: true,
+                   score: m.score, seed: m.seed };
+}
+
+pure function update(msg: Msg, m: Model) -> Model allocates {
+    match msg {
+        Up    => { return turned(m, 0, -1); }
+        Down  => { return turned(m, 0, 1); }
+        Left  => { return turned(m, -1, 0); }
+        Right => { return turned(m, 1, 0); }
+        Tick  => { return advanced(m); }
+        Again => { return fresh(m.seed); }
+    }
+}
+
+// The tick runs while the snake is alive and stops when it is not — a subscription is a function of
+// the state, so there is no cleanup to forget. The keys are watched globally: a game should not
+// require the player to click the board first.
+pure function watch(m: Model) -> [StarWatch] allocates {
+    let mutable out: [StarWatch] = [];
+    if m.alive { let t: Int = push(out, StarWatch.Every(1, 120)); }
+    let u: Int = push(out, StarWatch.Key(2, "ArrowUp"));
+    let d: Int = push(out, StarWatch.Key(3, "ArrowDown"));
+    let l: Int = push(out, StarWatch.Key(4, "ArrowLeft"));
+    let r: Int = push(out, StarWatch.Key(5, "ArrowRight"));
+    return out;
+}
+
+pure function arrived(tag: Int, value: String, m: Model) -> Model allocates {
+    if tag == 1 { return advanced(m); }
+    if tag == 2 { return turned(m, 0, -1); }
+    if tag == 3 { return turned(m, 0, 1); }
+    if tag == 4 { return turned(m, -1, 0); }
+    if tag == 5 { return turned(m, 1, 0); }
+    return m;
+}
+
+pure function at(c: Cell) -> String allocates {
+    return "left:" + to_string(c.x * 20) + "px;top:" + to_string(c.y * 20) + "px";
+}
+
+pure function verdict(m: Model) -> String {
+    if m.alive { return "score " + to_string(m.score); }
+    return "dead on " + to_string(m.score);
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable cells: [Json] = [];
+    let mutable i: Int = 0;
+    while i < len(m.body) {
+        let mutable c: [Field] = [];
+        let a: Int = push(c, json_field("x", json_int(m.body[i].x)));
+        let b: Int = push(c, json_field("y", json_int(m.body[i].y)));
+        let k: Int = push(cells, json_object(c));
+        i += 1;
+    }
+    let mutable f: [Field] = [];
+    let a: Int = push(f, json_field("body", json_list(cells)));
+    let b: Int = push(f, json_field("dx", json_int(m.dx)));
+    let c: Int = push(f, json_field("dy", json_int(m.dy)));
+    let d: Int = push(f, json_field("fx", json_int(m.food.x)));
+    let e: Int = push(f, json_field("fy", json_int(m.food.y)));
+    let g: Int = push(f, json_field("alive", json_truth(m.alive)));
+    let h: Int = push(f, json_field("score", json_int(m.score)));
+    let j: Int = push(f, json_field("seed", json_int(m.seed)));
+    return json_render(json_object(f));
+}
+
+pure function number_at(v: Json, name: String, fallback: Int) -> Int {
+    match json_at(v, name) {
+        None => { return fallback; }
+        Some(x) => { match json_as_int(x) { None => { return fallback; } Some(n) => { return n; } } }
+    }
+}
+
+function from_text(text: String) -> Model allocates {
+    match json_parse(text) {
+        Error(e) => { return fresh(7); }
+        Ok(v) => {
+            let mutable body: [Cell] = [];
+            match json_at(v, "body") {
+                None => { }
+                Some(list) => {
+                    match list {
+                        Null => { } Truth(b) => { } Number(n) => { } Text(t) => { } Object(o) => { }
+                        List(rows) => {
+                            let mutable i: Int = 0;
+                            while i < len(rows) {
+                                let k: Int = push(body, Cell { x: number_at(rows[i], "x", 0),
+                                                               y: number_at(rows[i], "y", 0) });
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            if len(body) == 0 { return fresh(number_at(v, "seed", 7)); }
+            let mutable alive: Bool = true;
+            match json_at(v, "alive") {
+                None => { }
+                Some(x) => { match json_as_truth(x) { None => { } Some(b) => { alive = b; } } }
+            }
+            return Model { body: body, dx: number_at(v, "dx", 1), dy: number_at(v, "dy", 0),
+                           food: Cell { x: number_at(v, "fx", 0), y: number_at(v, "fy", 0) },
+                           alive: alive, score: number_at(v, "score", 0),
+                           seed: number_at(v, "seed", 7) };
+        }
+    }
+}
+===
+
+===style.local
+.board { position: relative; width: 320px; height: 320px; background: #10131a;
+         border-radius: 8px; overflow: hidden; }
+.seg  { position: absolute; width: 18px; height: 18px; background: #6ee7a8; border-radius: 4px; }
+.food { position: absolute; width: 18px; height: 18px; background: #d9531e; border-radius: 50%; }
+.hud  { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; color: #1f2430; margin: .6rem 0; }
+===
+
+:props: model: Model
+:!props:
+
+:p: class=hud child={verdict(model)} :!p:
+
+:div: class=board
+    :for: seg in model.body key to_string(seg.x) + "-" + to_string(seg.y)
+        :div: class=seg style={{ at(seg) }} :!div:
+    :!for:
+    :div: class=food style={{ at(model.food) }} :!div:
+:!div:
+
+:button: on:click=Msg.Again
+new game
+:!button:

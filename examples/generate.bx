@@ -151,12 +151,21 @@ match file_read_maybe(path) {
                     print("// ---- carrying the state, because nothing here can hold it ----------");
                     print("external function host_state(text: String) -> CInt;");
                     print("");
+                    // **The first paint has to TELL THE HOST what it painted**, and this used to
+                    // render without doing so. `_settle` calls `host_state`; this did not, so after
+                    // mounting, the driver still held the raw initial text while the page was showing
+                    // whatever `from_text` had made of it. Every defaulting, clamping or migration that
+                    // function performs was therefore discarded for exactly one interaction — the
+                    // first — and then quietly repaired by the next `_settle`.
+                    //
+                    // Found by mounting a game whose `from_text("\{\}")` builds a whole board: the page
+                    // showed a three-square snake and the driver's state was still `\{\}`. It is worse
+                    // with a server-rendered first paint, which is the case that now exists: the page
+                    // carries the server's state, and a partial or older one would be silently used for
+                    // the first click while the screen showed something else.
                     print("function " + name + "_first(state: String) -> Int \{");
                     print("    region frame \{");
-                    print("        let m: Model = from_text(state);");
-                    print("        let html: String = html_render(" + name + "(m));");
-                    print("        let sent: Int = host_mount(html);");
-                    print("        return len(html);");
+                    print("        return " + name + "_settle(from_text(state));");
                     print("    \}");
                     print("\}");
                     print("");
@@ -228,7 +237,27 @@ match file_read_maybe(path) {
                         // the expression's origin rather than its type, and an `Int` has no storage
                         // to outlive anything. Reported with a 17-line reproduction, fixed in both
                         // compilers, and checked against the RELEASE before this line changed.
-                        print("        return " + name + "_settle(arrived(tag, value, from_text(state)));");
+                        // **A reply must republish the subscriptions, and this used to `return`
+                        // before doing so.** `_step` publishes them; this did not — so a state change
+                        // that CAME FROM a subscription never re-evaluated subscriptions, and star's
+                        // claim that a subscription is a function of the state was false for exactly
+                        // the case that matters most. A game ends on a tick: `watch` stopped asking for
+                        // the timer and the timer kept running, for ever.
+                        //
+                        // `drive-feed.mjs` had tested this since subscriptions existed — through a
+                        // CLICK, which is the one path that already worked. **A test that picks the
+                        // working path certifies the feature and misses the bug.**
+                        print("        let next: Model = arrived(tag, value, from_text(state));");
+                        print("        let shown: Int = " + name + "_settle(next);");
+                        if has_watch {
+                            print("        let watched: [StarWatch] = watch(next);");
+                            print("        let mutable w: Int = 0;");
+                            print("        while w < len(watched) \{");
+                            print("            let asked: Int = host_watch(star_watch_text(watched[w]));");
+                            print("            w += 1;");
+                            print("        \}");
+                        }
+                        print("        return shown;");
                         print("    \}");
                         print("\}");
                     }

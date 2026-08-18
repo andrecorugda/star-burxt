@@ -236,6 +236,19 @@ jobs:
           ./star-build examples/Feed.sbmx feed /tmp/build
           node examples/drive-feed.mjs /tmp/build/feed.wasm
 
+      # **A game, because a form asks star one question and a game asks the other four:** a tick that
+      # runs only while the state says so, four global keys, a list that moves and grows every frame,
+      # and a rule that ends it. Two real defects came out of writing it — the first paint never told
+      # the host what it had painted, and a state change that came FROM a subscription never
+      # re-evaluated subscriptions, so a game that ends on a tick ticked for ever. `drive-feed.mjs` had
+      # covered that path since subscriptions existed, through a click, which is the one path that
+      # already worked.
+      - name: The game plays, ends, and starts again
+        run: |
+          set -eux
+          ./star-build examples/Snake.sbmx snake /tmp/build
+          node tools/plays.mjs /tmp/build/snake.wasm
+
       # **What a component RECEIVES from an event, one channel at a time.** The fake DOM pinned
       # `clientX` to `undefined` and never supplied `clientY`, so every pointer event took the empty
       # arm of the driver's `valueOf` and the coordinate path had no coverage to lose. Proved by
