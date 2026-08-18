@@ -1,0 +1,11 @@
+// CLAIM: One event per element
+// HOLDS: refused
+// REFUSED-BECAUSE: an element takes ONE `on:` binding
+// WHY: a handler is an expression with no end marker, so the first `on:` takes the rest of the head.
+//      If this ever stops being refused it will be because the head gained a delimiter, and then the
+//      page should teach two events rather than apologise for one.
+:props: n: Int
+:!props:
+
+:input: on:input=Msg.Draft(value) on:keydown=Msg.Add
+:!input:

@@ -1,0 +1,7 @@
+// CLAIM: Anything that runs on the page but not in your document
+// HOLDS: absent
+// TERMS: directive lifecycle mounted unmounted plugin middleware hook
+// WHY: "there is no X at all" cannot be probed by writing one X — a probe naming `onMounted` misses
+//      `mounted`, and both miss `useEffect`. So this asserts that star DECLARES none of these terms.
+//      Prose mentioning one is fine; a declaration is not, which is the distinction that keeps the
+//      gate from firing on its own explanation.

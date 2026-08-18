@@ -1,0 +1,8 @@
+// CLAIM: Two-way binding beyond `on:input`
+// HOLDS: by-inspection
+// WHAT-WOULD-CHECK-IT: a probe would have to assert the ABSENCE of a feature nobody has named — there
+//      is no `bind:value` to write and refuse, because the claim is that the path is value-in and
+//      event-out and nothing else exists to test. What would genuinely check it is a document using a
+//      two-way construct from another framework, which requires deciding what star's spelling WOULD
+//      be, and that decision is the thing this claim declines to make.
+// WHY: recorded rather than skipped, so the escape hatch costs an argument rather than a shrug.

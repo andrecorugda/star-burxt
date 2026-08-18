@@ -1,0 +1,7 @@
+// CLAIM: A block that only wraps something is still worth avoiding
+// HOLDS: by-inspection
+// WHAT-WOULD-CHECK-IT: nothing, and it should not. This is ADVICE, not a limitation — a `span` holding
+//      a square is legal and always will be. It sits on this page because a reader deciding how to
+//      write a leaf wants to know, not because star refuses it.
+// WHY: a claim that is advice must be marked as advice, or a gate demanding a probe for every heading
+//      teaches people to phrase advice as capability to avoid the paperwork.

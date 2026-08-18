@@ -163,6 +163,17 @@ jobs:
       - name: Every ref the documentation advertises exists
         run: python3 tools/refs.py
 
+      # **A stale NOT-DONE is found by nobody, where a stale DONE is found by the first person who
+      # tries it.** Chapter 4 said "you cannot put a button inside a `for` yet" and quoted an error
+      # star had stopped emitting, so that page turned readers away from a working feature for as long
+      # as it had one. Every claim on `not-done.md` now carries a probe, and the mechanism is the
+      # language session's — they hit the same class in four documents and described the shape.
+      - name: Every published limitation still holds
+        run: |
+          set -eux
+          burxt build tools/limits.bx -o star-limits
+          ./star-limits
+
       - name: The editor configuration behaves
         run: node editors/vscode/config.mjs
 

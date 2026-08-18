@@ -6,6 +6,7 @@ star-generate
 star-check
 star-build
 star-liquid
+star-limits
 
 # **Generated beside their source, and the NEGATIONS are the load-bearing part.** `examples/*.bx`
 # alone also swallows the three tools' own sources, which live here too — and a new source file that

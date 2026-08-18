@@ -1,0 +1,302 @@
+// Every limitation the site publishes carries a probe, and every probe names a heading that exists.
+//
+//     burxt build tools/limits.bx -o star-limits
+//     ./star-limits
+//
+// **A stale NOT-DONE is found by nobody, where a stale DONE is found by the first person who tries
+// it.** Today `docs/guide/04` said *"you cannot put a button inside a `for` yet"* and quoted an error
+// star had stopped emitting — so that page had been turning readers away from a working feature for as
+// long as it had one. The language session had four documents denying that an enum could hold an enum,
+// wrong since before 1.0. Nobody hits these, because everybody believes the sentence.
+//
+// The mechanism is the language session's, described to me and copied deliberately rather than
+// reinvented. Four kinds of probe:
+//
+//   refused        the document must NOT be accepted, and for the STATED reason
+//   accepted       the document must still be accepted — see below, this is the load-bearing kind
+//   absent         star declares none of a list of terms
+//   by-inspection  no probe can reach it, and the file must say WHAT WOULD
+//
+// **`accepted` is why the gate works.** A suite made only of refusals cannot catch a page that
+// UNDERSTATES what already works, which is the exact shape of every stale limitation either of us
+// found. It is the kind that goes red on good news.
+//
+// **`REFUSED-BECAUSE` is required**, and it is the part I would not have thought to add. A probe that
+// was merely mistyped is refused too, and looks just as convincing — the language session's float
+// probe was refused with `unknown variable: ratio`, a knock-on from the real refusal. So the stated
+// reason has to appear in the output, matched anywhere in it rather than on the first line.
+//
+// **And both directions, or it rots.** Every heading in `not-done.md` must have a probe, so a new claim
+// cannot be published unguarded; and every probe must name a heading that exists, so renaming one
+// orphans it loudly. A sweep that asks only one way has cost this project twice: `.gitignore` matching
+// a source file, and a migration that reported success over the files it looked at.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+
+let PROBES: String = "tests/limitations";
+let PAGE: String = "docs/not-done.md";
+
+// A header field: `// NAME: value`, read from the probe's leading comment block.
+pure function field_of(text: String, name: String) -> String {
+    let marker: String = "// " + name + ": ";
+    let mutable i: Int = 0;
+    while i + len(marker) <= len(text) {
+        if substring(text, i, len(marker)) == marker && (i == 0 || byte_at(text, i - 1) == 10) {
+            let from: Int = i + len(marker);
+            let mutable stop: Int = from;
+            while stop < len(text) && byte_at(text, stop) != 10 { stop += 1; }
+            return string_trim(substring(text, from, stop - from));
+        }
+        i += 1;
+    }
+    return "";
+}
+
+// The claim headings the page actually publishes: a `**…**` opening a line.
+pure function headings_of(page: String) -> [String] allocates {
+    let mutable out: [String] = [];
+    let mutable i: Int = 0;
+    while i + 2 < len(page) {
+        let starts: Bool = i == 0 || byte_at(page, i - 1) == 10;
+        if starts && byte_at(page, i) == 42 && byte_at(page, i + 1) == 42 {
+            let from: Int = i + 2;
+            let mutable stop: Int = from;
+            while stop + 1 < len(page)
+                && !(byte_at(page, stop) == 42 && byte_at(page, stop + 1) == 42) {
+                stop += 1;
+            }
+            if stop > from {
+                // A heading ends at its closing `**`; trailing punctuation is not part of the claim.
+                let mutable claim: String = string_trim(substring(page, from, stop - from));
+                if len(claim) > 0 && byte_at(claim, len(claim) - 1) == 46 {
+                    claim = substring(claim, 0, len(claim) - 1);
+                }
+                let added: Int = push(out, claim);
+            }
+            i = stop + 2;
+            continue;
+        }
+        i += 1;
+    }
+    return out;
+}
+
+// The document, with the gate's own header stripped.
+//
+// **BMX has no `//` comment, so a header line is CONTENT.** The first version left them in and the
+// probe's own `EMITS-WITHOUT: hero_frame` line was rendered into the generated page — so the gate
+// found the name it was looking for, in its own metadata, and reported the claim false. A gate with
+// false positives is a gate somebody switches off, which is the one failure mode the language session
+// warned about explicitly.
+pure function body_of(probe: String) -> String allocates {
+    let mutable out: String = "";
+    let mutable i: Int = 0;
+    let mutable heading: Bool = true;
+    while i < len(probe) {
+        let mutable stop: Int = i;
+        while stop < len(probe) && byte_at(probe, stop) != 10 { stop += 1; }
+        let line: String = substring(probe, i, stop - i);
+        if heading && (len(line) == 0 || (len(line) >= 2 && substring(line, 0, 2) == "//")) {
+            // still in the header
+        } else {
+            heading = false;
+            out = out + line + "\n";
+        }
+        i = stop + 1;
+    }
+    return out;
+}
+
+pure function mentions(haystack: String, needle: String) -> Bool {
+    if len(needle) == 0 { return true; }
+    let mutable i: Int = 0;
+    while i + len(needle) <= len(haystack) {
+        if substring(haystack, i, len(needle)) == needle { return true; }
+        i += 1;
+    }
+    return false;
+}
+
+let mutable failures: [String] = [];
+let mutable claimed: [String] = [];
+let mutable checked: Int = 0;
+
+match file_read_maybe(PAGE) {
+    None => { print_error("cannot read " + PAGE); exit(2); }
+    Some(page) => {
+        let headings: [String] = headings_of(page);
+        if len(headings) == 0 {
+            print_error("no `**…**` claim found in " + PAGE + " — the pattern has stopped matching");
+            exit(2);
+        }
+
+        match file_list_directory(PROBES) {
+            None => { print_error("cannot read " + PROBES); exit(2); }
+            Some(names) => {
+                let mutable n: Int = 0;
+                while n < len(names) {
+                    let name: String = names[n];
+                    n += 1;
+                    let path: String = PROBES + "/" + name;
+                    match file_read_maybe(path) {
+                        None => { let x: Int = push(failures, path + ": cannot read it"); }
+                        Some(probe) => {
+                            let claim: String = field_of(probe, "CLAIM");
+                            let holds: String = field_of(probe, "HOLDS");
+                            if len(claim) == 0 {
+                                let x: Int = push(failures, name + ": no `// CLAIM:` line, so it guards nothing");
+                            } else {
+                                checked += 1;
+                                let noted: Int = push(claimed, claim);
+
+                                // **Every probe must name a heading that EXISTS.** Renaming a claim
+                                // then orphans its probe loudly rather than leaving it passing against
+                                // a page that no longer says it.
+                                let mutable found: Bool = false;
+                                let mutable h: Int = 0;
+                                while h < len(headings) {
+                                    if mentions(headings[h], claim) || mentions(claim, headings[h]) {
+                                        found = true;
+                                    }
+                                    h += 1;
+                                }
+                                if !found {
+                                    let x: Int = push(failures, name + ": CLAIM `" + claim
+                                        + "` names no heading in " + PAGE);
+                                }
+
+                                // The document alone, so the gate never reads its own header back.
+                                let scratch: String = "/tmp/star-limit-probe.sbmx";
+                                let wrote: Int = file_write(scratch, body_of(probe));
+                                if wrote < 0 {
+                                    let x: Int = push(failures, name + ": cannot write " + scratch);
+                                }
+
+                                if holds == "refused" {
+                                    let because: String = field_of(probe, "REFUSED-BECAUSE");
+                                    if len(because) == 0 {
+                                        let x: Int = push(failures, name + ": a `refused` probe needs"
+                                            + " `// REFUSED-BECAUSE:` — a probe that was merely"
+                                            + " mistyped is refused too, and looks just as convincing");
+                                    } else {
+                                        let said: String = os_capture("./star-check " + scratch + " 2>&1");
+                                        if mentions(said, "no problems") {
+                                            let x: Int = push(failures, name + ": ACCEPTED, but the page says"
+                                                + " this is refused. The limitation was lifted and the"
+                                                + " page still denies it");
+                                        } else {
+                                            if !mentions(said, because) {
+                                                let x: Int = push(failures, name + ": refused for a DIFFERENT"
+                                                    + " reason than the page states. Wanted `" + because
+                                                    + "`, got: " + string_trim(said));
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if holds == "accepted" {
+                                    let said: String = os_capture("./star-check " + scratch + " 2>&1");
+                                    if !mentions(said, "no problems") {
+                                        let x: Int = push(failures, name + ": REFUSED, but the page presents this"
+                                            + " as a correct document: " + string_trim(said));
+                                    }
+                                    // What must NOT be emitted, if the probe names it.
+                                    let without: String = field_of(probe, "EMITS-WITHOUT");
+                                    if len(without) > 0 {
+                                        let out: String = os_capture("./star-generate " + scratch
+                                            + " hero 2>&1");
+                                        // A DECLARATION, not a mention — the same distinction the
+                                        // `absent` kind already made and this one had not.
+                                        if mentions(out, "function " + without + "(") {
+                                            let x: Int = push(failures, name + ": now emits `" + without
+                                                + "`, so the claim is false and the page must change");
+                                        }
+                                    }
+                                }
+
+                                if holds == "absent" {
+                                    let terms: String = field_of(probe, "TERMS");
+                                    if len(terms) == 0 {
+                                        let x: Int = push(failures, name + ": an `absent` probe needs `// TERMS:`");
+                                    } else {
+                                        // A DECLARATION, not a mention. Prose naming an absent term is
+                                        // fine and must stay fine, or the gate fires on its own
+                                        // explanation — and a gate with false positives gets switched
+                                        // off.
+                                        let mutable t: Int = 0;
+                                        let mutable start: Int = 0;
+                                        while t <= len(terms) {
+                                            if t == len(terms) || byte_at(terms, t) == 32 {
+                                                let term: String = substring(terms, start, t - start);
+                                                if len(term) > 0 {
+                                                    let hits: String = os_capture(
+                                                        "grep -c '^\\(pure \\)\\?function [a-z_]*"
+                                                        + term + "\\|^class [A-Za-z]*" + term
+                                                        + "\\|^enum [A-Za-z]*" + term
+                                                        + "' star.bx 2>/dev/null");
+                                                    if !mentions(hits, "0") {
+                                                        let x: Int = push(failures, name + ": star now declares"
+                                                            + " something named `" + term
+                                                            + "`, so the claim is false");
+                                                    }
+                                                }
+                                                start = t + 1;
+                                            }
+                                            t += 1;
+                                        }
+                                    }
+                                }
+
+                                if holds == "by-inspection" {
+                                    if len(field_of(probe, "WHAT-WOULD-CHECK-IT")) == 0 {
+                                        let x: Int = push(failures, name + ": `by-inspection` needs"
+                                            + " `// WHAT-WOULD-CHECK-IT:` — the escape hatch has to"
+                                            + " cost an argument rather than a shrug");
+                                    }
+                                }
+
+                                if holds != "refused" && holds != "accepted"
+                                    && holds != "absent" && holds != "by-inspection" {
+                                    let x: Int = push(failures, name + ": `// HOLDS: " + holds
+                                        + "` is not one of refused, accepted, absent, by-inspection");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // **The other direction: every heading must have a probe.** Without this a new claim
+                // can be published unguarded, which is how every stale limitation started.
+                let mutable h: Int = 0;
+                while h < len(headings) {
+                    let mutable guarded: Bool = false;
+                    let mutable c: Int = 0;
+                    while c < len(claimed) {
+                        if mentions(headings[h], claimed[c]) || mentions(claimed[c], headings[h]) {
+                            guarded = true;
+                        }
+                        c += 1;
+                    }
+                    if !guarded {
+                        let x: Int = push(failures, PAGE + " publishes `" + headings[h]
+                            + "` with no probe in " + PROBES);
+                    }
+                    h += 1;
+                }
+            }
+        }
+    }
+}
+
+if len(failures) > 0 {
+    print_error(to_string(len(failures)) + " problem(s):");
+    let mutable i: Int = 0;
+    while i < len(failures) {
+        print_error("  " + failures[i]);
+        i += 1;
+    }
+    exit(1);
+}
+
+print(to_string(checked) + " published limitation(s), each with a probe that holds");

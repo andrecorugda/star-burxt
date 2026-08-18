@@ -1,0 +1,19 @@
+// CLAIM: Carrying state costs two functions
+// HOLDS: accepted
+// EMITS-WITHOUT: hero_frame
+// WHY: **an ACCEPTED probe, and this kind is the reason the gate works.** A suite of refusals cannot
+//      catch a page that UNDERSTATES what already works. This document is correct and compiles; what
+//      it does NOT get is a browser entry point, because it declares no `to_text`/`from_text`. The day
+//      Burxt's `Handle<T>` lands with copy_down, this probe starts emitting a frame function and goes
+//      red — which is the day the claim becomes false and the page has to change.
+===bx
+class Model { n: Int }
+enum Msg { Nothing }
+
+pure function update(msg: Msg, m: Model) -> Model { return m; }
+===
+
+:props: model: Model
+:!props:
+
+Count: {{ to_string(model.n) }}

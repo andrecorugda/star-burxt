@@ -1,0 +1,13 @@
+// CLAIM: `template` and `svg` are not elements star knows
+// HOLDS: refused
+// REFUSED-BECAUSE: STAR-E001
+// WHY: a `template`'s children are inert and star renders children as live content; `svg` is foreign
+//      content whose children are not HTML. Both are decisions. Eighteen OTHER elements sat refused
+//      by oversight in exactly this syntax until someone looked, which is why the two that are
+//      deliberate carry a probe.
+:props: n: Int
+:!props:
+
+:template: class=row
+hi
+:!template:
