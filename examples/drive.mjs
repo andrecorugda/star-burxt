@@ -21,11 +21,22 @@ const app = await mount({
   root, component: 'todos', initial: '{}',
 });
 
-const strip = (s) => s.replace(/<div class="star">|<\/div>$/g, '');
 const { is, done } = checker();
 
-is('an empty list renders', strip(root.innerHTML),
-   '<h1>Todos</h1><ul></ul><button data-star-h="1" data-star-on="click">add one</button>');
+// **What this asserts, and why it is no longer the whole page.** It used to pin the exact HTML, which
+// made it a test of the STYLING as much as the driver: restyling `Todos.sbmx` broke it twice while the
+// rendering was perfectly correct. A brittle assertion trains you to update it without reading it, which
+// is how a real regression walks past. So these ask the questions this file is FOR — the rows exist, they
+// are in order, each carries its key, and the handler indices are the ones the generator assigned.
+const rows = () => [...String(root.innerHTML).matchAll(/data-star-key="(\d+)"/g)].map((m) => m[1]);
+const labels = () => [...String(root.innerHTML).matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map((m) => m[1]);
+const handlerOf = (label) => {
+  const m = String(root.innerHTML).match(new RegExp(`<button[^>]*data-star-h="(\\d+)"[^>]*>${label}<`));
+  return m ? m[1] : null;
+};
+
+is('an empty list has no rows', rows().length, 0);
+is('and the add button is there, under the index the generator gave it', handlerOf('add one'), '1');
 
 root.fire('click', 1);
 is('a click adds a row and the state comes back', app.state,
@@ -39,9 +50,11 @@ root.fire('click', 0, { key: 2 });
 is('a per-row click toggles the row its KEY names', app.state,
    '{"todos":[{"id":1,"label":"task 1","done":false},{"id":2,"label":"task 2","done":true}],"next_id":3}');
 
-is('the page shows both rows, each carrying its key', strip(root.innerHTML),
-   '<h1>Todos</h1><ul><li data-star-key="1"><button data-star-h="0" data-star-on="click">task 1</button></li>'
-   + '<li data-star-key="2"><button data-star-h="0" data-star-on="click">task 2</button></li></ul>'
-   + '<button data-star-h="1" data-star-on="click">add one</button>');
+is('the page shows both rows, in order, each carrying its key', rows().join(','), '1,2');
+is('and both rows are on the page', labels().filter((t) => t.startsWith('task ')).join(','),
+   'task 1,task 2');
+is('a row\'s button carries the per-row handler, not the add button\'s',
+   handlerOf('task 2'), '0');
+is('the toggled row is the one the state says', /class="pick done"[^>]*>task 2</.test(root.innerHTML), true);
 
 done('the driver carries the state');

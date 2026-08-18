@@ -215,25 +215,36 @@ function from_text(text: String) -> Model allocates {
 ===
 
 ===style.local
-.board { position: relative; width: 320px; height: 320px; background: #10131a;
-         border-radius: 8px; overflow: hidden; }
-.seg  { position: absolute; width: 18px; height: 18px; background: #6ee7a8; border-radius: 4px; }
-.food { position: absolute; width: 18px; height: 18px; background: #d9531e; border-radius: 50%; }
-.hud  { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; color: #1f2430; margin: .6rem 0; }
+.board { position: relative; width: 320px; height: 320px; background: #0e1014;
+         border-radius: var(--bx-r); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255,255,255,.05); }
+.seg   { position: absolute; width: 18px; height: 18px; background: #6ee7a8; border-radius: 4px;
+         transition: left .09s linear, top .09s linear; }
+.food  { position: absolute; width: 18px; height: 18px; background: var(--bx-brand);
+         border-radius: 50%; }
 ===
 
 :props: model: Model
 :!props:
 
-:p: class=hud child={verdict(model)} :!p:
+:div: class=bx-card
+    :div: class=bx-spread
+        :div:
+            :h2: class=bx-title child={"Snake"} :!h2:
+            :p: class=bx-muted child={"Arrow keys. A tick, four global keys, and a list that moves every frame."} :!p:
+        :!div:
+        :span: class=bx-badge child={verdict(model)} :!span:
+    :!div:
 
-:div: class=board
-    :for: seg in model.body key to_string(seg.x) + "-" + to_string(seg.y)
-        :div: class=seg style={{ at(seg) }} :!div:
-    :!for:
-    :div: class=food style={{ at(model.food) }} :!div:
+    :hr: class=bx-divider :!hr:
+
+    :div: class=board
+        :for: seg in model.body key to_string(seg.x) + "-" + to_string(seg.y)
+            :div: class=seg style={{ at(seg) }} :!div:
+        :!for:
+        :div: class=food style={{ at(model.food) }} :!div:
+    :!div:
+
+    :div: class=bx-row
+        :button: class="bx-btn bx-btn-primary" child={"new game"} on:click=Msg.Again :!button:
+    :!div:
 :!div:
-
-:button: on:click=Msg.Again
-new game
-:!button:

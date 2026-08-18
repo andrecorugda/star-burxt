@@ -44,6 +44,17 @@ pure function open_count(tasks: [Task]) -> Int {
 
 // A class name is a value, so a state can choose one. There is no `class:done={...}` directive
 // because there does not need to be — the class attribute takes an expression like any other.
+// **Which tab is showing, asked of the state — and the stylesheet was already ready for it.**
+// `===style.local` has carried a `.tab.on` rule since this component was written, and the markup never
+// set that class, so the rule could not match anything a render produced. Dead styling for a state that
+// could not happen: the CSS is valid, the class simply never appears, and nothing reports it. The
+// component knew which view was showing and never told the page — every tab looked identical, including
+// the one you were looking at.
+pure function tab_class(m: Model, which: String) -> String {
+    if m.view == which { return "tab on"; }
+    return "tab";
+}
+
 pure function pick_class(done: Bool) -> String {
     if done { return "pick did"; }
     return "pick";
@@ -161,38 +172,38 @@ function from_text(text: String) -> Model allocates {
 ===style.local
 .card {
   max-width: 30rem; margin: 2.5rem auto; padding: 0;
-  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: #1f2430; background: #fff;
-  border: 1px solid #e6e8ee; border-radius: 14px;
-  box-shadow: 0 10px 30px rgba(24,31,50,.07);
+  font: 15px/1.55 var(--bx-font);
+  color: var(--bx-ink); background: var(--bx-surface);
+  border: 1px solid var(--bx-line); border-radius: 14px;
+  box-shadow: var(--bx-shadow);
   overflow: hidden;
 }
-.top { padding: 1.15rem 1.3rem .9rem; border-bottom: 1px solid #f0f2f6; }
+.top { padding: 1.15rem 1.3rem .9rem; border-bottom: 1px solid var(--bx-line-soft); }
 .top h1 { margin: 0; font-size: 1.15rem; letter-spacing: -.01em; }
-.top p { margin: .3rem 0 0; color: #6b7280; font-size: .875rem; }
-.count { color: #d9531e; font-weight: 600; margin-right: .3rem; }
+.top p { margin: .3rem 0 0; color: var(--bx-ink-soft); font-size: .875rem; }
+.count { color: var(--bx-brand); font-weight: 600; margin-right: .3rem; }
 
 .row-add { display: flex; gap: .5rem; padding: .9rem 1.3rem; }
 .row-add input {
   flex: 1; padding: .55rem .7rem; font: inherit; color: inherit;
-  border: 1px solid #dfe3ea; border-radius: 8px; background: #fbfcfe;
+  border: 1px solid var(--bx-line); border-radius: 8px; background: var(--bx-surface);
 }
-.row-add input:focus { outline: 2px solid #f4b183; outline-offset: 0; border-color: #d9531e; }
+.row-add input:focus { outline: 2px solid #f4b183; outline-offset: 0; border-color: var(--bx-brand); }
 .add {
   padding: .55rem .95rem; font: inherit; font-weight: 600; color: #fff;
-  background: #d9531e; border: 0; border-radius: 8px; cursor: pointer;
+  background: var(--bx-brand); border: 0; border-radius: 8px; cursor: pointer;
 }
-.add:hover { background: #c2471a; }
+.add:hover { background: var(--bx-brand-deep); }
 
 .tabs { display: flex; gap: .35rem; padding: 0 1.3rem .9rem; }
+.tab.on { background: var(--bx-brand-wash); color: var(--bx-brand-deep); font-weight: 600; }
 .tab {
-  padding: .3rem .7rem; font: inherit; font-size: .82rem; color: #4b5563;
-  background: #f4f6fa; border: 0; border-radius: 999px; cursor: pointer;
+  padding: .3rem .7rem; font: inherit; font-size: .82rem; color: var(--bx-ink-soft);
+  background: var(--bx-line-soft); border: 0; border-radius: 999px; cursor: pointer;
 }
-.tab:hover { background: #e9edf4; }
-.tab.on { background: #1f2430; color: #fff; }
+.tab:hover { background: var(--bx-line); }
 
-.list { list-style: none; margin: 0; padding: 0; border-top: 1px solid #f0f2f6; }
+.list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--bx-line-soft); }
 .item { display: flex; align-items: center; gap: .7rem; padding: .1rem 1.3rem; border-bottom: 1px solid #f6f7fa; }
 .pick {
   flex: 1; display: flex; align-items: center; gap: .65rem;
@@ -203,15 +214,15 @@ function from_text(text: String) -> Model allocates {
   width: 1.05rem; height: 1.05rem; flex: none;
   border: 1.5px solid #cbd2dd; border-radius: 5px;
 }
-.pick.did .box { background: #d9531e; border-color: #d9531e; }
-.pick.did .text { color: #9aa1ad; text-decoration: line-through; }
+.pick.did .box { background: var(--bx-brand); border-color: var(--bx-brand); }
+.pick.did .text { color: var(--bx-ink-faint); text-decoration: line-through; }
 
 .foot { display: flex; justify-content: space-between; align-items: center;
         padding: .8rem 1.3rem; color: #8b919d; font-size: .8rem; }
-.clear { font: inherit; font-size: .8rem; color: #d9531e; background: none;
+.clear { font: inherit; font-size: .8rem; color: var(--bx-brand); background: none;
          border: 0; padding: 0; cursor: pointer; }
 .clear:hover { text-decoration: underline; }
-.empty { padding: 1.6rem 1.3rem; color: #9aa1ad; text-align: center; border-bottom: 1px solid #f6f7fa; }
+.empty { padding: 1.6rem 1.3rem; color: var(--bx-ink-faint); text-align: center; border-bottom: 1px solid #f6f7fa; }
 ===
 
 :props: model: Model
@@ -245,15 +256,15 @@ Add
 
 :div: class=tabs
 
-:button: class=tab on:click=Msg.Show("all")
+:button: class={{ tab_class(model, "all") }} on:click=Msg.Show("all")
 All
 :!button:
 
-:button: class=tab on:click=Msg.Show("open")
+:button: class={{ tab_class(model, "open") }} on:click=Msg.Show("open")
 Open
 :!button:
 
-:button: class=tab on:click=Msg.Show("done")
+:button: class={{ tab_class(model, "done") }} on:click=Msg.Show("done")
 Done
 :!button:
 

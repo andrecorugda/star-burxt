@@ -22,6 +22,13 @@ pure function toggled(todos: [Todo], id: Int) -> [Todo] allocates {
     return out;
 }
 
+// Which class a row wears. A `pure` function rather than a conditional in the markup, because the view
+// asks a question and the answer belongs with the state it is about.
+pure function mark(done: Bool) -> String {
+    if done { return "pick done"; }
+    return "pick";
+}
+
 pure function update(msg: Msg, m: Model) -> Model allocates {
     match msg {
         Toggle(id) => { return Model { todos: toggled(m.todos, id), next_id: m.next_id }; }
@@ -101,27 +108,40 @@ function from_text(text: String) -> Model allocates {
 }
 ===
 
+===style.local
+.list { list-style: none; margin: 0; padding: 0; }
+.item { border-top: 1px solid var(--bx-line-soft); }
+.item:first-child { border-top: 0; }
+.pick { display: flex; align-items: center; gap: .65rem; width: 100%; padding: .6rem .1rem;
+        font: inherit; color: inherit; text-align: left; background: none; border: 0; cursor: pointer; }
+.pick::before { content: ""; width: 1.05rem; height: 1.05rem; flex: none; border-radius: 5px;
+                border: 1.5px solid var(--bx-line); }
+.pick.done::before { background: var(--bx-brand); border-color: var(--bx-brand); }
+.pick.done { color: var(--bx-ink-faint); text-decoration: line-through; }
+===
+
 :props: model: Model
 :!props:
 
-# Todos
+:div: class=bx-card
+    :div: class=bx-spread
+        :h2: class=bx-title child={"Todos"} :!h2:
+        :span: class="bx-badge bx-badge-quiet" child={to_string(len(model.todos)) + " items"} :!span:
+    :!div:
 
-:ul:
+    :hr: class=bx-divider :!hr:
 
-:for: todo in model.todos key to_string(todo.id)
+    :ul: class=list
+        :for: todo in model.todos key to_string(todo.id)
+            :li: class=item
+                :button: class={{ mark(todo.done) }} on:click=Msg.Toggle(string_to_int(key, 0))
+                {{ todo.label }}
+                :!button:
+            :!li:
+        :!for:
+    :!ul:
 
-:li:
-
-:button: on:click=Msg.Toggle(string_to_int(key, 0))
-{{ todo.label }}
-:!button:
-
-:!li:
-
-:!for:
-
-:!ul:
-
-:button: on:click=Msg.Add
-add one
-:!button:
+    :div: class=bx-row
+        :button: class="bx-btn bx-btn-primary" child={"add one"} on:click=Msg.Add :!button:
+    :!div:
+:!div:

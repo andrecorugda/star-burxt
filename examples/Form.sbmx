@@ -40,20 +40,30 @@ function from_text(text: String) -> Model {
 }
 ===
 
+===style.local
+.field { margin: 0 0 .8rem; }
+===
+
 :props: model: Model
 :!props:
 
-:form: on:submit=Msg.Save
+:div: class=bx-card
+    :div: class=bx-spread
+        :h2: class=bx-title child={"Save a draft"} :!h2:
+        :span: class="bx-badge bx-badge-quiet" child={to_string(model.hits) + " saves"} :!span:
+    :!div:
 
-:input: value={{ model.draft }} on:input=Msg.Typed(value)
-:!input:
+    :hr: class=bx-divider :!hr:
 
-:button:
-save
-:!button:
+    :form: on:submit=Msg.Save
+        :div: class=field
+            :label: class=bx-label child={"What are you writing?"} :!label:
+            :input: class=bx-input value={{ model.draft }} on:input=Msg.Typed(value) :!input:
+        :!div:
+        :button: class="bx-btn bx-btn-primary" child=save :!button:
+    :!form:
 
-:!form:
-
-:p:
-draft: {{ model.draft }} — saved: {{ model.saved }} ({{ to_string(model.hits) }})
-:!p:
+    :p: class=bx-muted
+    draft: {{ model.draft }} — last saved: {{ model.saved }}
+    :!p:
+:!div:

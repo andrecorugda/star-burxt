@@ -15,7 +15,7 @@ document listed exists and checks clean, and every row says what it is for.
 | `Todos.sbmx` | a list, a text field, and state carried as text | |
 | `Form.sbmx` | `on:submit`, `on:input`, and a field the view drives | |
 | `Hero.sbmx` | the landing page's component: a keyed `:for:`, `===style.local`, a pseudo-element checkbox | a scope marker appended after a pseudo-element, so `:hover` and `::before` were dead |
-| `Showcase.sbmx` | the biggest one — every block form on one page | |
+| `Showcase.sbmx` | the biggest one — every block form on one page | a `.tab.on` rule its markup could never set, so **every tab looked identical including the one you were on** |
 | `App.sbmx` | `:match:` choosing between screens | |
 | `router.sbmx` | `:if:` / `:else:` and an address that changes without a reload | |
 | `Served.sbmx` | `load(request)`, so the page is rendered where the data is | |
