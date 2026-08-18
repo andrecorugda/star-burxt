@@ -176,13 +176,17 @@ check('a section name mid-sentence is not a section', !prose.includes('t-section
   const text = out.replace(/<[^>]*>/g, '').replace(/&quot;/g, '"').replace(/&amp;/g, '&')
                   .replace(/&lt;/g, '<').replace(/&gt;/g, '>');
   check('no line number reached the text a reader copies', text === doc, JSON.stringify(text.slice(0, 90)));
-  check('and the depth spans are still inside the boxes, so the guides have a width',
+  check('and the depth spans are still inside the boxes, so the indentation survives',
         /class="cl"><span class="d1"/.test(out), out.slice(0, 200));
 }
 
 // **EVERY language, not just the markup.** The boxing lived in the depth pass first, which only `bmx` and
 // the markup half of `sbmx` go through — `burxt` and `css` build one string and never see a line, so their
 // panels had no numbers while the markup's did. Andre spotted it on the site before this test existed.
+//
+// The indent GUIDES that were here are gone — Andre's call on seeing them: *"the snippet text editor is
+// messy, remove the indentation lines so bad."* They were drawn correctly, at every level's own column, and
+// were still too much ink for a page of prose. The numbering and the indentation itself carry the structure.
 for (const [language, src] of [
   ['burxt', 'function f(n: Int) -> Int {\n    return n + 1;\n}'],
   ['bmx', ':p:\nhi\n:!p:'],

@@ -30,18 +30,22 @@
 <a class="skip" href="#top">Skip to content</a>
 
 <nav class="bar">
-  <!-- The mark, and it is Andre's own now rather than a placeholder: `star-[b]` — Burxt's `b` logo standing
-       in for the letter, so star is that letter INSIDE its own name rather than a separate identity with a
-       family resemblance. Delivered by the language session in the burxt repo; the transparent SVG, because
-       the opaque one carries a white `<rect>` that shows as a box on any tinted surface.
+  <!-- The mark: the gear, then the name.
+       Andre's report was "star icon in navbar did not update at all but you have it on burxt navbar" — he
+       was comparing this bar against burxt's, which shows the gear for star. What was here was the WORDMARK,
+       and the language session had already paid for that lesson twice: **a wordmark at nav size has no
+       mass.** Thin orange letterforms at 14px read as an afterthought beside a 22px lockup whatever the
+       colour, because an icon carries the orange as a SHAPE and survives being small in a way letters do not.
+       So the icon carries the identity here and the wordmark belongs on the landing page, where letters can
+       be read as words.
 
-       Still behind `has_branding`: a missing <img> is worse than no <img>. -->
+       **24px against a 22px lockup, and that is measured rather than matched.** A gear carries less apparent
+       height than a tall `b` at the same pixel count — it has no full-height stroke — so equal numbers look
+       unequal. And no `opacity`: grey at 62% is quieter grey, but orange at 62% is a different colour, and
+       #E8502A came out muddy brown when they tried it. -->
   <a class="mark" href="{{ site.baseurl }}/">
-    {%- if site.has_branding %}
-    <img src="{{ site.baseurl }}/assets/brand/starb_logo_transparent.svg" alt="star-burxt">
-    {%- else %}
+    <img class="glyph" src="{{ site.baseurl }}/assets/brand/sbmx-icon.svg" alt="" width="24" height="24">
     <strong class="wordmark">star-burxt</strong>
-    {%- endif %}
   </a>
 
 

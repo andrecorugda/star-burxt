@@ -119,7 +119,21 @@ match file_walk(root) {
                         let stop: Int = line_at(text, at);
                         let line: String = substring(text, at, stop - at);
                         if opens_raw(line) { in_raw = true; }
-                        if closes_raw(line) { in_raw = false; }
+                        // **An `endraw` with nothing open is the other half, and this walk had only one.**
+                        // I put a lockup at the top of the landing page by closing a block that had not
+                        // opened yet, and this gate said "all wrapped" — because it asked whether every line
+                        // was protected and whether the file ended protected, and never whether a close had
+                        // an open. Jekyll treats a stray `endraw` as an error on some versions and as
+                        // nothing on others, and "nothing" is the shape that reaches a reader.
+                        if closes_raw(line) {
+                            if !in_raw {
+                                let p2: Int = push(problems, path + ":" + to_string(number)
+                                    + ": `endraw` with no `raw` open. Whatever this was meant to close,"
+                                    + " it is not closing it — and the block you think you are inside"
+                                    + " starts somewhere else:\n    " + string_trim(line));
+                            }
+                            in_raw = false;
+                        }
                         // A layout IS Liquid — it is meant to be full of tags — so what is checked
                         // there is only that a `raw` it opens gets closed. A page's delimiters are
                         // checked as before.
