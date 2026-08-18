@@ -247,6 +247,20 @@
     return indented(out, lines).join('\n');
   }
 
+  // **Every line gets a box, and the newline stays OUTSIDE it.** The gutter number and the indent guides
+  // both need somewhere to hang, and an inline run has no left edge to hang them from. An `inline-block`
+  // per line has one — and because the `\n` between two boxes is still real text, what a reader copies is
+  // unchanged: newlines are text, indentation is padding, and a number drawn by CSS is neither. A
+  // block-level line would have swallowed the newline and left the clipboard depending on how a browser
+  // rejoins block boundaries.
+  //
+  // Every exit from the mapper below goes through it. Three did not on the first attempt — the fence
+  // line, the tab-indented line and the depth line — and a numbered gutter with three unnumbered lines
+  // in it is worse than none, because the numbers stop meaning anything.
+  function boxed(html) {
+    return `<span class="cl">${html}</span>`;
+  }
+
   // Wrap each painted line in a depth span, in a SECOND PASS over the finished lines.
   //
   // **Not inside the loop**, and that is not a style choice: the loop body has a dozen `continue`s, so
@@ -260,10 +274,10 @@
       const line = lines[i];
       if (fence !== null) {
         if (line.trim() === fence) fence = null;
-        return html;
+        return boxed(html);
       }
       const opens = /^(\s*)(`{3,}|~{3,})/.exec(line);
-      if (opens) { fence = opens[2]; return html; }
+      if (opens) { fence = opens[2]; return boxed(html); }
 
       // **A document that indents ITSELF keeps its own columns and gets a HANGING indent.** Real
       // spaces plus this padding would indent every line twice, so the author's columns win — but a
@@ -273,9 +287,9 @@
       const own = /^( +)/.exec(line);
       if (own) {
         const level = Math.min(6, Math.max(1, Math.round(own[1].length / 4)));
-        return `<span class="w${level}">${html}</span>`;
+        return boxed(`<span class="w${level}">${html}</span>`);
       }
-      if (/^\s/.test(line)) return html;
+      if (/^\s/.test(line)) return boxed(html);
 
       // 0.7 fences: `:name:` opens, `:!name:` closes. The closer NAMES its block, so the depth is
       // recoverable from either — but it is still drawn at its opener's column, because that is the
@@ -286,7 +300,7 @@
         if (block[1] === '!') { depth = Math.max(0, depth - 1); at = depth; }
         else { depth += 1; }
       }
-      return at > 0 ? `<span class="d${Math.min(at, 6)}">${html}</span>` : html;
+      return boxed(at > 0 ? `<span class="d${Math.min(at, 6)}">${html}</span>` : html);
     });
   }
 
@@ -475,10 +489,10 @@
       const line = lines[i];
       if (fence !== null) {
         if (line.trim() === fence) fence = null;
-        return html;
+        return boxed(html);
       }
       const opens = /^(\s*)(`{3,}|~{3,})/.exec(line);
-      if (opens) { fence = opens[2]; return html; }
+      if (opens) { fence = opens[2]; return boxed(html); }
 
       // **A document that indents ITSELF keeps its own columns and gets a HANGING indent.** Real
       // spaces plus this padding would indent every line twice, so the author's columns win — but a
@@ -488,9 +502,9 @@
       const own = /^( +)/.exec(line);
       if (own) {
         const level = Math.min(6, Math.max(1, Math.round(own[1].length / 4)));
-        return `<span class="w${level}">${html}</span>`;
+        return boxed(`<span class="w${level}">${html}</span>`);
       }
-      if (/^\s/.test(line)) return html;
+      if (/^\s/.test(line)) return boxed(html);
 
       // 0.7 fences: `:name:` opens, `:!name:` closes. The closer NAMES its block, so the depth is
       // recoverable from either — but it is still drawn at its opener's column, because that is the
@@ -501,7 +515,7 @@
         if (block[1] === '!') { depth = Math.max(0, depth - 1); at = depth; }
         else { depth += 1; }
       }
-      return at > 0 ? `<span class="d${Math.min(at, 6)}">${html}</span>` : html;
+      return boxed(at > 0 ? `<span class="d${Math.min(at, 6)}">${html}</span>` : html);
     });
   }
 

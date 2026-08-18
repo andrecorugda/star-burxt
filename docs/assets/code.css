@@ -122,3 +122,100 @@ pre code .w3 { padding-left: 12ch; text-indent: -12ch; }
 pre code .w4 { padding-left: 16ch; text-indent: -16ch; }
 pre code .w5 { padding-left: 20ch; text-indent: -20ch; }
 pre code .w6 { padding-left: 24ch; text-indent: -24ch; }
+
+/* ---- the gutter and the indent guides -------------------------------------------------------- *
+ *
+ * **What a reader copies is still the document.** A line number drawn with `content:` is generated
+ * content, which no browser puts on the clipboard, and a guide drawn with `background-image` is paint.
+ * Neither is text — which is the same rule the display indentation above already follows, and the
+ * reason a panel here can look like an editor without becoming a trap: copy it and you get the flat
+ * source the format accepts.
+ *
+ * Each line is an `inline-block` box with the newline OUTSIDE it, so the boxes stack without swallowing
+ * the newline that separates them. */
+
+pre code { counter-reset: cl; }
+
+pre code .cl {
+  display: inline-block;
+  position: relative;
+  counter-increment: cl;
+  /* The box has to reach the gutter's right edge even when the line is empty, or a blank line loses its
+   * number and the column stops reading as a column. */
+  min-width: 100%;
+  /* **A blank line's box is zero-high, and its number lands on the next line's.** Measured: the box for
+   * an empty line reported `height: 0`, so `3` and `4` were drawn a pixel apart. A minimum matching the
+   * line height puts the number where the line is; a non-empty line is already taller than this, so it
+   * changes nothing there. */
+  min-height: 1.55em;
+  /* **An empty inline-block baselines from its BOTTOM edge**, so giving the blank line a height pushed
+   * the descender space below it and that one row became 27px against everyone else's 21. Aligning every
+   * box to the top of its line makes the rhythm even, which is the only reason a numbered gutter reads as
+   * a column at all. Measured both ways. */
+  vertical-align: top;
+}
+
+pre code .cl::before {
+  content: counter(cl);
+  position: absolute;
+  left: -3.4em;
+  width: 2.4em;
+  text-align: right;
+  color: var(--ink-3, #9aa1ad);
+  font-variant-numeric: tabular-nums;
+  /* Not selectable, so a drag across the panel takes the code and not the numbering. */
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Room for the gutter, and a rule marking where it ends — the same two pieces an editor draws. */
+pre:has(code .cl) {
+  padding-left: 4.2em;
+}
+
+pre:has(code .cl)::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3.5em;
+  width: 1px;
+  background: var(--line, #e3e6ea);
+}
+
+pre { position: relative; }
+
+/* **The guides, one per level, drawn only across the indent.** A repeating gradient supplies the
+ * period and `background-size` clips it to this line's own depth, so the lines stop where the code
+ * starts instead of striping the whole row. `--step` matches the padding each depth class adds. */
+pre code [class^="d"], pre code [class^="w"] {
+  --step: 1.15em;
+  background-image: repeating-linear-gradient(
+    to right, var(--guide, #d6dbe3) 0 1px, transparent 1px var(--step)
+  );
+  background-repeat: no-repeat;
+  background-position: 0 0;
+}
+
+pre code .d1 { background-size: 1.15em 100%; }
+pre code .d2 { background-size: 2.30em 100%; }
+pre code .d3 { background-size: 3.45em 100%; }
+pre code .d4 { background-size: 4.60em 100%; }
+pre code .d5 { background-size: 5.75em 100%; }
+pre code .d6 { background-size: 6.90em 100%; }
+
+/* A document with its own leading spaces indents in `ch`, so its guides do too. */
+pre code [class^="w"] { --step: 4ch; }
+pre code .w1 { background-size: 4ch  100%; }
+pre code .w2 { background-size: 8ch  100%; }
+pre code .w3 { background-size: 12ch 100%; }
+pre code .w4 { background-size: 16ch 100%; }
+pre code .w5 { background-size: 20ch 100%; }
+pre code .w6 { background-size: 24ch 100%; }
+
+@media (prefers-color-scheme: dark) {
+  pre code .cl::before { color: #6b7280; }
+  pre code [class^="d"], pre code [class^="w"] { --guide: #2b3038; }
+  pre:has(code .cl)::before { background: #2b3038; }
+}

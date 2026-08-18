@@ -158,5 +158,27 @@ check('`bmx` still paints', paint('bmx', ':p:\nhi\n:!p:').includes('t-fence'));
 const prose = paint('sbmx', 'Use ===style.local for this.\n');
 check('a section name mid-sentence is not a section', !prose.includes('t-section'), prose);
 
+// ---- the gutter and the guides ----------------------------------------------------------------
+//
+// **Every line gets a box or the numbering stops meaning anything.** Three exits from the wrapper had
+// none on the first attempt — a fence line, a tab-indented line, and the depth line — which would have
+// numbered most of a panel and silently skipped the rest.
+{
+  const doc = [':section: class=card', '    # Today', '', '    :p: child=x :!p:',
+               '```', 'fenced', '```', ':!section:'].join('\n');
+  const out = paint('sbmx', doc);
+  const boxes = (out.match(/class="cl"/g) || []).length;
+  check(`every one of the ${doc.split('\n').length} lines is a numbered box`,
+        boxes === doc.split('\n').length, `${boxes} boxes`);
+
+  // The number is drawn by CSS, so it must not be in the text — and the text must still be the
+  // document, which is the property the whole display-indent design exists to keep.
+  const text = out.replace(/<[^>]*>/g, '').replace(/&quot;/g, '"').replace(/&amp;/g, '&')
+                  .replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  check('no line number reached the text a reader copies', text === doc, JSON.stringify(text.slice(0, 90)));
+  check('and the depth spans are still inside the boxes, so the guides have a width',
+        /class="cl"><span class="d1"/.test(out), out.slice(0, 200));
+}
+
 console.log(failures ? `\n${failures} failure(s)` : '\nthe highlighter paints all three languages');
 process.exit(failures ? 1 : 0);
