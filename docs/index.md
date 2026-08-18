@@ -5,7 +5,7 @@ description: "Write a page in Markdown. Get a real front-end app. star-burxt tur
 ---
 
 <p class="lockup">
-  <img src="{{ site.baseurl }}/assets/brand/starb_logo_transparent.svg"
+  <img src="{{ site.baseurl }}/assets/brand/starb_logo_transparent.svg?v={{ site.time | date: '%s' }}"
        alt="star-burxt" width="319" height="97">
 </p>
 

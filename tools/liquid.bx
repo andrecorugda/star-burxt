@@ -156,8 +156,11 @@ match file_walk(root) {
                     // page. He was right every time and my own screenshots looked correct, because a headless
                     // browser starts with no cache. **The two artefacts have to change URL together.**
                     //
-                    // Checked in the layouts only: a page's own content does not link stylesheets.
-                    if string_contains(path, "/_layouts/") {
+                    // Layouts AND includes. The stylesheets are in a layout; the gallery's captures are in
+                    // an include, and a PNG keeps its filename when it is retaken — so a reader holds the
+                    // previous capture until the cache expires. Andre reported the captures as cropped after
+                    // they had been retaken: the ones he was looking at were the old, genuinely cropped ones.
+                    if string_contains(path, "/_layouts/") || string_contains(path, "/_includes/") {
                         let mutable a: Int = 0;
                         let mutable line_no: Int = 1;
                         while a < len(text) {
@@ -165,7 +168,9 @@ match file_walk(root) {
                             while stop < len(text) && byte_at(text, stop) != 10 { stop += 1; }
                             let row: String = substring(text, a, stop - a);
                             let links: Bool = string_contains(row, "/assets/")
-                                && (string_contains(row, ".css") || string_contains(row, ".js"));
+                                && (string_contains(row, ".css") || string_contains(row, ".js")
+                                    || string_contains(row, ".png")
+                                    || string_contains(row, ".svg"));
                             if links && !string_contains(row, "?v=") {
                                 let p3: Int = push(problems, path + ":" + to_string(line_no)
                                     + ": an asset link with no `?v=`. For ten minutes after a deploy this"

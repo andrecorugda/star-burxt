@@ -18,6 +18,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, copyFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:http';
+import { inflateSync } from 'node:zlib';
 import { join, extname } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -28,10 +29,62 @@ const SHOTS = join(ROOT, 'docs', 'assets', 'gallery');
 // squeezed into half of it beside the code — Andre's words were "the actual capture is so small I can't even
 // see the code." Capturing at 1120 and displaying at the column's width downscales, which is crisp on any
 // display, and gives the component room to lay itself out properly while it is being photographed.
-const WIDTH = 1120, HEIGHT = 720;
+// `HEIGHT` is a FLOOR, not the height: a short component gets a slide of at least this much so the strip
+// does not jump between a 200px slide and a 900px one, and a tall one gets whatever it needs.
+const WIDTH = 1120, HEIGHT = 620;
 // `--include-only` rewrites the page from the captures already on disk. The capture pass takes minutes and
 // the include is the half that changes when the markup or the wording does.
 const INCLUDE_ONLY = process.argv.includes('--include-only');
+
+// **The bottom band of a capture must be empty, and that is the check a dimension comparison cannot make.**
+// The page draws the component inside 1.6rem of padding, so the last rows are background unless something
+// was cut off — and a cropped capture has ink running to its final row. Heights can agree and the picture
+// still be wrong; this asks the picture.
+//
+// The rows are unfiltered by hand because that is what a PNG is, and this file takes no dependency.
+function bottomIsClear(path, band = 12) {
+  const d = readFileSync(path);
+  const w = d.readUInt32BE(16), h = d.readUInt32BE(20), ctype = d[25];
+  const chans = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[ctype];
+  const idat = [];
+  for (let i = 8; i < d.length;) {
+    const len = d.readUInt32BE(i);
+    if (d.toString('ascii', i + 4, i + 8) === 'IDAT') idat.push(d.subarray(i + 8, i + 8 + len));
+    i += 12 + len;
+  }
+  const px = inflateSync(Buffer.concat(idat));
+  const stride = w * chans;
+  let prev = Buffer.alloc(stride), off = 0;
+  const tail = [];
+  for (let row = 0; row < h; row += 1) {
+    const f = px[off]; off += 1;
+    const line = Buffer.from(px.subarray(off, off + stride)); off += stride;
+    for (let x = 0; x < stride; x += 1) {
+      const a = x >= chans ? line[x - chans] : 0;
+      const b = prev[x];
+      const c = x >= chans ? prev[x - chans] : 0;
+      if (f === 1) line[x] = (line[x] + a) & 255;
+      else if (f === 2) line[x] = (line[x] + b) & 255;
+      else if (f === 3) line[x] = (line[x] + ((a + b) >> 1)) & 255;
+      else if (f === 4) {
+        const p = a + b - c;
+        const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+        line[x] = (line[x] + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 255;
+      }
+    }
+    if (row >= h - band) tail.push(line);
+    prev = line;
+  }
+  // Every pixel in the band the same colour as the band's first pixel.
+  const r0 = tail[0][0], g0 = tail[0][1], b0 = tail[0][2];
+  for (const line of tail) {
+    for (let x = 0; x < w; x += 1) {
+      if (Math.abs(line[x * chans] - r0) > 6 || Math.abs(line[x * chans + 1] - g0) > 6
+          || Math.abs(line[x * chans + 2] - b0) > 6) return false;
+    }
+  }
+  return true;
+}
 
 const chrome = () => {
   // A CI runner has one on PATH; this machine has them in a cache. Both, because a tool that only works
@@ -124,7 +177,12 @@ for (const name of INCLUDE_ONLY ? [] : shown) {
   await mount({ wasm: new URL('./${low}.wasm', import.meta.url),
                 root: document.getElementById('root'), component: '${low}',
                 initial: ${JSON.stringify(JSON.stringify(state))}, reconcile });
-  document.title = 'ready';
+  // **The page reports its own height, because a viewport screenshot CROPS.** Capturing at a fixed
+  // 1120x720 cut the bottom off every component taller than that — Andre saw it immediately. There is no
+  // full-page flag on the command line, so the height has to be known BEFORE the shot: this writes it
+  // where a --dump-dom pass can read it.
+  const tall = Math.ceil(document.documentElement.scrollHeight);
+  document.title = 'ready h=' + tall;
 </script>`);
 }
 
@@ -166,8 +224,26 @@ let failures = 0;
 for (const name of INCLUDE_ONLY ? [] : shown) {
   const low = name.toLowerCase();
   const url = `http://127.0.0.1:${port}/${low}.html`;
-  const flags = ['--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
+  // Pass one: how tall is it? Pass two: the shot, at that height.
+  const probe = ['--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
                  `--window-size=${WIDTH},${HEIGHT}`, '--virtual-time-budget=5000'];
+  // Retried once, for the same reason the DOM check is: an empty dump is this tool, not the page. Two
+  // components reported nothing on the first run of this and both rendered perfectly on their own.
+  let sized = (await run([...probe, '--dump-dom', url], true)).out;
+  let said = /<title>ready h=(\d+)<\/title>/.exec(sized);
+  if (!said) {
+    sized = (await run([...probe, '--dump-dom', url], true)).out;
+    said = /<title>ready h=(\d+)<\/title>/.exec(sized);
+  }
+  if (!said) {
+    failures += 1;
+    console.log(`  FAIL  ${low}.png — the page never reported its height, twice. That is this tool rather`);
+    console.log(`        than the component: ${sized.trim() === '' ? 'the dump came back EMPTY' : 'the dump had no title'}`);
+    continue;
+  }
+  const tall = Math.max(HEIGHT, Number(said[1]));
+  const flags = ['--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
+                 `--window-size=${WIDTH},${tall}`, '--virtual-time-budget=5000'];
   await run([...flags, `--screenshot=${join(SHOTS, `${low}.png`)}`, url], false);
 
   // **The capture is verified against the page's own DOM.** A picture cannot tell you it rendered the
@@ -197,9 +273,20 @@ for (const name of INCLUDE_ONLY ? [] : shown) {
   if (wrote) {
     const png = readFileSync(shotPath);
     const w = png.readUInt32BE(16), h = png.readUInt32BE(20);
-    if (w !== WIDTH || h !== HEIGHT) {
+    if (w !== WIDTH) {
       failures += 1;
-      console.log(`  FAIL  ${low}.png is ${w}×${h}, not ${WIDTH}×${HEIGHT} — the slides must be one size`);
+      console.log(`  FAIL  ${low}.png is ${w}px wide, not ${WIDTH}`);
+      continue;
+    }
+    if (h < tall) {
+      failures += 1;
+      console.log(`  FAIL  ${low}.png is ${h}px tall and the page asked for ${tall} — it is CROPPED`);
+      continue;
+    }
+    if (!bottomIsClear(shotPath)) {
+      failures += 1;
+      console.log(`  FAIL  ${low}.png has ink in its bottom rows, so the component is CUT OFF. The page`);
+      console.log('        keeps padding below the component, so those rows must be background.');
       continue;
     }
     if (png.length < 4000) {
@@ -242,9 +329,18 @@ const reasons = (() => {
 
 const slides = shown.map((name, at) => {
   const low = name.toLowerCase();
+  // The height comes from the FILE, so the browser reserves exactly the right box and the strip does not
+  // jump as each slide loads.
+  const png = readFileSync(join(SHOTS, `${low}.png`));
+  const shot = png.readUInt32BE(20);
   return `  <section class="shelf-slide" id="shelf-${low}" aria-label="${name}, ${at + 1} of ${shown.length}">
     <figure class="shelf-shot">
-      <img src="{{ site.baseurl }}/assets/gallery/${low}.png" width="${WIDTH}" height="${HEIGHT}"
+      <!-- Versioned like the stylesheets, and for the same reason: a PNG keeps its filename when it is
+           retaken, so a reader holds the PREVIOUS capture until the cache expires. Andre reported the
+           captures as cropped after they had been retaken — the ones he was looking at were the old
+           720x470 shots, which genuinely were cut off. -->
+      <img src="{{ site.baseurl }}/assets/gallery/${low}.png?v={{ site.time | date: '%s' }}"
+           width="${WIDTH}" height="${shot}"
            loading="${at < 2 ? 'eager' : 'lazy'}" alt="${name}.sbmx running in a browser">
     </figure>
     <figure class="shelf-code">
