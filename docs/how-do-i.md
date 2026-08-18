@@ -347,6 +347,39 @@ running is whatever your current state asks for.
 
 Timers, keys and websockets all arrive at `arrived`, under your tag.
 
+### Polling — `after`
+
+**A tick that should re-fetch needs `after`, and a tick must not be pointed at a fetch's tag.**
+
+```sbmx
+===bx
+class Model { polling: Bool }
+
+pure function watch(m: Model) -> [StarWatch] allocates {
+    let mutable out: [StarWatch] = [];
+    if m.polling { let a: Int = push(out, StarWatch.Every(8, 5000)); }   // 8 is the POLL
+    return out;
+}
+
+// What to do after something arrived. `commands` takes a `Msg`, and a reply is not one.
+pure function after(tag: Int, m: Model) -> [StarCmd] allocates {
+    let mutable out: [StarCmd] = [];
+    if tag == 8 { let a: Int = push(out, StarCmd.Fetch(7, "/api/feed")); }   // 7 is the REPLY
+    return out;
+}
+===
+```
+
+**This is here because the example on this site was wrong for as long as the page existed.** It pointed
+its timer at the fetch's tag, so every tick arrived at `arrived` with an **empty** body — and
+`string_to_int("", 0)` set the items to zero. Measured: 42 before a tick, 0 after. A live feed that
+blanked itself every five seconds.
+
+Two rules come out of it. **A tick carries no value**, so anything that parses `value` as a body will
+destroy what it had — give the poll its own tag and leave the items alone. And **`after` is the only way
+a subscription can ask for anything**, because `commands` is keyed on a `Msg` and nothing that arrives
+has one.
+
 ## …render on the server?
 
 Give your component a `load`, and its **signature** is what makes it server-only:

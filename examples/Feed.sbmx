@@ -12,7 +12,7 @@ pure function update(msg: Msg, m: Model) -> Model {
     }
 }
 
-// What to go and do. The tag is mine — 7 means "this is the feed reply".
+// What to go and do. The tags are mine — 7 is the feed's reply, 8 is the poll.
 pure function commands(msg: Msg, m: Model) -> [StarCmd] allocates {
     let mutable out: [StarCmd] = [];
     match msg {
@@ -25,14 +25,29 @@ pure function commands(msg: Msg, m: Model) -> [StarCmd] allocates {
 // What to keep listening to, as a function of the state.
 pure function watch(m: Model) -> [StarWatch] allocates {
     let mutable out: [StarWatch] = [];
-    if m.polling { let a: Int = push(out, StarWatch.Every(7, 5000)); }
+    if m.polling { let a: Int = push(out, StarWatch.Every(8, 5000)); }
     let b: Int = push(out, StarWatch.Key(9, "Escape"));
     return out;
 }
 
-// One inbox. Tag 7 is the feed, tag 9 is Escape.
+// **What to do after something ARRIVED, which is how polling works.** `commands` takes a `Msg` and a
+// reply is not one, so for as long as this file existed a tick could not ask for anything — and this
+// example "polled" by pointing its timer at the FETCH's tag, so every tick delivered an empty body and
+// `string_to_int("", 0)` set the items to zero. Measured: 42 before a tick, 0 after. A live feed that
+// blanks itself every five seconds, on the site, for as long as the site has had this page.
+pure function after(tag: Int, m: Model) -> [StarCmd] allocates {
+    let mutable out: [StarCmd] = [];
+    if tag == 8 { let a: Int = push(out, StarCmd.Fetch(7, "/api/feed")); }
+    return out;
+}
+
+// One inbox. Tag 7 is the feed's reply, 8 is the poll, 9 is Escape.
+//
+// **A tick must not touch the items**, which is the whole lesson of the bug above: the value that
+// arrives with a timer is empty, so anything parsing it as a body destroys what it had.
 pure function arrived(tag: Int, value: String, m: Model) -> Model {
     if tag == 7 { return Model { items: string_to_int(value, 0), status: "ready", polling: m.polling }; }
+    if tag == 8 { return Model { items: m.items, status: "polling", polling: m.polling }; }
     if tag == 9 { return Model { items: m.items, status: "closed", polling: false }; }
     return m;
 }

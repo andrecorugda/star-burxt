@@ -1,0 +1,135 @@
+===bx
+// A NESTED `:for:` — a loop inside a loop, which nothing else here does.
+//
+// The edge is the key. The driver reads a row key from the NEAREST `[data-star-key]` ancestor, so an
+// inner loop's key shadows the outer one — which is right, and means a cell must be identified by
+// something unique across the whole board rather than by its column. `id` is `y * 8 + x`.
+use "std/string.bx";
+use "std/json.bx";
+
+class Cell  { id: Int, dark: Bool, on: Bool }
+class Row   { y: Int, cells: [Cell] }
+class Model { rows: [Row], lit: Int }
+enum Msg { Toggle(Int) }
+
+const SIDE: Int = 8;
+
+pure function board(on_ids: [Int]) -> [Row] allocates {
+    let mutable rows: [Row] = [];
+    let mutable y: Int = 0;
+    while y < SIDE {
+        let mutable cells: [Cell] = [];
+        let mutable x: Int = 0;
+        while x < SIDE {
+            let id: Int = y * SIDE + x;
+            let mutable on: Bool = false;
+            let mutable i: Int = 0;
+            while i < len(on_ids) {
+                if on_ids[i] == id { on = true; }
+                i += 1;
+            }
+            let a: Int = push(cells, Cell { id: id, dark: remainder(x + y, 2) == 1, on: on });
+            x += 1;
+        }
+        let r: Int = push(rows, Row { y: y, cells: cells });
+        y += 1;
+    }
+    return rows;
+}
+
+pure function lit_ids(rows: [Row]) -> [Int] allocates {
+    let mutable out: [Int] = [];
+    let mutable y: Int = 0;
+    while y < len(rows) {
+        let mutable x: Int = 0;
+        while x < len(rows[y].cells) {
+            if rows[y].cells[x].on { let a: Int = push(out, rows[y].cells[x].id); }
+            x += 1;
+        }
+        y += 1;
+    }
+    return out;
+}
+
+pure function update(msg: Msg, m: Model) -> Model allocates {
+    match msg {
+        Toggle(id) => {
+            let mutable ids: [Int] = [];
+            let held: [Int] = lit_ids(m.rows);
+            let mutable found: Bool = false;
+            let mutable i: Int = 0;
+            while i < len(held) {
+                if held[i] == id { found = true; } else { let a: Int = push(ids, held[i]); }
+                i += 1;
+            }
+            if !found { let b: Int = push(ids, id); }
+            return Model { rows: board(ids), lit: len(ids) };
+        }
+    }
+}
+
+pure function shade(c: Cell) -> String {
+    if c.on { return "sq lit"; }
+    if c.dark { return "sq dark"; }
+    return "sq";
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable ids: [Json] = [];
+    let held: [Int] = lit_ids(m.rows);
+    let mutable i: Int = 0;
+    while i < len(held) { let a: Int = push(ids, json_int(held[i])); i += 1; }
+    let mutable f: [Field] = [];
+    let b: Int = push(f, json_field("lit", json_list(ids)));
+    return json_render(json_object(f));
+}
+
+function from_text(text: String) -> Model allocates {
+    let mutable ids: [Int] = [];
+    match json_parse(text) {
+        Error(e) => { }
+        Ok(v) => {
+            match json_at(v, "lit") {
+                None => { }
+                Some(list) => {
+                    match list {
+                        Null => { } Truth(b) => { } Number(n) => { } Text(t) => { } Object(o) => { }
+                        List(items) => {
+                            let mutable i: Int = 0;
+                            while i < len(items) {
+                                match json_as_int(items[i]) { None => { } Some(n) => { let a: Int = push(ids, n); } }
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return Model { rows: board(ids), lit: len(ids) };
+}
+===
+
+===style.local
+.board { display: inline-block; border: 1px solid #cbd2dd; border-radius: 6px; overflow: hidden; }
+.rank  { display: flex; }
+.sq    { width: 34px; height: 34px; border: 0; padding: 0; background: #f4f6fa; cursor: pointer; }
+.sq.dark { background: #dfe4ec; }
+.sq.lit  { background: #d9531e; }
+.count { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; margin: .6rem 0; }
+===
+
+:props: model: Model
+:!props:
+
+:p: class=count child={to_string(model.lit) + " lit"} :!p:
+
+:div: class=board
+    :for: row in model.rows key to_string(row.y)
+        :div: class=rank
+            :for: cell in row.cells key to_string(cell.id)
+                :button: class={{ shade(cell) }} on:click=Msg.Toggle(string_to_int(key, 0)) :!button:
+            :!for:
+        :!div:
+    :!for:
+:!div:

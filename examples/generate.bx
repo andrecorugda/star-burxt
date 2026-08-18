@@ -183,8 +183,11 @@ match file_read_maybe(path) {
                     // takes a `Msg` rather than a number.
                     let has_commands: Bool = star_mentions(component.code, "function commands(");
                     let has_watch: Bool = star_mentions(component.code, "function watch(");
+                    // `after` issues commands too, so the vocabulary and the host call it needs are
+                    // required by either function rather than by `commands` alone.
+                    let has_after: Bool = star_mentions(component.code, "function after(");
                     let has_arrived: Bool = star_mentions(component.code, "function arrived(");
-                    if has_commands {
+                    if has_commands || has_after {
                         print("");
                         print("external function host_command(line: String) -> CInt;");
                     }
@@ -249,6 +252,20 @@ match file_read_maybe(path) {
                         // working path certifies the feature and misses the bug.**
                         print("        let next: Model = arrived(tag, value, from_text(state));");
                         print("        let shown: Int = " + name + "_settle(next);");
+                        // **`after` is what makes polling possible, and it was missing.** `commands`
+                        // takes a `Msg`, and a reply is not one — so nothing that arrived through a
+                        // subscription could ask for anything to be done. A timer therefore could not
+                        // re-fetch, which is the entire point of a timer, and `Feed.sbmx` "polled" by
+                        // re-delivering its fetch tag with an empty body: measured, its items went from
+                        // 42 to 0 on the first tick. The site taught that example.
+                        if star_mentions(component.code, "function after(") {
+                            print("        let todo: [StarCmd] = after(tag, next);");
+                            print("        let mutable c: Int = 0;");
+                            print("        while c < len(todo) \{");
+                            print("            let asked: Int = host_command(star_cmd_text(todo[c]));");
+                            print("            c += 1;");
+                            print("        \}");
+                        }
                         if has_watch {
                             print("        let watched: [StarWatch] = watch(next);");
                             print("        let mutable w: Int = 0;");

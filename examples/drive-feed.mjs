@@ -43,6 +43,23 @@ is("THE REPLY ARRIVES UNDER THE AUTHOR'S OWN TAG", app.state,
 root.fire('click', 1);
 is('a subscription starts because the STATE changed', timers.filter(Boolean).length, 1);
 
+// **A POLL MUST ACTUALLY POLL**, and for as long as this file existed it did not. The example pointed
+// its timer at the FETCH's tag, so every tick delivered an empty body and `string_to_int("", 0)` set
+// the items to zero: 42 before a tick, 0 after — a live feed that blanked itself every five seconds,
+// taught on the site. This test asserted that a timer STARTS and STOPS and never once asked what a tick
+// does, which is the same shape as every other miss this week: the assertion that was never written.
+//
+// The cause was not the example. `commands` takes a `Msg` and a reply is not one, so nothing arriving
+// through a subscription could ask for anything to be done — polling was not expressible. `after(tag, m)`
+// is the missing half.
+{
+  const before = fetched.length;
+  timers.filter(Boolean)[0].fn();
+  await new Promise((r) => setTimeout(r, 20));
+  is('a tick ASKS FOR THE FETCH AGAIN, which is what a poll is', fetched.length, before + 1);
+  is('and the items it already had survive the tick', JSON.parse(app.state).items, 42);
+}
+
 root.fire('click', 1);
 is('and stops the same way — no cleanup function to forget', timers.filter(Boolean).length, 0);
 
