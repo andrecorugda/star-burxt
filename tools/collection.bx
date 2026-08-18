@@ -123,6 +123,39 @@ match file_list_directory(PLACE) {
     }
 }
 
+// **The gallery is the same claim in pictures, so it is held the same way.** A component that arrives with
+// no capture is one the carousel silently never shows, and a slide whose PNG has gone is a broken image on
+// the page a visitor is most likely to look at first. Neither has a failure mode of its own.
+//
+// A component with no `to_text`/`from_text` cannot be mounted on its own — `Badge` is used BY `Page` — so it
+// is not expected to have one. That exemption is derived from the source rather than listed here, or the
+// list would be the thing that goes stale.
+let shelf: String = file_read("docs/_includes/gallery.html");
+let mutable captured: Int = 0;
+let mutable l2: Int = 0;
+while l2 < len(listed) {
+    let name: String = listed[l2];
+    let source: String = file_read(PLACE + "/" + name + ".sbmx");
+    if mentions(source, "function to_text(") && mentions(source, "function from_text(") {
+        captured += 1;
+        let low: String = string_to_lower_ascii(name);
+        if !file_exists("docs/assets/gallery/" + low + ".png") {
+            let x: Int = push(failures, name + " can be mounted on its own and has no capture in"
+                + " docs/assets/gallery/ — run `node tools/gallery.mjs`");
+        }
+        if !mentions(shelf, "shelf-" + low) {
+            let y: Int = push(failures, name + " has no slide in docs/_includes/gallery.html, so the"
+                + " carousel does not show it — run `node tools/gallery.mjs`");
+        }
+    }
+    l2 += 1;
+}
+if captured < 10 {
+    print_error("only " + to_string(captured) + " mountable component(s) found — the to_text/from_text test"
+                + " has stopped matching, so the gallery half of this gate is asserting nothing");
+    exit(2);
+}
+
 if len(failures) > 0 {
     print_error(to_string(len(failures)) + " problem(s):");
     let mutable i: Int = 0;

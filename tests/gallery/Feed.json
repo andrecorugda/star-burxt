@@ -3,6 +3,6 @@
   "state": {
     "items": 42,
     "status": "ready",
-    "polling": true
+    "polling": false
   }
 }

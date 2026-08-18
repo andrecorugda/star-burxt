@@ -16,7 +16,7 @@
 // as a module and could not run on this machine, which is why the landing page's picture had gone stale
 // once already.
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, copyFileSync } from 'node:fs';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { join, extname } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -27,6 +27,14 @@ const SHOTS = join(ROOT, 'docs', 'assets', 'gallery');
 const WIDTH = 720, HEIGHT = 470;
 
 const chrome = () => {
+  // A CI runner has one on PATH; this machine has them in a cache. Both, because a tool that only works
+  // where it was written is a tool nobody else runs.
+  for (const name of ['google-chrome', 'chromium', 'chromium-browser']) {
+    try {
+      const path = execFileSync('command', ['-v', name], { shell: true, encoding: 'utf8' }).trim();
+      if (path) return path;
+    } catch { /* not on PATH */ }
+  }
   const roots = [join(process.env.HOME, '.cache', 'puppeteer', 'chrome'),
                  join(process.env.HOME, '.cache', 'ms-playwright')];
   for (const base of roots) {
@@ -118,14 +126,34 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                 '.wasm': 'application/wasm' };
 const server = createServer((req, res) => {
   const path = join(WORK, decodeURIComponent(req.url.split('?')[0]));
-  try {
-    res.writeHead(200, { 'content-type': types[extname(path)] || 'application/octet-stream' });
-    res.end(readFileSync(path));
-  } catch { res.writeHead(404); res.end(); }
+  // **Read first, then write the header.** Writing 200 and discovering the file is missing leaves nothing
+  // to say — `writeHead(404)` after that throws `ERR_HTTP_HEADERS_SENT` and takes the whole run down, which
+  // is what a missing favicon request did.
+  let body;
+  try { body = readFileSync(path); } catch { res.writeHead(404); res.end(); return; }
+  res.writeHead(200, { 'content-type': types[extname(path)] || 'application/octet-stream' });
+  res.end(body);
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const port = server.address().port;
 const BIN = chrome();
+
+// **`spawnSync` cannot be used here, and finding out cost an hour.** The HTTP server serving these pages
+// runs in THIS process, and a synchronous child blocks the event loop — so Chrome asked for the page, node
+// was blocked waiting for Chrome, and neither moved. Sixteen timeouts, all of them looking like a page that
+// would not settle, when the truth was that nothing was answering the request. It worked by hand because a
+// shell puts the server in a different process.
+//
+// The lesson generalises past this file: **a server and a synchronous child in one process is a deadlock**,
+// and its symptom is indistinguishable from the thing you would naturally suspect — the page.
+const run = (args, capture) => new Promise((resolve) => {
+  const child = spawn(BIN, args, { stdio: capture ? ['ignore', 'pipe', 'ignore'] : 'ignore' });
+  let out = '';
+  if (capture) child.stdout.on('data', (d) => { out += d; });
+  const timer = setTimeout(() => child.kill('SIGKILL'), 25000);
+  child.on('close', (code) => { clearTimeout(timer); resolve({ code, out }); });
+  child.on('error', () => { clearTimeout(timer); resolve({ code: -1, out: '' }); });
+});
 
 let failures = 0;
 for (const name of shown) {
@@ -133,16 +161,49 @@ for (const name of shown) {
   const url = `http://127.0.0.1:${port}/${low}.html`;
   const flags = ['--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
                  `--window-size=${WIDTH},${HEIGHT}`, '--virtual-time-budget=5000'];
-  execFileSync(BIN, [...flags, `--screenshot=${join(SHOTS, `${low}.png`)}`, url], { stdio: 'pipe' });
+  await run([...flags, `--screenshot=${join(SHOTS, `${low}.png`)}`, url], false);
 
   // **The capture is verified against the page's own DOM.** A picture cannot tell you it rendered the
-  // default view instead of the state it was given.
-  const dom = spawnSync(BIN, [...flags, '--dump-dom', url], { encoding: 'utf8' }).stdout || '';
+  // default view instead of the state it was given, and `from_text` FALLS BACK on a field it does not
+  // recognise — so a demo state that drifted would produce a slide of the default view and look
+  // deliberate.
+  // **An empty dump and a dump without the component are different failures**, and reporting the first as
+  // the second sent me looking at `Clock` for ten minutes when the page was fine — it rendered perfectly
+  // standalone. So an empty dump is retried once and, if it stays empty, named as a harness problem rather
+  // than a finding about the component.
+  let { out: dom } = await run([...flags, '--dump-dom', url], true);
+  if (dom.trim() === '') ({ out: dom } = await run([...flags, '--dump-dom', url], true));
+  if (dom.trim() === '') {
+    failures += 1;
+    console.log(`  FAIL  ${low}.png — no DOM came back, twice. That is this tool, not the component:`);
+    console.log('        check the server is still up and the browser is not being killed early');
+    continue;
+  }
   const { shows } = demo(name);
   const painted = dom.includes('class="star"');
   const landed = shows === '' || dom.includes(shows);
-  console.log(`  ${painted && landed ? 'ok  ' : 'FAIL'}  ${low}.png`);
-  if (!painted) { failures += 1; console.log('        the component did not render at all'); }
+  // A PNG's width and height live in its IHDR, at bytes 16..24 — so the capture can be checked for BEING a
+  // picture of the page rather than a picture of nothing. A blank page still writes a valid PNG, and a
+  // rendered page compresses to far more than an empty one, which is what the floor is for.
+  const shotPath = join(SHOTS, `${low}.png`);
+  const wrote = existsSync(shotPath);
+  if (wrote) {
+    const png = readFileSync(shotPath);
+    const w = png.readUInt32BE(16), h = png.readUInt32BE(20);
+    if (w !== WIDTH || h !== HEIGHT) {
+      failures += 1;
+      console.log(`  FAIL  ${low}.png is ${w}×${h}, not ${WIDTH}×${HEIGHT} — the slides must be one size`);
+      continue;
+    }
+    if (png.length < 4000) {
+      failures += 1;
+      console.log(`  FAIL  ${low}.png is only ${png.length} bytes, which is a picture of an empty page`);
+      continue;
+    }
+  }
+  console.log(`  ${painted && landed && wrote ? 'ok  ' : 'FAIL'}  ${low}.png`);
+  if (!wrote) { failures += 1; console.log('        no file was written — the capture never completed'); }
+  else if (!painted) { failures += 1; console.log('        the component did not render at all'); }
   else if (!landed) {
     failures += 1;
     console.log(`        rendered, but "${shows}" is not on the page — its demo state did not take, so`);
@@ -155,4 +216,52 @@ if (failures) {
   console.error(`\n${failures} capture(s) not verified`);
   process.exit(1);
 }
+
+// ---- the carousel -------------------------------------------------------------------------------
+//
+// **No JavaScript, and that is not a purity point.** `scroll-snap` plus anchor links is the whole
+// mechanism: a browser scrolls the nearest scrollable ancestor when you follow a fragment, so the strip
+// moves and snaps with nothing running. A carousel that needs a script is a carousel that is blank while
+// the script loads, on the page whose argument is that the component is already there.
+//
+// The code panel is the MARKUP half — `:props:` onward — because that is the half a reader is deciding
+// about. It ships as a `language-sbmx` block, so the site's own painter numbers it and draws its guides.
+const reasons = (() => {
+  const page = readFileSync(join(ROOT, 'examples', 'README.md'), 'utf8');
+  const out = {};
+  for (const m of page.matchAll(/^\| `(\w+)\.sbmx` \| ([^|]+)\|/gm)) out[m[1]] = m[2].trim();
+  return out;
+})();
+
+const slides = shown.map((name) => {
+  const low = name.toLowerCase();
+  return `  <section class="shelf-slide" id="shelf-${low}">
+    <figure class="shelf-shot">
+      <img src="{{ site.baseurl }}/assets/gallery/${low}.png" width="${WIDTH}" height="${HEIGHT}"
+           loading="lazy" alt="${name}.sbmx running in a browser">
+      <figcaption><strong>${name}.sbmx</strong> <span>${escape(reasons[name] || '')}</span></figcaption>
+    </figure>
+    <figure class="shelf-code">
+      <pre><code class="language-sbmx">${escape(markup(name))}</code></pre>
+    </figure>
+  </section>`;
+}).join('\n');
+
+const dots = shown.map((name) =>
+  `    <a href="#shelf-${name.toLowerCase()}">${name}</a>`).join('\n');
+
+writeFileSync(join(ROOT, 'docs', '_includes', 'gallery.html'),
+`<!-- GENERATED by tools/gallery.mjs. Do not edit: regenerate. -->
+<!-- Every capture is a real browser mounting the real .wasm, and every one is verified against the DOM it
+     came from — a screenshot cannot tell you it rendered the default view instead of the state it was given. -->
+<div class="shelf">
+  <nav class="shelf-dots">
+${dots}
+  </nav>
+  <div class="shelf-track">
+${slides}
+  </div>
+</div>
+`);
 console.log(`\n${shown.length} captures, every one verified against the page it came from`);
+console.log('wrote docs/_includes/gallery.html');
