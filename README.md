@@ -30,13 +30,11 @@ For anything past a counter, a `===bx` section holds your own Burxt — a `Model
 One line in your project's `burxt.package`:
 
 ```
-dependency  star  https://github.com/andrecorugda/star-burxt  main
+dependency  star  https://github.com/andrecorugda/star-burxt  v0.2.0
 dependency  bmx   https://github.com/andrecorugda/bmx         burxt-0.7.1
 ```
 
-**`main`, because 0.2 is not tagged yet.** `burxt fetch` writes the exact commit into `burxt.lock`,
-so a checkout is reproducible even while the ref moves — and the tag that exists, `v0.1.0`, is 55
-commits behind and cannot read a single example on the site.
+`burxt fetch` writes the exact commit into `burxt.lock`, so a checkout is reproducible.
 
 Then `burxt fetch`. Full instructions: [star.burxt-lang.org/install](https://star.burxt-lang.org/install.html).
 

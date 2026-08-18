@@ -34,7 +34,7 @@ A project is a folder with a file called `burxt.package` in it:
 name        my-app
 version     0.1.0
 
-dependency  star  https://github.com/andrecorugda/star-burxt  main
+dependency  star  https://github.com/andrecorugda/star-burxt  v0.2.0
 dependency  bmx   https://github.com/andrecorugda/bmx         burxt-0.5.1
 ```
 

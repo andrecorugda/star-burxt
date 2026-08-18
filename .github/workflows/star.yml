@@ -17,7 +17,14 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
+      # **`fetch-tags`, because `tools/refs.py` checks that every ref the documentation advertises
+      # exists.** A default checkout is shallow and carries no tags, so the moment a page names one
+      # the check would fail here while passing on every developer's machine — a red build about a
+      # correct document, which is the most confusing kind.
       - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+          fetch-depth: 0
 
 
       # **A RELEASED compiler, pinned — and this paragraph replaces one that had been true all day.**
