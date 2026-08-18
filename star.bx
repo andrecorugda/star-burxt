@@ -1722,6 +1722,22 @@ pure function star_value_end(head: String, from: Int) -> Int {
     if i < width && byte_at(head, i) == 123 {
         let mutable depth: Int = 0;
         while i < width {
+            // **A brace inside a STRING is not a brace.** `child={pick("\}", n)}` ended at the `\}`
+            // in the literal, leaving `, n)}` to be read as attributes — and the refusal that came out
+            // blamed `"` for not being an attribute name, which sends a reader to the wrong problem.
+            //
+            // BMX shipped the same defect in `-> [title="a\]b"]` an hour after documenting why
+            // first-delimiter-wins was safe. **A delimiter rule has to know what protects a
+            // delimiter**, and a quoted run is the only thing that protects one here.
+            if byte_at(head, i) == 34 {
+                i += 1;
+                while i < width && byte_at(head, i) != 34 {
+                    if byte_at(head, i) == 92 && i + 1 < width { i += 1; }
+                    i += 1;
+                }
+                if i < width { i += 1; }
+                continue;
+            }
             if byte_at(head, i) == 123 { depth += 1; }
             if byte_at(head, i) == 125 {
                 depth -= 1;
@@ -1740,6 +1756,16 @@ pure function star_value_end(head: String, from: Int) -> Int {
     let mutable depth: Int = 0;
     let mutable round: Int = 0;
     while i < width && (depth > 0 || round > 0 || !star_separates(byte_at(head, i))) {
+        // A quoted run protects every delimiter inside it — see the same guard in `star_attrs_of`.
+        if byte_at(head, i) == 34 {
+            i += 1;
+            while i < width && byte_at(head, i) != 34 {
+                if byte_at(head, i) == 92 && i + 1 < width { i += 1; }
+                i += 1;
+            }
+            if i < width { i += 1; }
+            continue;
+        }
         if i + 1 < width && byte_at(head, i) == 123 && byte_at(head, i + 1) == 123 {
             depth += 1;
             i += 1;
@@ -1829,8 +1855,19 @@ pure function star_attr_value(raw: String) -> String {
     let width: Int = len(raw);
     while i < width {
         if i + 1 < width && byte_at(raw, i) == 123 && byte_at(raw, i + 1) == 123 {
+            // **The closing `\}\}` must be found OUTSIDE any string in the expression.** This is the
+            // third scanner in this file to need that sentence and the reason is always the same: a
+            // delimiter rule has to know what protects a delimiter. `{{ pick("\}\}", n) }}` closed
+            // inside the literal and the expression came out spliced in half.
             let mutable j: Int = i + 2;
             while j + 1 < width && !(byte_at(raw, j) == 125 && byte_at(raw, j + 1) == 125) {
+                if byte_at(raw, j) == 34 {
+                    j += 1;
+                    while j < width && byte_at(raw, j) != 34 {
+                        if byte_at(raw, j) == 92 && j + 1 < width { j += 1; }
+                        j += 1;
+                    }
+                }
                 j += 1;
             }
             if len(literal) > 0 {
@@ -1917,6 +1954,18 @@ pure function star_attrs_of(head: String) -> Result<String, String> {
                 let mutable round: Int = 0;
                 while i < width && (depth > 0 || round > 0
                                     || !star_separates(byte_at(head, i))) {
+                    // A quoted run protects every delimiter inside it — `}}`, a comma, a space,
+                    // a paren. Without this, `class={{ pick("}}", n) }}` ended at the literal and the
+                    // refusal blamed `}}` for not being an attribute name.
+                    if byte_at(head, i) == 34 {
+                        i += 1;
+                        while i < width && byte_at(head, i) != 34 {
+                            if byte_at(head, i) == 92 && i + 1 < width { i += 1; }
+                            i += 1;
+                        }
+                        if i < width { i += 1; }
+                        continue;
+                    }
                     if i + 1 < width && byte_at(head, i) == 123 && byte_at(head, i + 1) == 123 {
                         depth += 1;
                         i += 1;

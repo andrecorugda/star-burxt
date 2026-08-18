@@ -610,6 +610,41 @@ def main():
     check("an interpolated value may hold a comma",
           "pick(n, 2)" in interp.stdout, interp.stdout[-220:])
 
+    # ---- a delimiter rule must know what PROTECTS a delimiter ----------------------------------
+    #
+    # BMX shipped `-> [title="a]b"]` splitting at the `]` inside the quoted value — an hour after
+    # documenting why first-delimiter-wins was safe. I asked whether a `]` in a string was still the
+    # first `]`, and then found the same class three times in star, in three different scanners:
+    #
+    #     child={pick("}", n)}          the `}` in the literal ended the braced value
+    #     class={{ pick("}}", n) }}     the `}}` in the literal ended the interpolation — twice, once
+    #                                   in the scan and again in the expression builder
+    #
+    # **The danger is not that a truncated value breaks, it is that it keeps working**: a cut
+    # expression is still valid syntax, so it compiles and renders something plausible.
+    for label, head, want in [
+        ("a `}` inside a string in `child={}`",
+         ':span: child={pick("}", n)}', 'html_text(pick("}", n))'),
+        ("a `}}` inside a string in an interpolation",
+         ':div: class={{ pick("}}", n) }}', 'html_attr("class", (pick("}}", n)))'),
+        ("a comma inside a string",
+         ':div: class={{ pick("a,b", n) }}', 'html_attr("class", (pick("a,b", n)))'),
+        ("a space inside a string",
+         ':div: class={{ pick("a b", n) }}', 'html_attr("class", (pick("a b", n)))'),
+        ("a paren inside a string",
+         ':span: child={pick(")", n)}', 'html_text(pick(")", n))'),
+        ("a comma inside a quoted value",
+         ':div: class="a,b"', 'html_attr("class", "a,b")'),
+    ]:
+        body = "\nhi\n:!div:\n" if head.startswith(":div:") else "\n:!span:\n"
+        got = generate(":props: n: Int\n:!props:\n\n" + head + body)
+        check(label, want in got.stdout, (got.stderr or got.stdout)[-200:])
+
+    # And the ordinary shapes still work, so the guards did not buy correctness with breakage.
+    mixed = generate(":props: n: Int\n:!props:\n\n:a: href=/x/{{ to_string(n) }}/y\ngo\n:!a:\n")
+    check("a value mixing literal and interpolation is unaffected",
+          'html_attr("href", "/x/" + (to_string(n)) + "/y")' in mixed.stdout, mixed.stdout[-200:])
+
     shutil.rmtree(work, ignore_errors=True)
 
     if failures:
