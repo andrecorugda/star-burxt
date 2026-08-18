@@ -37,6 +37,13 @@ No build config. No component library. No JavaScript to write. **The document *i
 
 {% endraw %}
 {% include showcase.html %}
+
+<h2 id="every-example">Twenty-one of these, all running</h2>
+
+<p class="showcase-note">Every example in the repository, captured in a browser beside the markup that made it.
+Drag the strip, or pick one.</p>
+
+{% include gallery.html %}
 {% raw %}
 
 For anything past a counter, a component has two halves — the markup, and a `===bx` section holding

@@ -83,6 +83,7 @@
 
   <span class="links">
     <a href="{{ site.baseurl }}/guide/01-your-first-component.html" class="{% if page.section == 'guide' %}here{% endif %}">Learn</a>
+    <a href="{{ site.baseurl }}/gallery.html" class="{% if page.title == 'Gallery' %}here{% endif %}">Gallery</a>
     <a href="{{ site.baseurl }}/how-do-i.html" class="{% if page.title == 'How do I…?' %}here{% endif %}">How do I…?</a>
     <a href="{{ site.baseurl }}/blocks.html"   class="{% if page.title == 'Blocks' %}here{% endif %}">Blocks</a>
     <a href="{{ site.baseurl }}/install.html"  class="{% if page.title == 'Set up' %}here{% endif %}">Set up</a>
@@ -133,6 +134,7 @@
     <div class="group">
       <h2>Look things up</h2>
       <ul>
+        <li class="topic"><a href="{{ site.baseurl }}/gallery.html"{% if page.title == "Gallery" %} class="here" aria-current="page"{% endif %}><span>Gallery</span></a></li>
         <li class="topic"><a href="{{ site.baseurl }}/how-do-i.html"{% if page.title == "How do I…?" %} class="here" aria-current="page"{% endif %}><span>How do I…?</span></a></li>
         <li class="topic"><a href="{{ site.baseurl }}/blocks.html"{% if page.title == "Blocks" %} class="here" aria-current="page"{% endif %}><span>Blocks</span></a></li>
         <li class="topic"><a href="{{ site.baseurl }}/refusals.html"{% if page.title == "When it says no" %} class="here" aria-current="page"{% endif %}><span>When it says no</span></a></li>

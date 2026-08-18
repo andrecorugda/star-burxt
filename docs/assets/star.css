@@ -10,7 +10,11 @@
 /* **The landing mark, with room above it.** Andre: *"the starb wordmark on landing the size is ok but there
  * is space on the top it goes to the edge."* The size stays; what was missing is the space, because this sits
  * first in the page body and had nothing between it and the bar. */
-.lockup { margin: .6rem 0 1.5rem; }
+/* **The gap Andre circled was two margins, not one.** This sits directly above the page's `h1`, which
+ * brings its own top margin, so the space between mark and headline was the sum of both. The mark keeps a
+ * little air above it and gives up all of it below; the heading's own margin is the only gap left. */
+.lockup { margin: .4rem 0 0; }
+.lockup + h1, .lockup + p + h1 { margin-top: .5rem; }
 .lockup img { height: 40px; width: auto; display: block; }
 @media (max-width: 640px) { .lockup img { height: 32px; } }
 
