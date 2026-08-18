@@ -236,6 +236,21 @@ jobs:
           ./star-build examples/Feed.sbmx feed /tmp/build
           node examples/drive-feed.mjs /tmp/build/feed.wasm
 
+      # **One set was answering two different questions and was wrong both ways.** What an element may
+      # CONTAIN is not what an element IS: `select` is phrasing content and holds `option`s, every
+      # heading holds text and is flow. The check for what may sit inside a phrasing element asked
+      # "does the child take flow?", so `<label>size <select>…</select></label>` was refused — nine of
+      # ten valid pairs were — while `<button><h1>` was ACCEPTED, the exact case star.bx's own comment
+      # says STAR-E005 exists to refuse.
+      #
+      # Both columns, because neither alone can hold a content model: a suite of refusals cannot catch a
+      # rule that refuses too much, and a suite of acceptances cannot catch one that permits too much.
+      - name: HTML's content model, both ways
+        run: |
+          set -eux
+          burxt build tools/content.bx -o star-content
+          ./star-content
+
       # **`:for: … key …` has emitted `data-star-key` since it existed and the reconciler ignored it.**
       # The file's own comment called keys "the fix" and said they waited on a format decision that had
       # already been made. It also claimed positional matching was merely wasteful on a reorder. It was

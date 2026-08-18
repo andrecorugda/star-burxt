@@ -375,6 +375,29 @@ pure function star_takes_phrasing(name: String) -> Bool {
         + " sup textarea time title u var ");
 }
 
+// **What an element IS, as against what it may CONTAIN.** Two different questions, and one set was
+// answering both — wrong in both directions, found by writing a `<label>` with a `<select>` in it.
+//
+// `select` IS phrasing content and TAKES `option` children, so asking "does it take flow?" refused
+// `<label>size <select>…</select></label>` — ordinary, valid, and one of the most common patterns in
+// any form. Nine of ten valid pairs I probed were refused: `<span><canvas>`, `<p><video>`,
+// `<p><iframe>`, `<span><progress>`, `<span><output>`, `<p><object>`, `<p><audio>`,
+// `<button><progress>`.
+//
+// **And the other direction was worse.** `h1` takes phrasing, so it sat in that set — which meant
+// `<button><h1>` was ACCEPTED, the exact case the comment above says STAR-E005 exists to refuse.
+// A rule whose own stated purpose it does not serve, in the file that states it.
+//
+// `option`, `legend`, `caption`, `dt`, `rp`, `rt` and `title` stay OUT: they take phrasing, but they
+// are not phrasing content — each is only valid inside a particular parent, so admitting them here
+// would let `<span><option>` through.
+pure function star_is_phrasing(name: String) -> Bool {
+    return star_in_set(name,
+        " a abbr audio b bdi bdo br button canvas cite code data datalist del dfn em embed i iframe"
+        + " img input ins kbd label map mark meter noscript object output picture progress q ruby s"
+        + " samp select slot small span strong sub sup textarea time u var video wbr ");
+}
+
 // Takes no children at all. `html_element` carries `requires !html_is_void(tag) ||
 // len(children) == 0`, so one of these with a body is a CONTRACT violation — refused at generate
 // time rather than left to trip when the page is already open.
@@ -737,8 +760,8 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                 if html_is_void(fenced.name) && len(fenced.children) > 0 {
                     return Result.Error("STAR-E004 at " + star_at(source, fenced.offset)
                         + ": `" + fenced.name + "` is a void element and cannot have a body."
-                        + " Write `:" + fenced.name + ": on:input=...` with nothing between"
-                        + " the fences");
+                        + " Put whatever it needs in the head — `:" + fenced.name
+                        + ": …` — and leave nothing between the fences");
                 }
                 // A key becomes an attribute the reconciler can match on. It is emitted
                 // as a real expression, so `key line.idd` is a compile error naming the
@@ -951,7 +974,10 @@ function star_emit_stmts(source: String, known: [StarKnown], marker: String, blo
                                 // rather than by a second emitter: attributes, events, keys and
                                 // components all have to work inside a `<span>` exactly as they do
                                 // outside one, and two emitters would be two answers.
-                                if star_takes_flow(f.name) {
+                                // **Is the child PHRASING, not does the child take flow.** Those
+                                // are different questions and this asked the wrong one — see
+                                // `star_is_phrasing`.
+                                if !star_is_phrasing(f.name) {
                                     return Result.Error("STAR-E005 at " + star_at(source, f.offset)
                                         + ": `" + fenced.name + "` takes phrasing content, so it"
                                         + " cannot contain a `" + f.name + "` block");

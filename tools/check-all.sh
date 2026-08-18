@@ -99,6 +99,7 @@ run "the showcase is current"        python3 tools/showcase.py
 run "every advertised ref exists"    python3 tools/refs.py
 run "every published limitation holds" ./star-limits
 run "the published surface is the real one" ./star-surface
+run "HTML's content model, both ways" ./star-content
 
 printf '  %-46s' "every component checks clean"
 for doc in examples/*.sbmx; do

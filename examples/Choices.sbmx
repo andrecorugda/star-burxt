@@ -1,0 +1,101 @@
+===bx
+// Every form control star can drive, and each one's value means something different.
+//
+// The edge is what arrives as `value`. A text field gives its text; a CHECKBOX gives its checked state
+// rather than its value, because `on` is not an answer; a select gives the chosen option; a radio gives
+// the value of the one that was clicked. One `on:` per element, so each control carries its own handler.
+use "std/string.bx";
+use "std/json.bx";
+
+class Model { size: String, tone: String, agree: Bool, note: String }
+enum Msg { Size(String), Tone(String), Agree(String), Note(String) }
+
+pure function update(msg: Msg, m: Model) -> Model {
+    match msg {
+        Size(v)  => { return Model { size: v, tone: m.tone, agree: m.agree, note: m.note }; }
+        Tone(v)  => { return Model { size: m.size, tone: v, agree: m.agree, note: m.note }; }
+        Agree(v) => { return Model { size: m.size, tone: m.tone, agree: v == "true", note: m.note }; }
+        Note(v)  => { return Model { size: m.size, tone: m.tone, agree: m.agree, note: v }; }
+    }
+}
+
+pure function summary(m: Model) -> String allocates {
+    let mutable out: String = m.size + ", " + m.tone;
+    if m.agree { out = out + ", agreed"; } else { out = out + ", not agreed"; }
+    return out + " — " + to_string(len(m.note)) + " characters";
+}
+
+pure function to_text(m: Model) -> String allocates {
+    let mutable f: [Field] = [];
+    let a: Int = push(f, json_field("size", json_text(m.size)));
+    let b: Int = push(f, json_field("tone", json_text(m.tone)));
+    let c: Int = push(f, json_field("agree", json_truth(m.agree)));
+    let d: Int = push(f, json_field("note", json_text(m.note)));
+    return json_render(json_object(f));
+}
+
+pure function text_at(v: Json, name: String, fallback: String) -> String {
+    match json_at(v, name) {
+        None => { return fallback; }
+        Some(x) => { match json_as_text(x) { None => { return fallback; } Some(t) => { return t; } } }
+    }
+}
+
+function from_text(text: String) -> Model {
+    match json_parse(text) {
+        Error(e) => { return Model { size: "medium", tone: "warm", agree: false, note: "" }; }
+        Ok(v) => {
+            let mutable agree: Bool = false;
+            match json_at(v, "agree") {
+                None => { }
+                Some(x) => { match json_as_truth(x) { None => { } Some(b) => { agree = b; } } }
+            }
+            return Model { size: text_at(v, "size", "medium"), tone: text_at(v, "tone", "warm"),
+                           agree: agree, note: text_at(v, "note", "") };
+        }
+    }
+}
+===
+
+===style.local
+.field { display: block; margin: .7rem 0; }
+.field select, .field textarea { font: inherit; padding: .3rem .5rem; border: 1px solid #cbd2dd;
+                                border-radius: 5px; }
+.said { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; color: #6b7280; }
+===
+
+:props: model: Model
+:!props:
+
+:p: class=said child={summary(model)} :!p:
+
+:label: class=field
+    size
+    :select: on:change=Msg.Size(value)
+        :option: value=small small :!option:
+        :option: value=medium medium :!option:
+        :option: value=large large :!option:
+    :!select:
+:!label:
+
+:fieldset: class=field
+    :legend: tone :!legend:
+    :label:
+        :input: type=radio name=tone value=warm on:change=Msg.Tone(value) :!input:
+        warm
+    :!label:
+    :label:
+        :input: type=radio name=tone value=cool on:change=Msg.Tone(value) :!input:
+        cool
+    :!label:
+:!fieldset:
+
+:label: class=field
+    :input: type=checkbox on:change=Msg.Agree(value) :!input:
+    I agree
+:!label:
+
+:label: class=field
+    notes
+    :textarea: on:input=Msg.Note(value) :!textarea:
+:!label:

@@ -1,0 +1,147 @@
+// HTML's content model, both directions.
+//
+//     burxt build tools/content.bx -o star-content
+//     ./star-content
+//
+// **One set was answering two different questions and was wrong both ways.** `star_takes_phrasing`
+// says what an element may CONTAIN; the check for what may appear INSIDE a phrasing element asked
+// `star_takes_flow(child)` instead of "is the child phrasing content". Those differ for every element
+// that is phrasing and holds structure — `select` holds `option`s, `video` holds `source`s — and for
+// every element that holds text but is itself flow, which is every heading.
+//
+// So `<label>size <select>…</select></label>` was refused: ordinary, valid, one of the most common
+// patterns in any form. Nine of ten valid pairs were. **And `<button><h1>` was ACCEPTED** — the exact
+// case `star.bx`'s own comment says STAR-E005 exists to refuse, in the file that says it.
+//
+// **Both columns, because a content model cannot be checked by one.** A suite of refusals cannot catch
+// a rule that refuses too much, and a suite of acceptances cannot catch one that permits too much —
+// and this rule was wrong in each direction at once. Nobody writes a test asserting that something
+// they believe illegal actually works, which is why the ACCEPTED column is the one that found this.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+
+// Valid HTML: a phrasing element holding phrasing content.
+let ACCEPTED: String = "label>select label>textarea label>input span>canvas span>progress"
+    + " span>output span>span span>img p>video p>audio p>iframe p>object p>button p>label"
+    + " button>span button>progress button>img td>select li>select h1>span h1>a";
+
+// Invalid HTML: flow content inside a phrasing element, or an element only valid in another parent.
+let REFUSED: String = "span>p span>div span>section span>ul span>ol span>li span>table"
+    + " span>option span>legend span>blockquote span>pre span>details button>h1 button>div"
+    + " button>p label>div label>form p>div p>section a>h2";
+
+pure function before(pair: String) -> String {
+    let mutable i: Int = 0;
+    while i < len(pair) && byte_at(pair, i) != 62 { i += 1; }
+    return substring(pair, 0, i);
+}
+
+pure function after_mark(pair: String) -> String {
+    let mutable i: Int = 0;
+    while i < len(pair) && byte_at(pair, i) != 62 { i += 1; }
+    return substring(pair, i + 1, len(pair) - i - 1);
+}
+
+pure function mentions(haystack: String, needle: String) -> Bool {
+    if len(needle) == 0 { return true; }
+    let mutable i: Int = 0;
+    while i + len(needle) <= len(haystack) {
+        if substring(haystack, i, len(needle)) == needle { return true; }
+        i += 1;
+    }
+    return false;
+}
+
+// A void element takes no body, so a probe that gives it one is refused for a DIFFERENT reason — which
+// this gate reported as three false findings on its first run, correctly: `<label><input>` is the
+// commonest form pattern there is and my probe was writing `<input>x</input>`.
+pure function is_void(name: String) -> Bool {
+    return mentions(" area base br col embed hr img input link meta source track wbr ", " " + name + " ");
+}
+
+// One pair, written as a document and put to the checker.
+function verdict(parent: String, child: String) -> String allocates touches files, commands, input {
+    let mutable inner: String = "    :" + child + ":\n    x\n    :!" + child + ":\n";
+    if is_void(child) { inner = "    :" + child + ": :!" + child + ":\n"; }
+    let doc: String = ":props: n: Int\n:!props:\n\n:" + parent + ":\n" + inner
+        + ":!" + parent + ":\n";
+    let wrote: Int = file_write("/tmp/star-content-probe.sbmx", doc);
+    if wrote < 0 { return "unwritable"; }
+    let said: String = os_capture("./star-check /tmp/star-content-probe.sbmx 2>&1");
+    if mentions(said, "no problems") { return "accepted"; }
+    if mentions(said, "STAR-E005") { return "refused"; }
+    return "refused for another reason: " + string_trim(said);
+}
+
+// Walk a space-delimited list of `parent>child` pairs, returning what went wrong.
+//
+// **The counters used to be top-level `let mutable` read from in here, and the compiler refused it** —
+// `unknown variable: checked`. That is the same shape the language session found silently reading ZERO
+// in stage-1 an hour ago: a top-level binding is a local of the program's entry, not a module constant.
+// Stage-0 refuses it; the released compiler is the one being run here, so it was caught at the keyboard.
+function judge(pairs: String, wanted: String) -> [String] allocates touches files, commands, input {
+    let mutable failures: [String] = [];
+    let mutable start: Int = 0;
+    let mutable i: Int = 0;
+    while i <= len(pairs) {
+        if i == len(pairs) || byte_at(pairs, i) == 32 {
+            let pair: String = substring(pairs, start, i - start);
+            if len(pair) > 0 {
+                let parent: String = before(pair);
+                let child: String = after_mark(pair);
+                let got: String = verdict(parent, child);
+                if got != wanted {
+                    if wanted == "accepted" {
+                        let x: Int = push(failures, "`<" + parent + "><" + child + ">` is VALID HTML"
+                            + " and star refuses it — " + got);
+                    } else {
+                        let y: Int = push(failures, "`<" + parent + "><" + child + ">` is INVALID"
+                            + " HTML and star accepts it, so the rule permits what it exists to stop");
+                    }
+                }
+            }
+            start = i + 1;
+        }
+        i += 1;
+    }
+    return failures;
+}
+
+pure function words_in(text: String) -> Int {
+    let mutable n: Int = 0;
+    let mutable i: Int = 0;
+    let mutable inside: Bool = false;
+    while i < len(text) {
+        if byte_at(text, i) == 32 { inside = false; } else {
+            if !inside { n += 1; }
+            inside = true;
+        }
+        i += 1;
+    }
+    return n;
+}
+
+let mutable failures: [String] = [];
+let refused_wrongly: [String] = judge(ACCEPTED, "accepted");
+let accepted_wrongly: [String] = judge(REFUSED, "refused");
+let mutable f: Int = 0;
+while f < len(refused_wrongly) { let x: Int = push(failures, refused_wrongly[f]); f += 1; }
+let mutable g: Int = 0;
+while g < len(accepted_wrongly) { let y: Int = push(failures, accepted_wrongly[g]); g += 1; }
+
+let checked: Int = words_in(ACCEPTED) + words_in(REFUSED);
+if checked < 30 {
+    print_error("only " + to_string(checked) + " pair(s) in the table — too few to hold a content"
+                + " model, or the splitting has stopped working");
+    exit(2);
+}
+
+if len(failures) > 0 {
+    print_error(to_string(len(failures)) + " problem(s) in " + to_string(checked) + " pair(s):");
+    let mutable i: Int = 0;
+    while i < len(failures) { print_error("  " + failures[i]); i += 1; }
+    exit(1);
+}
+
+print(to_string(checked) + " parent/child pair(s) judged, in both directions");
