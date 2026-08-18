@@ -17,7 +17,7 @@ use "std/string.bx";
 use "std/json.bx";
 
 class Cell  { x: Int, y: Int }
-class Model { body: [Cell], dx: Int, dy: Int, food: Cell, alive: Bool, score: Int, seed: Int }
+class Model { body: [Cell], dx: Int, dy: Int, food: Cell, alive: Bool, started: Bool, score: Int, seed: Int }
 enum Msg { Up, Down, Left, Right, Tick, Again }
 
 const WIDTH: Int = 16;
@@ -55,8 +55,11 @@ pure function fresh(seed: Int) -> Model allocates {
     let a: Int = push(body, Cell { x: 8, y: 8 });
     let b: Int = push(body, Cell { x: 7, y: 8 });
     let c: Int = push(body, Cell { x: 6, y: 8 });
+    // **It starts paused, and that is the subscription property rather than a nicety.** `watch` asks
+    // for no timer until `started`, so a board that has not been touched does not move — and the game
+    // used to be over in 840ms, before a player could reach the keyboard.
     return Model { body: body, dx: 1, dy: 0, food: next_food(body, seed), alive: true,
-                   score: 0, seed: stepped(seed) };
+                   started: false, score: 0, seed: stepped(seed) };
 }
 
 // A turn is refused when it reverses, because a snake cannot walk into its own neck — and doing it by
@@ -64,7 +67,7 @@ pure function fresh(seed: Int) -> Model allocates {
 pure function turned(m: Model, dx: Int, dy: Int) -> Model {
     if m.dx + dx == 0 && m.dy + dy == 0 { return m; }
     return Model { body: m.body, dx: dx, dy: dy, food: m.food, alive: m.alive,
-                   score: m.score, seed: m.seed };
+                   started: true, score: m.score, seed: m.seed };
 }
 
 pure function advanced(m: Model) -> Model allocates {
@@ -76,7 +79,7 @@ pure function advanced(m: Model) -> Model allocates {
     // A wall or itself ends it. The tail square is a hit too: the tail has not moved yet this frame.
     if nx < 0 || ny < 0 || nx >= WIDTH || ny >= HEIGHT || occupied(m.body, nx, ny) {
         return Model { body: m.body, dx: m.dx, dy: m.dy, food: m.food, alive: false,
-                       score: m.score, seed: m.seed };
+                       started: m.started, score: m.score, seed: m.seed };
     }
 
     let eating: Bool = nx == m.food.x && ny == m.food.y;
@@ -91,10 +94,10 @@ pure function advanced(m: Model) -> Model allocates {
 
     if eating {
         return Model { body: body, dx: m.dx, dy: m.dy, food: next_food(body, m.seed), alive: true,
-                       score: m.score + 1, seed: stepped(m.seed) };
+                       started: m.started, score: m.score + 1, seed: stepped(m.seed) };
     }
     return Model { body: body, dx: m.dx, dy: m.dy, food: m.food, alive: true,
-                   score: m.score, seed: m.seed };
+                   started: m.started, score: m.score, seed: m.seed };
 }
 
 pure function update(msg: Msg, m: Model) -> Model allocates {
@@ -113,7 +116,7 @@ pure function update(msg: Msg, m: Model) -> Model allocates {
 // require the player to click the board first.
 pure function watch(m: Model) -> [StarWatch] allocates {
     let mutable out: [StarWatch] = [];
-    if m.alive { let t: Int = push(out, StarWatch.Every(1, 120)); }
+    if m.alive && m.started { let t: Int = push(out, StarWatch.Every(1, 140)); }
     let u: Int = push(out, StarWatch.Key(2, "ArrowUp"));
     let d: Int = push(out, StarWatch.Key(3, "ArrowDown"));
     let l: Int = push(out, StarWatch.Key(4, "ArrowLeft"));
@@ -135,8 +138,9 @@ pure function at(c: Cell) -> String allocates {
 }
 
 pure function verdict(m: Model) -> String {
-    if m.alive { return "score " + to_string(m.score); }
-    return "dead on " + to_string(m.score);
+    if !m.alive { return "dead on " + to_string(m.score); }
+    if !m.started { return "press an arrow key"; }
+    return "score " + to_string(m.score);
 }
 
 pure function to_text(m: Model) -> String allocates {
@@ -156,6 +160,7 @@ pure function to_text(m: Model) -> String allocates {
     let d: Int = push(f, json_field("fx", json_int(m.food.x)));
     let e: Int = push(f, json_field("fy", json_int(m.food.y)));
     let g: Int = push(f, json_field("alive", json_truth(m.alive)));
+    let s2: Int = push(f, json_field("started", json_truth(m.started)));
     let h: Int = push(f, json_field("score", json_int(m.score)));
     let j: Int = push(f, json_field("seed", json_int(m.seed)));
     return json_render(json_object(f));
@@ -195,9 +200,14 @@ function from_text(text: String) -> Model allocates {
                 None => { }
                 Some(x) => { match json_as_truth(x) { None => { } Some(b) => { alive = b; } } }
             }
+            let mutable started: Bool = false;
+            match json_at(v, "started") {
+                None => { }
+                Some(x) => { match json_as_truth(x) { None => { } Some(b) => { started = b; } } }
+            }
             return Model { body: body, dx: number_at(v, "dx", 1), dy: number_at(v, "dy", 0),
                            food: Cell { x: number_at(v, "fx", 0), y: number_at(v, "fy", 0) },
-                           alive: alive, score: number_at(v, "score", 0),
+                           alive: alive, started: started, score: number_at(v, "score", 0),
                            seed: number_at(v, "seed", 7) };
         }
     }

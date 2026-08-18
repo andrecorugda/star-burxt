@@ -48,8 +48,18 @@ const press = async (key) => { for (const fn of [...keyListeners]) fn({ key }); 
 // ---- it starts, and the tick is running BECAUSE the state says it is alive --------------------
 check('a fresh game has a three-square snake', state().body.length, 3);
 check('its head is in the middle', head(), '8,8');
-check('the tick is running while it is alive', timers.size, 1);
-check('and all four arrow keys are watched', keyListeners.length, 4);
+
+// **A board nobody has touched does not move**, and that is `watch` rather than a flag the driver
+// reads: it asks for no timer until the state says the game has started. The first version began
+// moving at mount and was over in 840ms — before a player could reach the keyboard.
+check('NO TICK until the game has started', timers.size, 0);
+check('but all four arrow keys are watched, so there is something to start it with',
+      keyListeners.length, 4);
+check('and the page says what to do', /press an arrow key/.test(String(root.innerHTML)), true);
+
+// ---- the first key starts it ------------------------------------------------------------------
+await press('ArrowRight');
+check('the first key starts the clock', timers.size, 1);
 
 // ---- a tick moves it, and the length is unchanged ---------------------------------------------
 await tick();
@@ -103,8 +113,10 @@ check('and it is still alive', state().alive, true);
 root.fire('click', 0, { on: 'click' });
 await new Promise((r) => setTimeout(r, 0));
 check('a new game resets the board', state().body.length, 3);
-check('and starts the tick again', timers.size, 1);
 check('with the score back to nothing', state().score, 0);
+check('and it waits to be started, exactly as the first one did', timers.size, 0);
+await press('ArrowUp');
+check('a key starts it again', timers.size, 1);
 
 console.log(failures ? `\n${failures} failure(s)` : '\nthe game plays, ends, and starts again');
 process.exit(failures ? 1 : 0);
