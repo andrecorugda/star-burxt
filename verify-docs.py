@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every `.bmx` example on the site is generated, so the book cannot teach something that is refused.
+"""Every `.sbmx` example on the site is generated, so the book cannot teach something that is refused.
 
 **A tutorial that teaches a thing the tool rejects is worse than no tutorial**, because the reader
 concludes they made the mistake. This found exactly that on its first run: chapter 1 opened with a
@@ -155,6 +155,37 @@ def quoted_messages():
     return wrong
 
 
+def confused_extensions():
+    r"""`.bmx` is BMX's the way `.html` is HTML's; `.sbmx` is star's the way `.jsx` is React's.
+
+    **The two were used interchangeably and it reached the GitHub repository description**, which said
+    *"A .bmx file is a component"* — outside the tree, so every sweep over `docs/` missed it for as long
+    as it existed. Andre found it by reading the repository page.
+
+    Checked as a PAIRING rather than as a token: `.bmx` is a perfectly good thing to mention, and the
+    pages do, because star compiles BMX. What is wrong is calling one a component or the other a
+    document.
+    """
+    wrong = []
+    near = re.compile(r"\.bmx[^.\n]{0,40}\bcomponent\b|\bcomponent\b[^.\n]{0,40}\.bmx"
+                      r"|\.sbmx[^.\n]{0,40}\bdocument any\b")
+    for base, _, names in os.walk(os.path.join(ROOT, "docs")):
+        for n in sorted(names):
+            if not n.endswith(".md"):
+                continue
+            path = os.path.join(base, n)
+            text = open(path, encoding="utf-8").read()
+            for m in near.finditer(text):
+                # The guide states the distinction on purpose; that sentence names both extensions.
+                line = text[:m.start()].count("\n") + 1
+                context = text.split("\n")[line - 1]
+                if "belongs to" in context or "not interchangeable" in context:
+                    continue
+                wrong.append("%s:%d calls a `.bmx` a component (or a `.sbmx` a document): %r"
+                             % (os.path.relpath(path, ROOT), line, context.strip()[:70]))
+    return wrong
+
+
 def hidden_fences():
     """Code blocks the extractor above cannot see, which is worse than a block that fails.
 
@@ -205,14 +236,15 @@ def main():
     }
 
     work = tempfile.mkdtemp(prefix="star-docs-")
-    doc = os.path.join(work, "d.bmx")
+    doc = os.path.join(work, "d.sbmx")
 
     # Components the pages show the reader, written beside the examples so a page teaching
     # `::: Badge` is checked against a `Badge` that exists. Its props are the ones the pages use —
     # a component here that did not match the documented call would make this check a fiction.
     open(os.path.join(work, "Badge.sbmx"), "w").write(
         ":props: amount: Int, tone: String\n:!props:\n\n:span: class=badge\n{{ tone }}: {{ to_string(amount) }}\n:!span:\n")
-    wrong, checked, refuted, typechecked = list(hidden_fences()) + quoted_messages(), 0, 0, [0]
+    wrong, checked, refuted, typechecked = (list(hidden_fences()) + quoted_messages()
+                                            + confused_extensions()), 0, 0, [0]
 
     for path, line, body in examples():
         # **An example that is MEANT to be refused is fed verbatim.** The preamble below supplies a

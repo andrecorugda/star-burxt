@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """star-burxt's guarantee test.
 
-**This is the whole claim, and it is a claim about REFUSALS.** A `.bmx` document becomes a component
+**This is the whole claim, and it is a claim about REFUSALS.** A `.sbmx` component becomes Burxt
 the compiler judges: a typo in a slot, a wrong type in a handler, and money narrowing inside a click
 handler are all compile errors, and three more refusals are star-burxt's own.
 
@@ -49,7 +49,7 @@ def main():
         return 1
 
     def generate(document):
-        path = os.path.join(work, "doc.bmx")
+        path = os.path.join(work, "doc.sbmx")
         with open(path, "w") as f:
             f.write(document)
         return run([generator, path, "c"], cwd=ROOT)

@@ -82,7 +82,7 @@
 
 /* ---- showing a document's nesting without changing the document -------------------------------
  *
- * A `.bmx` document cannot be indented — nesting is by containment — so a component with a loop in it
+ * A flat document — nesting by containment alone, which is how every document read before BMX 0.6 —
  * ends in a run of bare `:::` and nothing says what any of them closes. Andre pointed at exactly that
  * case. Whether leading space becomes legal is BMX's decision.
  *

@@ -13,8 +13,12 @@ By the end of this page you will have a greeting on a screen, made from a docume
 
 ## Write the component
 
-Make a file called `hello.sbmx`. **The extension matters**: a `.bmx` is a document any tool can
-render, and a `.sbmx` is a component that needs star — so the name says which.
+Make a file called `hello.sbmx`.
+
+**The extension matters, and the two are not interchangeable.** `.bmx` belongs to BMX the way `.html`
+belongs to HTML: a document any tool can render, with no logic in it. `.sbmx` belongs to star the way
+`.jsx` belongs to React: the same markup plus the code that makes it do something. A `.bmx` is a
+document; a `.sbmx` is a component. Rename one to the other and the tool that reads it changes.
 
 ```sbmx
 :props: name: String

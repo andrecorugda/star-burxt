@@ -1,7 +1,7 @@
 // examples/star/generate.bx — a BMX document becomes a star-burxt component.
 //
 //     burxt build examples/star/generate.bx -o star-generate
-//     ./star-generate counter.bmx counter > counter.bx
+//     ./star-generate counter.sbmx counter > counter.bx
 //
 // Emits a `pure function <name>(<props>) -> Html` and a
 // `pure function <name>_dispatch(handler: Int, <props>) -> <state>`, then the
@@ -14,7 +14,7 @@ use "std/os.bx";
 use "std/files.bx";
 
 if os_arg_count() < 3 {
-    print_error("usage: star-generate <document.bmx> <component-name>");
+    print_error("usage: star-generate <component.sbmx> <component-name>");
     exit(2);
 }
 

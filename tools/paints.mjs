@@ -79,7 +79,7 @@ check('painting preserves the line count',
 
 // ---- the nesting is SHOWN without changing the document ---------------------------------------
 //
-// A `.bmx` document cannot be indented, so a component with a loop in it ends in a run of bare `:::`
+// A flat document — one written without indentation, which every `.bmx` was before BMX 0.6 —
 // and nothing says what any of them closes. The painter indents the DISPLAY.
 
 const nested = [
