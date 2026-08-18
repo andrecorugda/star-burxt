@@ -333,4 +333,33 @@ A paragraph with **bold**, *italic*, `code` and a [link](https://example.com).
 > A quote.
 ```
 
+---
+
+## A note to yourself — `<!-- -->`
+
+```sbmx
+<!-- The designer wants this reworked; the copy is not final. -->
+Hello {{ name }}.
+```
+
+**It emits nothing.** Before BMX 0.12.0 there was no comment at all, and an author's only options
+were to delete the thought or watch it render: `<!-- TODO -->` came out the far side as visible
+escaped text, on the page, for a reader to see. Not refused — *accepted, and wrong*, which is the one
+shape worth fixing first.
+
+A comment is a **whole line**. Mid-line is refused, because closing half of this would be worse than
+closing none — that form would still ship the note:
+
+```sbmx
+:p:
+Total: 5 <!-- fix this -->
+:!p:
+```
+
+> BMX-E007 a comment is a whole line — move `<!--` to the start of its own line, or put it in a code
+> span to show it literally
+
+And the alternative that message names does work — `` `<!-- fix this -->` `` shows the characters
+themselves. An unterminated comment is `BMX-E006` rather than a document that quietly ends early.
+
 {% endraw %}

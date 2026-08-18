@@ -233,6 +233,11 @@ def main():
         "on:click=line.id": "STAR-E007",
         "Msg.Toggle(todo.id)": "STAR-E007",
         "# A component with nothing declared": "STAR-E003",
+        # **BMX's code, not star's, and that is the point of keeping this table honest.** A comment
+        # is the format's construct, so the refusal is `BMX-E007` — and the marker is the whole
+        # offending line, because `<!--` alone appears in the CORRECT example three paragraphs above
+        # and would demand a refusal from a document that must be accepted.
+        "Total: 5 <!-- fix this -->": "BMX-E007",
     }
 
     work = tempfile.mkdtemp(prefix="star-docs-")
