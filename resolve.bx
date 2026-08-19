@@ -21,6 +21,33 @@ use "std/os.bx";
 // them; the checker does not — it only needs to know each child's props so a call can be built in the
 // callee's order. Same walk either way, because a checker that resolved imports differently from the
 // generator would pass documents the generator refuses.
+// Could this import name a package? **A dependency name is letters, digits and `_`** — the compiler's
+// own rule, since the name becomes the first segment of every import that reaches it. So a first
+// segment carrying a dot, or an empty one from a leading slash, cannot be a package however it is
+// spelled.
+//
+// Used for one thing only: deciding whether a FAILED import is worth blaming the compiler for.
+// `./Card.sbmx` and `sub/Card.sbmx` are paths, were always paths, and a reader who mistyped one is not
+// helped by being told about `burxt where`.
+pure function star_looks_packaged(target: String) -> Bool {
+    let mutable cut: Int = 0;
+    while cut < len(target) && byte_at(target, cut) != 47 {
+        cut += 1;
+    }
+    if cut == 0 || cut >= len(target) {
+        return false;
+    }
+    let mutable i: Int = 0;
+    while i < cut {
+        let c: Int = byte_at(target, i);
+        if !((c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95) {
+            return false;
+        }
+        i += 1;
+    }
+    return true;
+}
+
 // **`touches commands, input` is here because resolving an import means ASKING THE COMPILER**, and that
 // is a deliberate widening of a published name rather than a leak. `use "mylib/Card.sbmx"` names a
 // package, and where a package sits on disk is derived from its source — under `.burxt/packages` beside
@@ -69,8 +96,31 @@ public function star_resolve(path: String, source: String, written: Bool) -> [St
                     // that is simply absent, and only the last of those three is beyond `burxt fetch`.
                     // Rewording that would lose the distinction star did not make and cannot restore.
                     print_error("cannot read " + child_path + ", imported by " + path);
-                    if len(string_trim(asked.errors)) > 0 {
-                        print_error("  " + string_trim(asked.errors));
+                    // **Three situations, and an exit status tells them apart from none of them.** A
+                    // compiler with no `where` and a compiler refusing an undeclared name both exit 1
+                    // with empty stdout, and they need opposite advice: update your toolchain, or fix
+                    // your manifest. Telling somebody to check `burxt.package` when the command does
+                    // not exist on their machine is the kind of message that costs an afternoon.
+                    //
+                    // The capability is read from the usage block, which names `burxt where` only on a
+                    // compiler that has it — measured, one matching line against none. That block is
+                    // also what the compiler's own CLI reference is generated from, so it cannot
+                    // advertise a command that is not there. No version gate and no `--capabilities`
+                    // flag: a second mechanism saying what this already says is the thing today was
+                    // spent removing.
+                    //
+                    // Asked only on the way out, so a document that imports by path pays nothing.
+                    if star_looks_packaged(target) {
+                        let usage: Capture = os_capture_status("burxt");
+                        if !star_mentions(usage.errors, "burxt where") {
+                            print_error("  `" + target + "` names a package, and this `burxt` cannot"
+                                + " resolve one — its usage does not list `burxt where`. Update the"
+                                + " compiler; an import by path works on every version.");
+                        } else {
+                            if len(string_trim(asked.errors)) > 0 {
+                                print_error("  " + string_trim(asked.errors));
+                            }
+                        }
                     }
                     exit(2);
                 }

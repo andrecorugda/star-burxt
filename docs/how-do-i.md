@@ -312,11 +312,17 @@ directory is a cache keyed by the dependency's url and tag, so anything written 
 the day you bump the version. Add `.star/` to your `.gitignore`; it is build output, like the `.bx`
 beside a local `.sbmx`.
 
-> **This one needs a newer compiler than any release.** star finds the package by asking `burxt where`,
-> because where a dependency sits on disk is derived from its source and is not something star may
-> guess. Until that ships, a package-qualified import is read as a path and refused — you will see
-> `cannot read mylib/Card.sbmx`, with the compiler's own explanation underneath. The Burxt-library half
-> above has no such requirement.
+> **This one needs a compiler that lists `burxt where` in its usage.** star finds the package by asking
+> that command, because where a dependency sits on disk is derived from its source and is not something
+> star may guess. Run `burxt` with no arguments to see whether yours has it — no version number here,
+> because it is not in a release yet and a number written before the tag exists is a number that will be
+> wrong.
+>
+> Without it, a package-qualified import is read as a path and refused, and star says which of the two
+> things went wrong rather than making you guess: *"names a package, and this `burxt` cannot resolve one
+> — its usage does not list `burxt where`"* for an old compiler, and the compiler's own *"`nosuch` is not
+> a dependency of `my-app`"* when the name is simply undeclared. Those need opposite fixes. The
+> Burxt-library half above has no such requirement.
 
 ## …see what my document turned into?
 
