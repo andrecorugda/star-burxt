@@ -29,6 +29,17 @@ HTML, so `:path:` and `:circle:` need a second vocabulary with its own content m
 in HTML that holds phrasing or flow content is there, including `time`, `abbr`, `kbd`, `iframe` and
 `audio`, which were missing until they were looked for.
 
+**Publishing a component library needs a compiler newer than any release.** star's side is built:
+`use "mylib/Card.sbmx"` resolves through the package, the component is generated into `.star/` in your
+tree, and its props are checked at the call site exactly as a local component's are. It works by asking
+the compiler where a package sits — `burxt where` — because that location is derived from the
+dependency's source and is deliberately not something star may re-derive.
+
+That command is **not in a Burxt release yet**, so on today's `burxt` a package-qualified import falls
+back to being read as a path and is refused, with the compiler's own message passed through underneath
+star's. A third-party *Burxt library* has always worked and still does — declare it, `use
+"mylib/money.bx"` in your `===bx` section, and the compiler resolves it the ordinary way.
+
 **A block that only wraps something is still worth avoiding.** A `span` holding nothing but a square
 is three tokens of markup for a shape CSS can draw — `===style.local` with a `::before` is usually the
 better answer, and it keeps the document about content.

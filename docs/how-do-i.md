@@ -269,6 +269,55 @@ Its props are `value: Int, tone: String`
 And the order you write them in does not matter — arguments are passed in the order the component
 declares them, so two props of the same type cannot swap by accident.
 
+## …use a component somebody else published?
+
+Two kinds of thing can come from a package, and they have different answers.
+
+**A Burxt library works today, and its author need not have heard of star.** Anyone can publish
+ordinary Burxt — money rules, validation, a domain type. Declare it and use it from your `===bx`
+section:
+
+```
+name        my-app
+version     0.1.0
+
+dependency  star   https://github.com/andrecorugda/star-burxt  v0.2.0
+dependency  bmx    https://github.com/andrecorugda/bmx         burxt-0.12.1
+dependency  mylib  https://github.com/someone/mylib            v1.0.0
+```
+
+Then `use "mylib/money.bx";` alongside your other imports, and call what it exports. star passes that
+line through to the generated component untouched, so the compiler resolves it the way it resolves any
+import — there is no star-specific step and nothing to register.
+
+**A component library is the same shape, one level up.** The author writes ordinary components and
+publishes the repository:
+
+```sbmx
+:props: label: String
+:!props:
+
+:span: class=card
+{{ label }}
+:!span:
+```
+
+You then write `use "mylib/Card.sbmx";` and call `:Card: label={{ model.title }}` exactly as if the
+file were yours. Its props are checked at your call site — a missing one is the same **STAR-E017** you
+get for a local component, naming the component and what it declares.
+
+What star does with it is worth knowing, because you will see the files. A packaged component is
+generated into **`.star/mylib/Card.bx` in your tree**, never inside the fetched package — a package
+directory is a cache keyed by the dependency's url and tag, so anything written there is thrown away
+the day you bump the version. Add `.star/` to your `.gitignore`; it is build output, like the `.bx`
+beside a local `.sbmx`.
+
+> **This one needs a newer compiler than any release.** star finds the package by asking `burxt where`,
+> because where a dependency sits on disk is derived from its source and is not something star may
+> guess. Until that ships, a package-qualified import is read as a path and refused — you will see
+> `cannot read mylib/Card.sbmx`, with the compiler's own explanation underneath. The Burxt-library half
+> above has no such requirement.
+
 ## …see what my document turned into?
 
 ```sh

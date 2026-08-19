@@ -12,6 +12,8 @@
 // ============================================================================
 use "star.bx";
 use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
 
 // Every component a document imports, generated beside its own source, with what it declares.
 //
@@ -19,7 +21,17 @@ use "std/files.bx";
 // them; the checker does not — it only needs to know each child's props so a call can be built in the
 // callee's order. Same walk either way, because a checker that resolved imports differently from the
 // generator would pass documents the generator refuses.
-public function star_resolve(path: String, source: String, written: Bool) -> [StarKnown] touches files {
+// **`touches commands, input` is here because resolving an import means ASKING THE COMPILER**, and that
+// is a deliberate widening of a published name rather than a leak. `use "mylib/Card.sbmx"` names a
+// package, and where a package sits on disk is derived from its source — under `.burxt/packages` beside
+// a key made from url and tag for a git dependency, and nowhere near it for a path dependency. star
+// re-deriving that would be a second implementation of somebody else's rule, on the path every build
+// takes; `tools/surface.bx` already carries one such re-derivation and it cannot see path dependencies
+// at all. So this shells out to `burxt where` and the effect says so.
+//
+// Nothing about a GENERATED component changes: star is a build-time dependency, and no component emits
+// `use "star/star.bx"`. The widening reaches build tooling and stops there.
+public function star_resolve(path: String, source: String, written: Bool) -> [StarKnown] touches files, commands, input {
     let mutable known: [StarKnown] = [];
     let here: String = star_directory_of(path);
     let imports: String = star_imports_of(star_section(source, "bx"));
@@ -29,10 +41,37 @@ public function star_resolve(path: String, source: String, written: Bool) -> [St
         let line: String = substring(imports, at, stop - at);
         let target: String = star_quoted_path(line);
         if star_ends_with(target, ".sbmx") {
-            let child_path: String = here + target;
+            // **The package is asked about FIRST, because that is the compiler's own precedence.** The
+            // generated component carries this import onward, so if star resolved a name one way and the
+            // compiler resolved it the other, a document would generate and then refuse to build — and
+            // the message would be about a file nobody wrote. `burxt where` exits non-zero with EMPTY
+            // stdout when the name is not a dependency, which is what makes "fall back to a path" safe
+            // to decide on: there is nothing to misread.
+            let asked: Capture = os_capture_status("burxt where " + file_quote(target));
+            let answer: String = string_trim(asked.output);
+            let packaged: Bool = asked.code == 0 && len(answer) > 0;
+            let mutable child_path: String = here + target;
+            // Where its generated `.bx` goes, and the stem the parent will import it by. A package
+            // component is generated into the CONSUMER's tree: writing beside the source would put it
+            // inside a fetched package, which is a cache keyed by url and tag, so the day the tag moves
+            // the directory is renamed and everything star left there is orphaned rather than updated.
+            // `.star/` rather than `<pkg>/` because a directory named after a dependency makes the
+            // import ambiguous and the compiler refuses it by name — see `StarKnown`.
+            let mutable stem: String = star_without_extension(target);
+            if packaged {
+                child_path = answer;
+                stem = ".star/" + star_without_extension(target);
+            }
             match file_read_maybe(child_path) {
                 None => {
+                    // Burxt's own message, passed through rather than reworded — it distinguishes a name
+                    // that is not a dependency from one that is not fetched from a vendored directory
+                    // that is simply absent, and only the last of those three is beyond `burxt fetch`.
+                    // Rewording that would lose the distinction star did not make and cannot restore.
                     print_error("cannot read " + child_path + ", imported by " + path);
+                    if len(string_trim(asked.errors)) > 0 {
+                        print_error("  " + string_trim(asked.errors));
+                    }
                     exit(2);
                 }
                 Some(child) => {
@@ -44,17 +83,21 @@ public function star_resolve(path: String, source: String, written: Bool) -> [St
                         }
                         Ok(built) => {
                             if written {
-                                let out: String = star_without_extension(child_path) + ".bx";
+                                let out: String = here + stem + ".bx";
+                                // `mkdir -p`, and only for a package component — a local one writes
+                                // beside a source that already exists, so the directory does too.
+                                if packaged {
+                                    let made: Bool = file_make_directory(star_directory_of(out));
+                                }
                                 let wrote: Int = file_write(out,
                                     "// GENERATED from " + child_path + " by star-burxt. Do not edit.\n"
                                     + star_source_of(built, star_function_name(child_name)));
                                 if len(bmx_strip_end(built.style)) > 0 {
-                                    let styled: Int = file_write(
-                                        star_without_extension(child_path) + ".css", built.style);
+                                    let styled: Int = file_write(here + stem + ".css", built.style);
                                 }
                             }
                             let noted: Int = push(known, StarKnown {
-                                name: child_name, props: built.props,
+                                name: child_name, props: built.props, source: stem,
                             });
                         }
                     }

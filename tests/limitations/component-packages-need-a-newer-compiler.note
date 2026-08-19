@@ -1,0 +1,29 @@
+// CLAIM: Publishing a component library needs a compiler newer than any release
+// HOLDS: by-inspection
+// WHAT-WOULD-CHECK-IT: nothing this suite can run, because **the claim is about the machine rather
+//      than about star**. It holds on a `burxt` without `burxt where` and stops holding on one with it,
+//      so a probe would assert a property of whatever compiler happens to be on `PATH` — green here and
+//      red on the next machine, or the reverse, with neither answer saying anything about this
+//      repository. A gate whose result depends on the environment reports the environment.
+//
+//      What IS checkable, and was checked rather than assumed on 2026-08-19, is both sides of the fork:
+//
+//        1. With a compiler that has `where`: a package component resolved, generated to
+//           `.star/mylib/Card.bx` in the CONSUMER's tree, imported as `use ".star/mylib/Card.bx"`, and
+//           `star-check` reported `no errors` / `no problems` through all three layers. Props were
+//           checked at the call site across the package boundary — a missing one gave STAR-E017 naming
+//           the component and its props, exactly as a local component does.
+//        2. With the compiler that is installed: `cannot read mylib/Card.sbmx, imported by Uses.sbmx`,
+//           and underneath it Burxt's own message, passed through rather than reworded.
+//
+//      The whole suite is green on the installed compiler, which is the assertion that matters most
+//      here: **the feature costs nothing to a document that does not use it.** `burxt where` is asked
+//      first for every `.sbmx` import, and a plain path import simply falls through to what it always
+//      did.
+// WHY: recorded rather than skipped, so the escape hatch costs an argument rather than a shrug.
+//
+//      This claim replaced one that said a component could not come from a package at all. That was
+//      true when it was written this morning and false by the afternoon, which is the failure mode
+//      `tools/limits.bx` exists for — **a stale NOT-DONE is found by nobody.** It survived the gate
+//      because a by-inspection note is prose and the gate cannot read prose. Worth knowing when
+//      reaching for `.note` again: it buys an honest record and buys no protection at all.

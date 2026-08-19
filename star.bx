@@ -1275,6 +1275,47 @@ function star_component_name(target: String) -> String {
     return star_without_extension(base);
 }
 
+// Each `.sbmx` import respelled to the stem its generated `.bx` actually lives at, which is
+// `StarKnown.source` — see that class for why the written spelling will not do.
+//
+// **Unchanged input is returned unchanged, byte for byte**, rather than reconstructed and handed back.
+// Every existing document imports by path, so `source` is already the written stem and this would
+// rebuild the section to produce the same thing — except for the trailing newline and any line the
+// reconstruction normalised. `docs/_includes/showcase.html` and the gallery are checked by
+// regenerating and diffing, so a whitespace-only difference here is a red build about nothing.
+function star_code_with_known_paths(code: String, known: [StarKnown]) -> String {
+    let mutable out: String = "";
+    let mutable changed: Bool = false;
+    let width: Int = len(code);
+    let mutable at: Int = 0;
+    while at < width {
+        let stop: Int = star_end_of_line(code, at, width);
+        let line: String = substring(code, at, stop - at);
+        let mutable emitted: String = line;
+        if star_is_use_line(line) {
+            let target: String = star_quoted_path(line);
+            if star_ends_with(target, ".sbmx") {
+                let wanted: String = star_component_name(target);
+                let mutable k: Int = 0;
+                while k < len(known) {
+                    if known[k].name == wanted && len(known[k].source) > 0
+                       && known[k].source + ".sbmx" != target {
+                        emitted = "use \"" + known[k].source + ".sbmx\";";
+                        changed = true;
+                    }
+                    k += 1;
+                }
+            }
+        }
+        out = out + emitted + "\n";
+        at = stop + 1;
+    }
+    if !changed {
+        return code;
+    }
+    return out;
+}
+
 // The author's imports as the GENERATED file needs them: a `.sbmx` becomes the `.bx` it was
 // generated into, and everything else passes through.
 function star_burxt_imports(code: String) -> String {
@@ -1479,8 +1520,27 @@ pure function star_stamped(selector: String, marker: String) -> String {
 // and it is what lets the argument list be built in the CALLEE's declared order rather than in the
 // order the author happened to type.
 
-// A component this document may use: its name as written, and the props of the function it became.
-public class StarKnown { name: String, props: String }
+// A component this document may use: its name as written, the props of the function it became, and
+// **the import path its generated `.bx` will answer to**.
+//
+// That third field exists because a `.sbmx` import has two spellings with the same shape and only the
+// compiler can tell them apart. `use "Badge.sbmx"` is a path beside the document; `use "mylib/Card.sbmx"`
+// is a component inside a *package*, and where that package sits on disk is derived from its source —
+// a git dependency lands under `.burxt/packages` beside a key made from url and tag, a path dependency
+// never goes near it. star must not re-derive either; `resolve.bx` asks `burxt where` and puts the
+// answer here.
+//
+// **It cannot simply be the import as written, because that spelling is refused.** A package component
+// generated into `./mylib/Card.bx` makes `use "mylib/Card.bx"` mean two things at once, and the
+// compiler says so rather than choosing: *"could mean the dependency `mylib` declared in
+// burxt.package, or the file at mylib/Card.bx. Rename one of them."* So a package component is
+// generated into `.star/<pkg>/` in the CONSUMER's tree — never into the package, which for a git
+// dependency is a fetch-managed cache whose directory name changes the day the tag does — and this
+// field carries the stem that reaches it.
+//
+// A local import answers its own stem, so this is exactly what it always was for every document
+// written before packages resolved at all.
+public class StarKnown { name: String, props: String, source: String }
 
 // `Badge` -> `badge`, `UserCard` -> `user_card`. Burxt functions are snake_case and a component is
 // a Burxt function; the block name is the type-shaped spelling an author expects in markup.
@@ -2422,7 +2482,10 @@ pure function star_runtime_encoders() -> String {
 // is not sniffed from whether an `update` exists — a file with `===bx` and no `update` gets a named
 // refusal, not a compiler error about a function nobody wrote.
 public function star_generate(source: String, name: String, known: [StarKnown]) -> Result<StarComponent, String> {
-    let code: String = star_section(source, "bx");
+    // Respelled here rather than at emission, because emission sees only the component and this is the
+    // last place `known` is in scope. Everything downstream reads `component.code`, so one substitution
+    // reaches both the import list and the mode switch.
+    let code: String = star_code_with_known_paths(star_section(source, "bx"), known);
     // **`key` and `value` are star's, and a prop may not take them.** A dispatch is
     // `(handler, key, value, <props>)`, so a prop of either name produces a function with two
     // parameters of the same name — which the compiler refuses, in generated code, about a
