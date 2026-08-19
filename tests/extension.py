@@ -54,8 +54,40 @@ VSIX = EXT / "star-burxt.vsix"
 SERVER = "server/star-lsp.mjs"
 
 # Where somebody is told to install it. A promise to install a file is a promise the file is there.
-PAGES = ["docs/editor.md", "editors/README.md", "editors/vscode/README.md",
-         "editors/vscode/pack.py", "tools/check-all.sh", ".github/workflows/star.yml"]
+#
+# **Found by globbing, not listed — and the list came first, which is the point.** This was six paths
+# written by hand, and the BMX session had just been bitten by the same shape: their staleness checker
+# held its pages in a literal list, so a new page matched every pattern it looks for and passed the gate
+# anyway. Globbing theirs immediately found the landing page claiming a version eight minors stale.
+#
+# The transferable rule they stated, applied here to the file that prompted it: **when you add a check,
+# ask what its own scope is hand-maintained on.** The next stale claim is not in the claims a check
+# reads — it is in the list deciding which files it reads at all. A `.vsix` filename in a page nobody
+# listed is exactly the promise this assertion exists to keep. Globbing added `CLAUDE.md`, which names
+# the artefact and was held to nothing.
+#
+# **The cost, so it is not rediscovered: a gate's own explanatory text is input to the gate.** Reading
+# the whole tree means reading this file, so prose here about a filename is indistinguishable from a
+# promise of one — the control literal below had to be assembled for exactly that reason. Today every
+# `.vsix` token in the repository is `star-burxt.vsix` and it exists, so there is no collision to
+# excuse. If one ever arrives — a page discussing a name it does not ship — the fix is a marker in the
+# file that opts itself out, the way BMX's changelog declares itself historical, and NOT a list of
+# exceptions in here. That is the same accumulation this change removed.
+SKIP = {".git", ".burxt", "node_modules", "__pycache__", ".star"}
+
+
+def pages():
+    """Every text file in the tree, so a filename promise made anywhere is a promise checked."""
+    for base, dirs, names in __import__("os").walk(ROOT):
+        dirs[:] = [d for d in dirs if d not in SKIP]
+        for n in sorted(names):
+            path = pathlib.Path(base) / n
+            if path.suffix == ".vsix":
+                continue
+            try:
+                yield path, path.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
 
 PROBE = r"""
 import { spawn } from 'child_process';
@@ -234,10 +266,14 @@ def main():
 
     # The name every document hands to a reader.
     named = set()
-    for page in PAGES:
-        named.update(re.findall(r"\b([\w.-]+\.vsix)\b", (ROOT / page).read_text()))
+    for _, text in pages():
+        named.update(re.findall(r"\b([\w.-]+\.vsix)\b", text))
     if prove:
-        named.add("star-burxt-0.1.0.vsix")
+        # **Assembled rather than written, because this file is now one of the files it reads.** Globbing
+        # the tree instead of listing six paths made the check find its own control literal and fail the
+        # real run — a gate reporting a defect it had planted. Excluding this file by name would put a
+        # hand-maintained scope back in, one exception at a time, which is the shape being removed here.
+        named.add("star-burxt-0.1.0" + ".vsix")
     missing = sorted(n for n in named if not (EXT / n).exists())
     check(not missing,
           f"every .vsix the documentation names exists ({', '.join(sorted(named))})",
