@@ -26,6 +26,24 @@ function returning a record that holds a list, and a `pure` function calling the
 component will not compile against 1.2.0 or below. A released version is all you need; there is
 nothing to build from source.
 
+**Then check the standard library, because the version alone does not.** Every component star
+generates opens with `use "std/html.bx"`, and a compiler that cannot resolve that checks *nothing* —
+every document you write reports an error and none of the errors are about your document.
+
+```sh
+printf 'use "std/html.bx";\n' > /tmp/probe.bx && burxt check /tmp/probe.bx
+#  /tmp/probe.bx: no errors     ← ready
+```
+
+`burxt --version` will not tell you this. It prints a number a broken install prints just as happily,
+and the number does not move until Burxt tags a release — so it cannot even distinguish two builds.
+The probe asks the only question that matters.
+
+**If it fails, the usual cause is a second Burxt earlier in your `PATH`.** The library is found by the
+compiler's own installation — `BURXT_LIB`, or `../lib/burxt` beside the binary — never by proximity to
+your program, so an old binary that shadows a good install takes its missing library with it. Run
+`which -a burxt`: if there is more than one, the first is the one you are using.
+
 ## 2. Make a project
 
 A project is a folder with a file called `burxt.package` in it:
