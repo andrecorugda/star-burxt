@@ -19,17 +19,37 @@ grammar is included rather than copied.
 
 ## Installing, while none of this is published
 
-VS Code reads extensions out of a directory:
+```sh
+code --install-extension editors/vscode/star-burxt.vsix
+```
+
+`editors/vscode/pack.py` writes that file with nothing but the standard library — the extension has no
+npm dependencies, so `vsce` would only add a toolchain. An installed extension is registered, versioned
+and uninstallable through the normal UI, which is the reason to prefer it: a symlink works until
+something scans the registry and does not find you.
+
+VS Code also reads extensions straight out of a directory, and both of these still work:
 
 ```sh
+cp -r editors/vscode ~/.vscode/extensions/star-burxt
 ln -s "$PWD/editors/vscode" ~/.vscode/extensions/star-burxt
 ```
+
+**All three are checked by spawning the server inside them and asking**, rather than by inspecting the
+packer — `tests/extension.py`. The reason is that the copy was broken and read as working: the server
+finds its version by walking up for `burxt.package`, a copy lands where no parent has one, and it
+answered `0.0.0` while colouring and checking perfectly. `pack.py` stages that manifest beside the
+server so all three shapes find one.
 
 It depends on BMX's and Burxt's extensions, which install the same way from their own repositories.
 
 ## The language server
 
-`editors/lsp/star-lsp.mjs` — diagnostics for `.sbmx`, over JSON-RPC on stdio, no dependencies.
+`editors/vscode/server/star-lsp.mjs` — diagnostics for `.sbmx`, over JSON-RPC on stdio, no
+dependencies. **It lives inside the extension deliberately**: it sat in `editors/lsp/` and was
+reached by a `..` path, which resolves outside the folder on a copy install AND on a symlink one,
+because `path.join` normalises `..` lexically. Either way the extension coloured documents and
+never checked one.
 
 **It is a protocol wrapper over `star check`, deliberately.** All three layers of judgement come from
 the same binary a person runs on the command line. A server that reimplemented any of them would be

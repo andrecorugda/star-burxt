@@ -197,6 +197,18 @@ jobs:
       - name: The language server speaks the protocol
         run: STAR_CHECK=./star-check node editors/lsp/drive-lsp.mjs
 
+      # **Runs the test, not the packer.** The obvious shape here is `pack.py && inspect`, and it is
+      # the shape that cannot work: it regenerates the artefact it is verifying, so it overwrites the
+      # evidence one line before looking for it and a stale committed .vsix passes forever. The test
+      # repacks into a comparison and restores the committed bytes, so this step sees staleness.
+      # It also spawns the server inside each documented install and asks it for its version, which is
+      # where the 0.0.0 copy install was found.
+      - name: The extension packages, and answers its version through every install
+        run: |
+          set -eux
+          python3 tests/extension.py
+          python3 tests/extension.py --prove-it
+
       - name: A .sbmx document becomes a component the compiler judges
         run: python3 test.py
 

@@ -42,11 +42,23 @@ decodes each PNG and fails outside 70% ± 3, and pointing it at the un-cropped s
 
 ## Installing it
 
-The extension is not on the Marketplace yet, so it is installed from the repository. Copy it or link it —
-the language server lives inside the extension, so both work:
+The extension is not on the Marketplace yet, so it is installed from the repository. There is a packaged
+build committed alongside it:
 
 ```sh
 git clone https://github.com/andrecorugda/star-burxt
+code --install-extension star-burxt/editors/vscode/star-burxt.vsix
+```
+
+That is the one to prefer — an installed extension is registered, versioned, upgradable and uninstallable
+through the normal UI. The `.vsix` is written by `editors/vscode/pack.py` using nothing but Python's standard
+library, because the extension has no npm dependencies and `vsce` would only add a toolchain to a repository
+that promises not to need one.
+
+Copying or linking the folder also works, and the language server lives inside the extension so neither
+needs anything else:
+
+```sh
 cp -r star-burxt/editors/vscode ~/.vscode/extensions/star-burxt
 #  …or, to keep it in step with the checkout:
 ln -s "$PWD/star-burxt/editors/vscode" ~/.vscode/extensions/star-burxt
@@ -55,11 +67,21 @@ ln -s "$PWD/star-burxt/editors/vscode" ~/.vscode/extensions/star-burxt
 Then reload VS Code. On Windows, `mklink /D` does the linking; on VS Code Insiders the folder is
 `~/.vscode-insiders/extensions`.
 
-**Both of those are tested rather than assumed.** The first version of this page said a symlink was required
-because the server sat beside the extension rather than inside it — and when I checked the instruction, the
-symlink did not work either: `path.join` normalises `..` lexically, so it resolved outside the link just as a
-copy did. Either way the extension would have installed, coloured a document, and never checked one. The
-server moved inside; both paths are verified by resolving them.
+**All three are tested rather than assumed, and the second time that sentence was written it was false.**
+The first version of this page said a symlink was required because the server sat beside the extension rather
+than inside it — and when I checked the instruction, the symlink did not work either: `path.join` normalises
+`..` lexically, so it resolved outside the link just as a copy did. Either way the extension would have
+installed, coloured a document, and never checked one. The server moved inside, and both paths were verified
+by resolving them.
+
+**What that verified was where the server is, not what it says it is.** The server reads its version by
+walking up until it finds `burxt.package`, and a copy install lands it where no parent directory holds one —
+so it answered `initialize` with `0.0.0` while colouring and checking correctly. The symlink escaped by
+accident, because node resolves a module's realpath and lands back inside the checkout. **A version that is
+wrong in a field nobody looks at has no symptom until somebody reads a bug report** and it names the wrong
+release. `pack.py` now stages `burxt.package` beside the server, and `tests/extension.py` spawns the real
+server inside each of the three installs above and asks it — because a claim about an install is only worth
+what checking it through that install is worth.
 
 **It needs three things on `PATH`:** `node`, to run the server; `burxt`, because the checker compiles your
 document; and `star-check`, built from this repository with `burxt build examples/check.bx -o star-check`.
@@ -68,6 +90,32 @@ Point the extension at it explicitly if it lives somewhere else:
 ```json
 { "starBurxt.check": "/home/you/star-burxt/star-check" }
 ```
+
+**And a `burxt` whose standard library resolves, which is worth saying because the failure is total.**
+Every component star generates opens with `use "std/html.bx"`, so a compiler that cannot find the
+standard library checks nothing at all — every document reports an error and none of them are about your
+document. The library is found by the compiler's own installation, never by proximity to your program,
+and there are **two** places it looks: `BURXT_LIB` if set, then `../lib/burxt` beside the binary. An
+install done with `scripts/install.sh` satisfies the second, because it puts the binary at
+`$PREFIX/bin/burxt` and the library at `$PREFIX/lib/burxt`. A compiler run out of a build directory
+satisfies neither, and says so by name.
+
+**There is deliberately no `/usr/local/lib/burxt` fallback**, which is worth knowing because it is the
+one people expect. It was removed for being redundant when right and wrong when it fired: a standard
+install already resolves there through the exe-relative root, so the hardcoded one could only be
+reached when the binary lived somewhere else — meaning that library belonged to a *different*
+installation. It was live, and it silently compiled a locally built compiler against the installed
+library.
+
+```sh
+printf 'use "std/html.bx";\n' > /tmp/probe.bx && burxt check /tmp/probe.bx
+#  /tmp/probe.bx: no errors                     ← the library resolved
+#  error: `use "std/html.bx"` — no standard library found. Looked in: …   ← it did not, and says where
+```
+
+A compiler old enough to predate that lookup ignores `BURXT_LIB` as well, and then the error names a
+path beside your document rather than the library — `cannot read examples/std/html.bx`. If that is what
+you see, the compiler is the thing to update, not the variable to set.
 
 ## Checking that it works
 

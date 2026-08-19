@@ -1,0 +1,32 @@
+name        star-burxt
+version     0.2.0
+
+# **No package dependency on BMX yet, and the reason is worth recording rather than rediscovering.**
+#
+# While `bmx.bx` still lives in Burxt's `lib/`, it IS part of the installed standard library, so
+# `use "std/bmx.bx"` reaches it — no manifest entry required.
+#
+# The first attempt declared `dependency bmx <path-to-lib>`, which fails in a way that looks like a
+# permissions problem and is not: a path dependency names a DIRECTORY, and `lib/` holds all
+# twenty-seven modules. So `os_arg` and `file_read_maybe` were reported as "declared in the package
+# `bmx`" — the whole standard library had been declared to be BMX. The same file also arrives twice,
+# once through `std/` and once through the package, which is its own error.
+#
+# A path dependency wants a directory that is the package, and BMX now has one.
+#
+# **`burxt-0.5.1`, and the tag's NAME is the interesting part.** It is not `v0.2.0`, because this
+# repository holds a format at 0.2 and an implementation of it, and one number for both invites them
+# to be read off each other — the exact conflation BMX's `VERSIONING.md` exists to prevent. So a tag
+# names an implementation release and says WHICH implementation, leaving `js-…` free for the
+# reference parser.
+#
+# A commit pin stood here until BMX had a green run to tag against: minting a version number nothing
+# has verified is worse than naming a commit. That run exists now — 56/56 conformance, 56/56
+# agreement with the reference implementation, level 2 in CI — so the pin is a tag.
+#
+# The import is `use "bmx/burxt/bmx.bx"` rather than `bmx/bmx.bx`: in the format's repository
+# `reference/bmx.js` defines what BMX means and `burxt/bmx.bx` is one implementation of it. Putting
+# the Burxt file at that repo's root would shorten this by seven characters and make a specification
+# repository look like a Burxt package, which is the one thing it must not look like. It needs no
+# manifest of its own — nothing reads a dependency's — so it stays exactly what it is.
+dependency  bmx  https://github.com/andrecorugda/bmx  burxt-0.12.1
