@@ -114,6 +114,9 @@ run "the gallery page is current"    bash -c 'node tools/gallery.mjs --include-o
 
 run "every advertised ref exists"    ./star-refs
 run "every version named agrees"     ./star-versions
+run "every version control holds"     ./star-versions --prove-it
+run "CI builds what CI runs"          ./star-workflows
+run "the CI control holds"            ./star-workflows --prove-it
 run "every published limitation holds" ./star-limits
 run "the published surface is the real one" ./star-surface
 run "HTML's content model, both ways" ./star-content

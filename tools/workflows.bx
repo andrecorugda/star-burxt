@@ -1,0 +1,289 @@
+// Every binary CI runs is built before CI runs it, and every binary the suite runs is one the
+// documentation tells a reader to build.
+//
+//     burxt build tools/workflows.bx -o star-workflows
+//     ./star-workflows
+//     ./star-workflows --prove-it     # the negative control
+//
+// **Three reds in a row came from one family and this is the check for the third.** A CI step invoking
+// `./star-docs` was written by swapping the command it replaced — `python3 verify-docs.py` became
+// `./star-docs` — and the build line was never added. `check-all.sh` cannot see that: it builds what it
+// needs itself and never reads the workflow, so the suite was green and the runner said
+// `No such file or directory`.
+//
+// The other two, because they are the same shape: a step placed before the `burxt fetch` it depended on,
+// which passed here because `.burxt/` already existed; and a Burxt source under `examples/*.bx` swallowed
+// by `.gitignore`, so it built locally forever and CI had never seen it. **Each one is "the local tree
+// has something the runner does not", and each one passed a green suite.** `star-languages` now covers
+// the untracked source, and this covers the workflow's own ordering.
+//
+// The workspace persists between steps, so a binary built in an earlier step is there for a later one.
+// That makes the question ORDER, not presence: built anywhere above its first use is fine, built below
+// it or not at all is not.
+//
+// ---- the throwaway that found this had the bug it exists to find ---------------------------------
+//
+// The first version, written as a one-off, reported **two** problems. The second was `./star-generate`
+// used two hundred lines before it is built — and that line is inside a **comment**, quoting the error
+// `./star-generate: No such file or directory` from the last time this exact defect happened. A comment
+// about a binary read as a use of it.
+//
+// **Using versus mentioning, again** — the same predicate failure as a file opting out of a marker check
+// by describing the marker. So a line whose first non-space character is `#` is skipped, and the prose
+// above a step may say what it likes.
+//
+// The other thing the throwaway got wrong: it took one match per line. `STAR_CHECK=./star-check
+// ./star-drive-lsp` is two, and the second is the one being run.
+//
+// ---- and the same pair a third time, in the documentation ----------------------------------------
+//
+// `check-all.sh` **does not build the tools** — it assumes they exist, so CLAUDE.md's build block is
+// the prerequisite a fresh checkout follows. That makes it the same predicate with different files:
+// every `./star-…` the suite runs must appear in that block. Writing this check found two it did not
+// — `star-versions`, added with its own CI step and never added to the list, and `star-drive-lsp`,
+// which the suite has run for longer than that. **Both are invisible to CI**, which builds each tool
+// in its own step and never reads CLAUDE.md, and invisible here, where every binary already exists.
+// The reader following the documented steps is the only one who sees it, and they are the one person
+// who cannot report it.
+//
+// Order is not the question in this pair — the block is a prerequisite, run before anything — so this
+// half asks only whether the line is there.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+
+// A YAML comment line. Only a whole-line comment — a `#` inside a shell command is a legitimate
+// character and this is not a YAML parser.
+pure function is_comment(line: String) -> Bool {
+    return string_starts_with(string_trim(line), "#");
+}
+
+// The token at `from`, ending at whitespace or a shell quote.
+pure function token_at(line: String, from: Int) -> String allocates {
+    let mutable stop: Int = from;
+    while stop < len(line) {
+        let c: String = substring(line, stop, 1);
+        if c == " " || c == "\t" || c == "\"" || c == "'" || c == ";" {
+            break;
+        }
+        stop += 1;
+    }
+    return substring(line, from, stop - from);
+}
+
+// Every `star-…` following `marker` on this line, not just the first.
+pure function all_after(line: String, marker: String) -> [String] allocates {
+    let mutable out: [String] = [];
+    let mutable rest: String = line;
+    while true {
+        let at: Int = string_find(rest, marker);
+        if at < 0 {
+            break;
+        }
+        let from: Int = at + len(marker);
+        let name: String = token_at(rest, from);
+        if string_starts_with(name, "star-") {
+            let x: Int = push(out, name);
+        }
+        rest = substring(rest, from, len(rest) - from);
+    }
+    return out;
+}
+
+pure function workflows() -> [String] allocates {
+    let mutable out: [String] = [];
+    let a: Int = push(out, ".github/workflows/star.yml");
+    let b: Int = push(out, ".github/workflows/site.yml");
+    return out;
+}
+
+let prove: Bool = os_arg_count() > 1 && os_arg(1) == "--prove-it";
+
+let mutable failures: [String] = [];
+let mutable checked: Int = 0;
+
+let mutable w: Int = 0;
+while w < len(workflows()) {
+    let path: String = workflows()[w];
+    let rows: [String] = string_lines(file_read(path));
+
+    let mutable used_names: [String] = [];
+    let mutable used_at: [Int] = [];
+    let mutable built_names: [String] = [];
+    let mutable built_at: [Int] = [];
+
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        if !is_comment(rows[i]) {
+            let builds: [String] = all_after(rows[i], "-o ");
+            let mutable b: Int = 0;
+            while b < len(builds) {
+                let x: Int = push(built_names, builds[b]);
+                let y: Int = push(built_at, i + 1);
+                b += 1;
+            }
+            let runs: [String] = all_after(rows[i], "./");
+            let mutable r: Int = 0;
+            while r < len(runs) {
+                let x: Int = push(used_names, runs[r]);
+                let y: Int = push(used_at, i + 1);
+                r += 1;
+            }
+        }
+        i += 1;
+    }
+
+    // **The control plants a use that nothing builds.** It is a name, not an edited file, because a
+    // check that rewrites the thing it reads can leave the tree dirty when it exits non-zero.
+    if prove && w == 0 {
+        let x: Int = push(used_names, "star-a-tool-nothing-builds");
+        let y: Int = push(used_at, 0);
+    }
+
+    let mutable u: Int = 0;
+    while u < len(used_names) {
+        let name: String = used_names[u];
+        let first_use: Int = used_at[u];
+
+        // Only the first use of a name, so a name run in six steps is one verdict.
+        let mutable earlier: Bool = false;
+        let mutable k: Int = 0;
+        while k < u {
+            if used_names[k] == name {
+                earlier = true;
+            }
+            k += 1;
+        }
+
+        if !earlier {
+            checked += 1;
+            let mutable built_line: Int = -1;
+            let mutable b: Int = 0;
+            while b < len(built_names) {
+                if built_names[b] == name {
+                    if built_line < 0 || built_at[b] < built_line {
+                        built_line = built_at[b];
+                    }
+                }
+                b += 1;
+            }
+            if built_line < 0 {
+                let x: Int = push(failures, path + ":" + to_string(first_use) + " runs `./" + name
+                    + "` and no step builds it. The tools are `.gitignore`d, so the runner gets"
+                    + " `No such file or directory` — and check-all.sh cannot see it, because it builds"
+                    + " what it needs itself and never reads the workflow");
+            }
+            if built_line > first_use {
+                let x: Int = push(failures, path + ":" + to_string(first_use) + " runs `./" + name
+                    + "` but nothing builds it until line " + to_string(built_line)
+                    + ". A tool built as a side effect of whichever step happened to need it first is a"
+                    + " tool whose availability depends on step order");
+            }
+        }
+        u += 1;
+    }
+    w += 1;
+}
+
+// **Found nothing is not the same as passed.** If the pattern stops matching — a workflow renamed, the
+// steps restructured — this reports zero problems out of zero uses, which reads exactly like success.
+if checked == 0 {
+    print("no `./star-...` invocation found in any workflow: the pattern has stopped matching");
+    exit(1);
+}
+
+// ---- the suite against the documented build list -------------------------------------------------
+
+let suite: [String] = string_lines(file_read("tools/check-all.sh"));
+let readme: [String] = string_lines(file_read("CLAUDE.md"));
+
+let mutable documented: [String] = [];
+let mutable d: Int = 0;
+while d < len(readme) {
+    let builds: [String] = all_after(readme[d], "-o ");
+    let mutable b: Int = 0;
+    while b < len(builds) {
+        let x: Int = push(documented, builds[b]);
+        b += 1;
+    }
+    d += 1;
+}
+
+let mutable suite_names: [String] = [];
+let mutable s: Int = 0;
+while s < len(suite) {
+    if !is_comment(suite[s]) {
+        let runs: [String] = all_after(suite[s], "./");
+        let mutable r: Int = 0;
+        while r < len(runs) {
+            let mutable seen: Bool = false;
+            let mutable k: Int = 0;
+            while k < len(suite_names) {
+                if suite_names[k] == runs[r] {
+                    seen = true;
+                }
+                k += 1;
+            }
+            if !seen {
+                let x: Int = push(suite_names, runs[r]);
+            }
+            r += 1;
+        }
+    }
+    s += 1;
+}
+
+if len(suite_names) == 0 {
+    print("tools/check-all.sh runs no `./star-...` at all: the pattern has stopped matching");
+    exit(1);
+}
+
+if prove {
+    let x: Int = push(suite_names, "star-a-tool-nothing-documents");
+}
+
+let mutable n: Int = 0;
+while n < len(suite_names) {
+    let mutable found: Bool = false;
+    let mutable m: Int = 0;
+    while m < len(documented) {
+        if documented[m] == suite_names[n] {
+            found = true;
+        }
+        m += 1;
+    }
+    if !found {
+        let x: Int = push(failures, "tools/check-all.sh runs `./" + suite_names[n]
+            + "` and CLAUDE.md never tells a reader to build it. check-all.sh does not build the tools,"
+            + " so a fresh checkout following the documented steps cannot run the suite — and neither CI"
+            + " nor this machine can see that, because both already have the binary");
+    }
+    n += 1;
+}
+
+if prove {
+    // Two plants, one per half, so a control that passes proves BOTH halves can still fail.
+    if len(failures) < 2 {
+        print("CONTROL FAILED: two plants, " + to_string(len(failures)) + " reported");
+        let mutable f: Int = 0;
+        while f < len(failures) {
+            print("  " + failures[f]);
+            f += 1;
+        }
+        exit(1);
+    }
+    print("control held: both plants reported");
+    exit(0);
+}
+if len(failures) > 0 {
+    print(to_string(len(failures)) + " problem(s):");
+    let mutable f: Int = 0;
+    while f < len(failures) {
+        print("  " + failures[f]);
+        f += 1;
+    }
+    exit(1);
+}
+
+print(to_string(checked) + " binaries are run by a workflow, and each is built before it runs");
+print(to_string(len(suite_names)) + " binaries are run by the suite, and each is documented as built");

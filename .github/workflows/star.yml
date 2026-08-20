@@ -269,6 +269,18 @@ jobs:
           set -eux
           burxt build tools/versions.bx -o star-versions
           ./star-versions
+          ./star-versions --prove-it
+
+      # **The step that reads this file.** Three consecutive red runs were the same defect — the local
+      # tree had something the runner did not — and the third was a step running a `.gitignore`d tool
+      # that no step built. A green suite here cannot see it: `check-all.sh` builds its own tools and
+      # never reads the workflow.
+      - name: Every binary CI runs is built before CI runs it
+        run: |
+          set -eux
+          burxt build tools/workflows.bx -o star-workflows
+          ./star-workflows
+          ./star-workflows --prove-it
 
       - name: Every line that is not Burxt says why
         run: |
@@ -461,5 +473,12 @@ jobs:
           ./star-build examples/Served.sbmx page /tmp/build
           ./star-partition /tmp/build/page.o /tmp/build/page.wasm
 
+      # **The build line, because this step once had none.** `python3 verify-docs.py` was replaced with
+      # `./star-docs` and the tool it now needs was never built — the suite stayed green here, where the
+      # binary exists and is `.gitignore`d, and the runner said `No such file or directory`.
+      # `./star-workflows` reads this file and holds every step to it.
       - name: Every example in the documentation actually works
-        run: ./star-docs
+        run: |
+          set -eux
+          burxt build tools/docs.bx -o star-docs
+          ./star-docs

@@ -29,6 +29,7 @@
 // be one of them must agree with everything else claiming to be the same one.
 use "std/files.bx";
 use "std/string.bx";
+use "std/os.bx";
 
 pure function contains(haystack: String, needle: String) -> Bool {
     return string_find(haystack, needle) >= 0;
@@ -87,7 +88,14 @@ pure function at_least(a: String, b: String) -> Bool {
     return true;
 }
 
-let prove: Bool = false;
+// **This was `false`, and the header above it advertised `--prove-it`.** A negative control that
+// cannot fail is worse than none: the flag ran, the tool printed its success line, and the exit status
+// said the control had held. It was written as a placeholder and read as a check for a day.
+//
+// The plant is the floor as a reader is told it, one character off — the disagreement between prose and
+// configuration that this whole file exists to catch — so the control exercises the comparison rather
+// than a counter.
+let prove: Bool = os_arg_count() > 1 && os_arg(1) == "--prove-it";
 
 let config: String = file_read("docs/_config.yml");
 let install: String = file_read("docs/install.md");
@@ -99,6 +107,10 @@ let mutable stated: String = prose_floor(install);
 let floor_ci: String = scalar(star_ci, "BURXT_FLOOR");
 let star_pin: String = scalar(star_ci, "BURXT_VERSION");
 let site_pin: String = scalar(site_ci, "BURXT_VERSION");
+
+if prove {
+    stated = stated + ".1";
+}
 
 let mutable failures: [String] = [];
 
@@ -133,6 +145,15 @@ if star_pin != site_pin {
 if len(floor) > 0 && !at_least(star_pin, floor) {
     let e: Int = push(failures, "CI installs `" + star_pin + "`, which is below the advertised floor `"
         + floor + "`");
+}
+
+if prove {
+    if len(failures) == 0 {
+        print("CONTROL FAILED: a planted floor of `" + stated + "` was not reported as a disagreement");
+        exit(1);
+    }
+    print("control held: the planted floor `" + stated + "` was reported");
+    exit(0);
 }
 
 print(to_string(len(failures)) + " problem(s) in the versions this repository names");

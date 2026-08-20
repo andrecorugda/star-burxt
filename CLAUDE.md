@@ -141,6 +141,9 @@ burxt build tools/surface.bx     -o star-surface
 burxt build tools/content.bx     -o star-content
 burxt build tools/collection.bx  -o star-collection
 burxt build tools/reachable.bx   -o star-reachable
+burxt build tools/versions.bx    -o star-versions
+burxt build tools/workflows.bx   -o star-workflows
+burxt build editors/lsp/drive-lsp.bx -o star-drive-lsp
 ```
 
 ```sh
