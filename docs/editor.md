@@ -67,6 +67,16 @@ ln -s "$PWD/star-burxt/editors/vscode" ~/.vscode/extensions/star-burxt
 Then reload VS Code. On Windows, `mklink /D` does the linking; on VS Code Insiders the folder is
 `~/.vscode-insiders/extensions`.
 
+> **If you are on WSL, SSH, a container or a Codespace, that folder is not the one your editor reads.**
+> A remote window loads extensions from **`~/.vscode-server/extensions`** on the remote machine, so a
+> copy or a symlink into `~/.vscode/extensions` silently does nothing — no error, no extension, and the
+> instruction looks like it worked. That is the case this project cares about most: `extensionKind` is
+> `["workspace"]` precisely because the checker runs where your code is, which is the remote side.
+>
+> **`code --install-extension` avoids the question entirely** — it resolves the right directory itself
+> and says which machine it used (`Installing extensions on WSL: Ubuntu…`). Prefer it, and reach for a
+> folder only when you want the extension to track a checkout.
+
 **All three are tested rather than assumed, and the second time that sentence was written it was false.**
 The first version of this page said a symlink was required because the server sat beside the extension rather
 than inside it — and when I checked the instruction, the symlink did not work either: `path.join` normalises
