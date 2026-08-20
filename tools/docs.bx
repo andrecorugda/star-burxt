@@ -1,0 +1,977 @@
+// Every `.sbmx` example on the site is generated, so the book cannot teach something that is refused.
+//
+//     burxt build tools/docs.bx -o star-docs
+//     ./star-docs
+//
+// **A tutorial that teaches a thing the tool rejects is worse than no tutorial**, because the reader
+// concludes they made the mistake. This found exactly that on its first run: chapter 1 opened with a
+// plain Markdown document and no `::: props`, which star-burxt refuses — so the first lesson on the
+// site did not work.
+//
+// Most examples are FRAGMENTS: a reference page showing a `for` block should not have to carry a
+// props line to be readable. A fragment is given the preamble below before it is checked, so what is
+// under test is the block structure the example teaches rather than a document nobody would write.
+// Generation checks structure — block names, events, nesting, void elements — and leaves names and
+// types to the compiler, which is the right split for a page of fragments.
+//
+// Four checks live here, and each one exists because something got past the others:
+//
+//   examples     every fenced document generates, and a component-mode one also compiles
+//   hidden       a fence the extractor cannot SEE, which reads exactly like a fence that passed
+//   quoted       every refusal the pages quote is one star still emits
+//   extensions   `.bmx` is BMX's and `.sbmx` is star's, and the pages stopped agreeing
+//
+// ---- and it was `verify-docs.py`, in the root -----------------------------------------------------
+//
+// Andre's directive is the whole reason this file exists: *"I will not accept a language that really
+// depends on another language. We worked so hard to develop Burxt until it is self hosting."* A
+// 342-line Python program in the root of a self-hosting framework is what his friends read before
+// concluding the language was not ready — and `README.md` had already said this should not stay
+// Python. Nothing in it needed Python: walk files, find fences by hand, write a document, run a
+// binary, look for a string in its output.
+//
+// **The port is not a translation, because the Python leaned on regular expressions and Burxt has
+// none.** That sounds like the cost and it is mostly the benefit. Two of the comments below record a
+// pattern that silently STOPPED MATCHING — the `:::` fence respelled in BMX 0.7, and the
+// `(\w*)` opener that could not see a four-backtick block — and a pattern that no longer matches
+// removes nothing, checks nothing, and reports a smaller number as a pass. Matching by hand cannot
+// half-match: `fence_open` either recognises the line or answers `-1`.
+//
+// **The one thing the port had to be careful to KEEP is that Python counts characters and Burxt
+// counts bytes.** `[^.\n]{0,40}`, `.{12,60}` and `len(piece) > 14` are all character counts, and these
+// pages are full of em dashes — three bytes each. So every bound below walks codepoints with
+// `next_char`, and `clip` exists for exactly that reason.
+//
+// Both halves of that were measured against a byte-counting build of this same file rather than
+// argued, because the argument sounds right either way:
+//
+//   the gap    `.bmx` and `component` 33 characters apart, twelve of them em dashes, is 57 bytes.
+//              Python flags it, this flags it with the same message, and the byte-counting build
+//              reports the pages clean. **A shorter reach is a check that silently stops reaching.**
+//   the clip   a context line clipped at 70 BYTES ended inside an em dash: `0xe2` with no
+//              continuation, invalid UTF-8, in a report from the tool whose subject is refusing
+//              invalid things. At 70 characters it does not.
+//
+// And the honest other half: **nothing on the site depends on either today.** The byte-counting build
+// passes `docs/` unchanged, so this is a hole that has not fired, written down because the page that
+// would fire it is one em dash away and the failure is silence.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+
+const GEN: String = "./star-generate";
+const FRAMEWORK: String = "star.bx";
+
+// Every prop the site's examples mention. A fragment naming something that is not here is a page
+// using a name it never introduced, which is worth failing on.
+const PREAMBLE: String = ":props: count: Int, name: String, greeting: String, unread: Int, ready: Bool, total: Decimal<2>, subtotal: Decimal<2>, shipping: Decimal<2>, lines: [Line], draft: String, options: [Choice], go: Bool, thing: Line\n:!props:\n\n";
+
+// ---- the small things, said once -----------------------------------------------------------------
+
+pure function contains(haystack: String, needle: String) -> Bool {
+    return string_find(haystack, needle) >= 0;
+}
+
+// `\w` in Python is Unicode-aware; every tag, code and identifier these pages hold is ASCII, and a
+// Unicode-aware version would need a table this file has no business carrying.
+pure function is_word_byte(b: Int) -> Bool {
+    return (b >= 48 && b <= 57) || (b >= 65 && b <= 90) || (b >= 97 && b <= 122) || b == 95;
+}
+
+pure function is_space_byte(b: Int) -> Bool {
+    return b == 32 || b == 9 || b == 10 || b == 13 || b == 11 || b == 12;
+}
+
+// The start of the line after the one `i` is on — where a `^` can match next.
+pure function next_line(text: String, i: Int) -> Int {
+    let mutable j: Int = i;
+    while j < len(text) && byte_at(text, j) != 10 {
+        j += 1;
+    }
+    if j >= len(text) { return len(text); }
+    return j + 1;
+}
+
+// The 1-based line a byte offset falls on, which is what every report below names.
+pure function line_of(text: String, at: Int) -> Int {
+    let mutable found: Int = 1;
+    let mutable i: Int = 0;
+    while i < at && i < len(text) {
+        if byte_at(text, i) == 10 { found += 1; }
+        i += 1;
+    }
+    return found;
+}
+
+// The first `chars` CODEPOINTS, which is what a Python slice of a `str` takes.
+//
+// **Not the first `chars` bytes.** star's messages are full of em dashes, and a byte clip lands
+// between the three bytes of one — an invalid sequence in a report, from the tool whose subject is
+// refusing invalid things. `next_char` never answers past the end, so this is total.
+pure function clip(text: String, chars: Int) -> String {
+    let mutable at: Int = 0;
+    let mutable seen: Int = 0;
+    while seen < chars && at < len(text) {
+        at = next_char(text, at);
+        seen += 1;
+    }
+    return substring(text, 0, at);
+}
+
+// Python's `%r` for the fragments these reports quote, which are short and ASCII.
+//
+// Faithful for what actually reaches it: the quote character is chosen the way `repr` chooses it, and
+// backslash, newline, carriage return and tab are escaped. It is NOT a general `repr` — a control byte
+// arrives verbatim rather than as `\x0b`, and nothing on these pages has ever held one.
+pure function reprd(text: String) -> String allocates {
+    let mutable quote: String = "'";
+    if contains(text, "'") && !contains(text, "\"") { quote = "\""; }
+    let mutable out: String = quote;
+    let mutable i: Int = 0;
+    while i < len(text) {
+        let c: String = substring(text, i, 1);
+        if c == "\\" { out = out + "\\\\"; }
+        else { if c == "\n" { out = out + "\\n"; }
+        else { if c == "\r" { out = out + "\\r"; }
+        else { if c == "\t" { out = out + "\\t"; }
+        else { if c == quote { out = out + "\\" + quote; }
+        else { out = out + c; } } } } }
+        i += 1;
+    }
+    return out + quote;
+}
+
+// ---- the fenced blocks a page holds --------------------------------------------------------------
+//
+// One block: how many backticks opened it, the word after them, what is between the fences, and where
+// the opening fence began.
+class Fence { ticks: Int, tag: String, body: String, start: Int }
+
+// A fence opener at `i`: exactly ``` , then a word, then the end of the line. Answers where the body
+// starts, or `-1`.
+//
+// **A FOURTH backtick is not a word character and not a newline, so this answers `-1` for one** — and
+// that hole is what `deep_fences` below exists to report rather than to fix. The Python's opener had
+// the same hole and nothing looked for what fell through it, so two component examples on the landing
+// page were never generated and never compiled. They happened to be correct.
+pure function fence_open(text: String, i: Int) -> Int {
+    if i + 3 > len(text) { return -1; }
+    if substring(text, i, 3) != "```" { return -1; }
+    let mutable j: Int = i + 3;
+    while j < len(text) && is_word_byte(byte_at(text, j)) {
+        j += 1;
+    }
+    if j < len(text) && byte_at(text, j) == 10 { return j + 1; }
+    return -1;
+}
+
+// The first line at or after `from` that opens with `ticks` backticks, or `-1`.
+pure function fence_close(text: String, from: Int, ticks: Int) -> Int {
+    let mutable k: Int = from;
+    while k < len(text) {
+        if k + ticks <= len(text) {
+            let mutable all: Bool = true;
+            let mutable t: Int = 0;
+            while t < ticks {
+                if byte_at(text, k + t) != 96 { all = false; }
+                t += 1;
+            }
+            if all { return k; }
+        }
+        k = next_line(text, k);
+    }
+    return -1;
+}
+
+// Every three-backtick block on a page.
+//
+// **Both fences are consumed by one pass, and the tag is read.** The Python's comment is worth keeping
+// because the bug it describes was reintroduced once and reported a paragraph: a CLOSING fence is also
+// ``` followed by a newline, so an extractor that treats every fence line as a possible opener pairs
+// one example's closing fence with the next one's opening fence and hands the prose between two
+// examples to the generator. Walking from the opener to its own closer and resuming on the line AFTER
+// it cannot do that.
+//
+// A fence that never closes is not a block: the scan resumes on the next line, which is where a
+// regular expression that failed at one position would try next.
+pure function fences(text: String) -> [Fence] allocates {
+    let mutable out: [Fence] = [];
+    let mutable i: Int = 0;
+    while i < len(text) {
+        let body: Int = fence_open(text, i);
+        let mutable moved: Bool = false;
+        if body >= 0 {
+            let close: Int = fence_close(text, body, 3);
+            if close >= 0 {
+                let x: Int = push(out, Fence {
+                    ticks: 3,
+                    tag: substring(text, i + 3, body - 1 - (i + 3)),
+                    body: substring(text, body, close - body),
+                    start: i });
+                i = next_line(text, close);
+                moved = true;
+            }
+        }
+        if !moved { i = next_line(text, i); }
+    }
+    return out;
+}
+
+// Every FOUR-or-more-backtick block, closed by a run of the same length.
+pure function deep_fences(text: String) -> [Fence] allocates {
+    let mutable out: [Fence] = [];
+    let mutable i: Int = 0;
+    while i < len(text) {
+        let mutable n: Int = 0;
+        while i + n < len(text) && byte_at(text, i + n) == 96 {
+            n += 1;
+        }
+        let mutable moved: Bool = false;
+        if n >= 4 {
+            let mutable j: Int = i + n;
+            while j < len(text) && is_word_byte(byte_at(text, j)) {
+                j += 1;
+            }
+            if j < len(text) && byte_at(text, j) == 10 {
+                let close: Int = fence_close(text, j + 1, n);
+                if close >= 0 {
+                    let x: Int = push(out, Fence {
+                        ticks: n,
+                        tag: substring(text, i + n, j - (i + n)),
+                        body: substring(text, j + 1, close - (j + 1)),
+                        start: i });
+                    i = next_line(text, close);
+                    moved = true;
+                }
+            }
+        }
+        if !moved { i = next_line(text, i); }
+    }
+    return out;
+}
+
+// ---- which blocks are examples -------------------------------------------------------------------
+
+// A `===` section counts only at the start of a line. A refusal message that MENTIONS `===style.local`
+// mid-sentence is prose, and feeding prose to the generator produces a report that blames a paragraph.
+pure function has_section(body: String) -> Bool {
+    let mutable i: Int = 0;
+    while i < len(body) {
+        if i + 4 <= len(body) && substring(body, i, 3) == "===" && is_word_byte(byte_at(body, i + 3)) {
+            return true;
+        }
+        i = next_line(body, i);
+    }
+    return false;
+}
+
+// **A 0.7 fence is `:name:`, so looking for `:::` stopped finding examples.** BMX respelled the fence
+// in 0.7 and this decides whether a block is a document at all — the old spelling would have quietly
+// skipped every migrated example and reported a smaller number as a pass.
+//
+// The Python wrote this as `^\s*:!?[A-Za-z][\w-]*:` with `re.M`, where `\s` matches a newline too, so
+// the leading run could cross line boundaries and land on any later line's indented content. What that
+// pattern actually asks is what this asks: is there a LINE whose first non-space thing is a fence.
+pure function has_block_fence(body: String) -> Bool {
+    let rows: [String] = string_lines(body);
+    let mutable r: Int = 0;
+    while r < len(rows) {
+        let line: String = string_trim_start(rows[r]);
+        if string_starts_with(line, ":") {
+            let mutable p: Int = 1;
+            if p < len(line) && byte_at(line, p) == 33 { p += 1; }
+            if p < len(line) {
+                let c: Int = byte_at(line, p);
+                if (c >= 65 && c <= 90) || (c >= 97 && c <= 122) {
+                    p += 1;
+                    // `[\w-]*` is greedy and `:` is in neither class, so the run ends exactly where
+                    // the colon must be. No backtracking to reason about.
+                    while p < len(line) && (is_word_byte(byte_at(line, p)) || byte_at(line, p) == 45) {
+                        p += 1;
+                    }
+                    if p < len(line) && byte_at(line, p) == 58 { return true; }
+                }
+            }
+        }
+        r += 1;
+    }
+    return false;
+}
+
+// Fences with a language tag (```sh, ```burxt) are not documents. `sbmx` is what a star document IS,
+// so a tagged example is still an example — the tag is what earns it syntax colour on the site. Every
+// OTHER tag (`sh`, `html`, `error`) is not a document and must not reach the generator.
+pure function is_example(tag: String, body: String) -> Bool {
+    if len(tag) > 0 && tag != "sbmx" { return false; }
+    if !has_block_fence(body) && !contains(body, "\{\{") && !has_section(body) { return false; }
+    return true;
+}
+
+// ---- fences the extractor cannot see -------------------------------------------------------------
+//
+// Code blocks `fences` above cannot see, which is worse than a block that fails.
+//
+// A four-backtick fence is invisible to it — the opener needs a newline right after the optional word
+// — so two component examples on the landing page were never generated and never compiled, and nothing
+// said so. They happened to be correct. **A block that escapes the checker reads exactly like a block
+// that passed it**, so finding them is worth its own failure.
+function hidden_fences(pages: [String]) -> [String] allocates touches files {
+    let mutable bad: [String] = [];
+    let mutable p: Int = 0;
+    while p < len(pages) {
+        let text: String = file_read(pages[p]);
+        let blocks: [Fence] = deep_fences(text);
+        let mutable b: Int = 0;
+        while b < len(blocks) {
+            let block: Fence = blocks[b];
+            if has_block_fence(block.body) || contains(block.body, "\{\{") || has_section(block.body) {
+                let x: Int = push(bad, pages[p] + ":" + to_string(line_of(text, block.start))
+                    + " is a " + to_string(block.ticks) + "-backtick fence holding an example, which"
+                    + " the checker cannot see — use ```sbmx");
+            }
+            b += 1;
+        }
+        p += 1;
+    }
+    return bad;
+}
+
+// ---- refusals the pages quote --------------------------------------------------------------------
+
+// Messages the pages quote that belong to the COMPILER, not to star. Declared rather than skipped by
+// a pattern: a pattern broad enough to skip Burxt's messages also skips star's own stale ones, which
+// is exactly how chapter 4 went on teaching a limitation that had been lifted.
+pure function burxt_messages() -> [String] allocates {
+    let mutable out: [String] = [];
+    let a: Int = push(out, "unknown variable:");     // a slot naming something the props do not declare
+    let b: Int = push(out, "unknown field:");        // a slot naming a field the type does not have
+    let c: Int = push(out, "cannot apply");          // a handler mixing Int and String
+    let d: Int = push(out, "this multiplication");   // money narrowed without a rounding rule
+    return out;
+}
+
+// Where a `" + expression + "` runs out, one past its closing quote — or `i` when there is none there.
+//
+// This is the Burxt string plumbing that stands between a quote on a page and the same wording in
+// `star.bx`: the source holds `"an " + name + " handler"` and the page holds the sentence. Removing the
+// plumbing joins the halves so a substring test can find them.
+pure function plumbing_end(source: String, i: Int) -> Int {
+    let stop: Int = len(source);
+    let mutable j: Int = i + 1;
+    while j < stop && is_space_byte(byte_at(source, j)) { j += 1; }
+    if j >= stop || byte_at(source, j) != 43 { return i; }
+    j += 1;
+    while j < stop && is_space_byte(byte_at(source, j)) { j += 1; }
+    // The shortest run that reaches a `+ "` wins, which is what the Python's `*?` asked for. `+` is
+    // itself a member of the run, so a `+` that is not followed by a quote is passed over rather than
+    // ending the search — `a + b + "` has to keep going.
+    let mutable k: Int = j;
+    while k < stop {
+        let c: Int = byte_at(source, k);
+        if c == 43 {
+            let mutable m: Int = k + 1;
+            while m < stop && is_space_byte(byte_at(source, m)) { m += 1; }
+            if m < stop && byte_at(source, m) == 34 { return m + 1; }
+        }
+        let plumbing: Bool = is_word_byte(c) || c == 46 || c == 91 || c == 93
+            || c == 40 || c == 41 || c == 43 || c == 32;
+        if !plumbing { return i; }
+        k += 1;
+    }
+    return i;
+}
+
+// Everything `star.bx` can say, with the plumbing removed and the source escapes undone.
+//
+// **Compared on the DISTINCTIVE tail rather than the whole line**, because a page wraps a message and a
+// source file concatenates one — neither holds it as a single string, and requiring that would fail on
+// formatting rather than on content.
+pure function sayable(source: String) -> String allocates {
+    let mutable out: String = "";
+    let mutable kept: Int = 0;
+    let mutable i: Int = 0;
+    while i < len(source) {
+        if byte_at(source, i) == 34 {
+            let end: Int = plumbing_end(source, i);
+            if end > i {
+                out = out + substring(source, kept, i - kept);
+                kept = end;
+                i = end;
+            } else {
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+    out = out + substring(source, kept, len(source) - kept);
+    return string_replace(string_replace(out, "\\`", "`"), "\\\"", "\"");
+}
+
+// Runs of backtick and newline become one space, so a message a page wrapped across three lines and
+// dressed in code spans is one sentence again.
+pure function flattened(block: String) -> String allocates {
+    let mutable out: String = "";
+    let mutable i: Int = 0;
+    let mutable folding: Bool = false;
+    while i < len(block) {
+        let c: Int = byte_at(block, i);
+        if c == 96 || c == 10 {
+            if !folding { out = out + " "; }
+            folding = true;
+        } else {
+            out = out + substring(block, i, 1);
+            folding = false;
+        }
+        i += 1;
+    }
+    return out;
+}
+
+// An untagged fenced block that reads like a refusal: does star still say any part of it?
+//
+// **An error message quoted WITHOUT its code is invisible to the coded check below**, and that is how a
+// stale one survived: chapter 4 quoted `an \`on:\` handler inside a \`for\` is not supported yet`, a
+// message star stopped emitting when the limitation was lifted — teaching a restriction that no longer
+// existed, in a sentence no token search would flag.
+//
+// **ANY sentence-fragment must be findable, not the longest run.** Two things defeat a single-run
+// comparison: a page WRAPS a message across lines, and star assembles one from several functions —
+// `star_event_hint` supplies the second half of E002 — so no long run exists in either form. Fragments
+// are what survive both.
+//
+// The first attempt took the text before the first backtick, which for `an \`on:\` handler …` is "an":
+// two characters, below the length floor, silently passing every message shaped that way. That is this
+// guard failing in the way it exists to catch, which is why it is written down rather than quietly
+// fixed.
+function quoted_prose(pages: [String], source: String) -> [String] allocates touches files {
+    let mutable wrong: [String] = [];
+    let known: [String] = burxt_messages();
+    let mutable p: Int = 0;
+    while p < len(pages) {
+        let text: String = file_read(pages[p]);
+        let blocks: [Fence] = fences(text);
+        let mutable b: Int = 0;
+        while b < len(blocks) {
+            let fence: Fence = blocks[b];
+            let block: String = string_trim(fence.body);
+            let rows: [String] = string_lines(block);
+            let mutable prose: Bool = contains(block, "\{\{");
+            if len(rows) > 0 && !contains(rows[0], ":") { prose = true; }
+            let mutable skip: Bool = len(fence.tag) > 0 || len(block) == 0 || prose;
+            if string_starts_with(block, "error:") || string_starts_with(block, "warning:") {
+                skip = true;                  // the compiler's own prefix, and none of star's are
+            }
+            let mutable k: Int = 0;
+            while k < len(known) {
+                if string_starts_with(block, known[k]) { skip = true; }
+                k += 1;
+            }
+            if string_starts_with(block, "STAR-E") { skip = true; }   // the coded case, handled below
+            if !skip {
+                // Split on `.`, `—` and `:`; keep the pieces long enough to be distinctive. The floor
+                // is in CODEPOINTS, and the em dash it splits on is three bytes — counting those as
+                // three would let a short fragment over the floor and check it against nothing.
+                let flat: String = flattened(block);
+                let mutable first: String = "";
+                let mutable pieces: Int = 0;
+                let mutable found: Bool = false;
+                let mutable start: Int = 0;
+                let mutable i: Int = 0;
+                while i <= len(flat) {
+                    let mutable width: Int = 0;
+                    if i < len(flat) {
+                        let c: Int = byte_at(flat, i);
+                        if c == 46 || c == 58 { width = 1; }
+                        if i + 3 <= len(flat) && substring(flat, i, 3) == "—" { width = 3; }
+                    }
+                    if i == len(flat) || width > 0 {
+                        let piece: String = string_trim(substring(flat, start, i - start));
+                        if char_count(piece) > 14 {
+                            if pieces == 0 { first = piece; }
+                            pieces += 1;
+                            if contains(source, piece) { found = true; }
+                        }
+                        start = i + width;
+                    }
+                    if width > 1 { i += width; } else { i += 1; }
+                }
+                if pieces > 0 && !found {
+                    let x: Int = push(wrong, pages[p] + ":" + to_string(line_of(text, fence.start))
+                        + " quotes a message star does not emit: " + reprd(clip(first, 56)));
+                }
+            }
+            b += 1;
+        }
+        p += 1;
+    }
+    return wrong;
+}
+
+// Every CODED refusal the pages quote must be one the generator still emits.
+//
+// **A page quoting a message the compiler stopped emitting is worse than a stale example**, because the
+// example is checked and the quote is not: a reader searches for the sentence they were shown and finds
+// nothing. `docs/guide/01` quoted `Add \`::: props name: Type\`` for a day after that message was
+// respelled, and only Andre reading the page found it.
+function quoted_codes(pages: [String], source: String, said: String) -> [String] allocates touches files {
+    let mutable wrong: [String] = [];
+    let mutable p: Int = 0;
+    while p < len(pages) {
+        let text: String = file_read(pages[p]);
+        let mutable i: Int = 0;
+        while i < len(text) {
+            // `^(STAR-E\d+): ?(.{12,60})` — a code at the start of a line, then twelve to sixty
+            // characters of wording that do not cross the line ending.
+            if string_matches_at(text, "STAR-E", i) {
+                let mutable j: Int = i + 6;
+                while j < len(text) && byte_at(text, j) >= 48 && byte_at(text, j) <= 57 { j += 1; }
+                let digits: Int = j - (i + 6);
+                if digits > 0 && j < len(text) && byte_at(text, j) == 58 {
+                    let code: String = substring(text, i, j - i);
+                    let mutable at: Int = j + 1;
+                    // The space is optional and greedy, and it gives itself back rather than lose the
+                    // match: a line with exactly twelve characters after `: ` still has thirteen after
+                    // `:`, which is what a backtracking engine would find.
+                    let spaced: Bool = at < len(text) && byte_at(text, at) == 32;
+                    if spaced && chars_on_line(text, at + 1) >= 12 { at += 1; }
+                    if chars_on_line(text, at) >= 12 {
+                        let quoted: String = string_trim(clip(line_from(text, at), 60));
+                        if !contains(source, code) {
+                            let x: Int = push(wrong, pages[p] + ":" + to_string(line_of(text, i))
+                                + " quotes " + code + ", which star.bx does not emit at all");
+                        } else {
+                            let plain: String = string_trim(before_backtick(quoted));
+                            if len(plain) > 0 && !contains(said, plain) {
+                                let y: Int = push(wrong, pages[p] + ":" + to_string(line_of(text, i))
+                                    + " quotes " + code + " with wording star.bx does not have: "
+                                    + reprd(clip(plain, 48)));
+                            }
+                        }
+                    }
+                }
+            }
+            i = next_line(text, i);
+        }
+        p += 1;
+    }
+    return wrong;
+}
+
+// How many codepoints are left on this line from `at`.
+pure function chars_on_line(text: String, at: Int) -> Int {
+    let mutable seen: Int = 0;
+    let mutable i: Int = at;
+    while i < len(text) && byte_at(text, i) != 10 {
+        i = next_char(text, i);
+        seen += 1;
+    }
+    return seen;
+}
+
+pure function line_from(text: String, at: Int) -> String {
+    let mutable i: Int = at;
+    while i < len(text) && byte_at(text, i) != 10 { i += 1; }
+    return substring(text, at, i - at);
+}
+
+// `tail.split("`")[0]` — the wording before any code span, since a span is the page's typography and
+// not part of what star said.
+pure function before_backtick(text: String) -> String {
+    let cut: Int = string_find(text, "`");
+    if cut < 0 { return text; }
+    return substring(text, 0, cut);
+}
+
+// ---- `.bmx` and `.sbmx` are not interchangeable --------------------------------------------------
+//
+// `.bmx` is BMX's the way `.html` is HTML's; `.sbmx` is star's the way `.jsx` is React's.
+//
+// **The two were used interchangeably and it reached the GitHub repository description**, which said
+// *"A .bmx file is a component"* — outside the tree, so every sweep over `docs/` missed it for as long
+// as it existed. Andre found it by reading the repository page.
+//
+// Checked as a PAIRING rather than as a token: `.bmx` is a perfectly good thing to mention, and the
+// pages do, because star compiles BMX. What is wrong is calling one a component or the other a
+// document.
+
+// Is `word` at `at`, with a word boundary on each side?
+pure function word_at(text: String, word: String, at: Int) -> Bool {
+    if !string_matches_at(text, word, at) { return false; }
+    if at > 0 && is_word_byte(byte_at(text, at - 1)) { return false; }
+    let after: Int = at + len(word);
+    if after < len(text) && is_word_byte(byte_at(text, after)) { return false; }
+    return true;
+}
+
+// `[^.\n]{0,40}` then `word`, greedy. Answers one past the whole thing, or `-1`.
+//
+// The forty is a count of CODEPOINTS, walked with `next_char`. Counting bytes instead would shorten the
+// reach by two for every em dash in between, and these sentences are made of em dashes — the pairing
+// this exists to catch would sit twenty characters apart and go unseen.
+pure function gap_then_word(text: String, from: Int, word: String, bounded: Bool) -> Int {
+    let mutable best: Int = -1;
+    let mutable p: Int = from;
+    let mutable n: Int = 0;
+    let mutable going: Bool = true;
+    while going {
+        let mutable hit: Bool = false;
+        if bounded { hit = word_at(text, word, p); } else { hit = string_matches_at(text, word, p); }
+        if hit { best = p + len(word); }
+        if n >= 40 || p >= len(text) {
+            going = false;
+        } else {
+            let c: Int = byte_at(text, p);
+            if c == 46 || c == 10 {
+                going = false;
+            } else {
+                p = next_char(text, p);
+                n += 1;
+            }
+        }
+    }
+    return best;
+}
+
+// One past the confusion starting at `i`, or `-1`. The three alternatives are tried in the order the
+// Python wrote them, because that is the order a regular expression tries them in.
+pure function confusion_at(text: String, i: Int) -> Int {
+    if string_matches_at(text, ".bmx", i) {
+        let end: Int = gap_then_word(text, i + 4, "component", true);
+        if end >= 0 { return end; }
+    }
+    if word_at(text, "component", i) {
+        let end: Int = gap_then_word(text, i + 9, ".bmx", false);
+        if end >= 0 { return end; }
+    }
+    if string_matches_at(text, ".sbmx", i) {
+        let end: Int = gap_then_word(text, i + 5, "document any", true);
+        if end >= 0 { return end; }
+    }
+    return -1;
+}
+
+function confused_extensions(pages: [String]) -> [String] allocates touches files {
+    let mutable wrong: [String] = [];
+    let mutable p: Int = 0;
+    while p < len(pages) {
+        let text: String = file_read(pages[p]);
+        let rows: [String] = string_split(text, "\n");
+        let mutable i: Int = 0;
+        while i < len(text) {
+            let end: Int = confusion_at(text, i);
+            if end < 0 {
+                i += 1;
+            } else {
+                let line: Int = line_of(text, i);
+                let context: String = rows[line - 1];
+                // The guide states the distinction on purpose; that sentence names both extensions.
+                if !contains(context, "belongs to") && !contains(context, "not interchangeable") {
+                    let x: Int = push(wrong, pages[p] + ":" + to_string(line)
+                        + " calls a `.bmx` a component (or a `.sbmx` a document): "
+                        + reprd(clip(string_trim(context), 70)));
+                }
+                i = end;
+            }
+        }
+        p += 1;
+    }
+    return wrong;
+}
+
+// ---- the examples that are MEANT to be refused ---------------------------------------------------
+//
+// A page about refusals has to show the thing it refuses. Keyed by the message the page promises, so a
+// fixture cannot drift from its prose — and answered in one place, before the source is assembled,
+// because the assembly reads the answer.
+pure function wanted_code(body: String) -> String {
+    if contains(body, ":mystery:") { return "STAR-E001"; }
+    if contains(body, "on:hover") { return "STAR-E002"; }
+    if contains(body, "type here") { return "STAR-E004"; }
+    if contains(body, "# Click me") { return "STAR-E005"; }
+    if contains(body, ":if: ready key") { return "STAR-E006"; }
+    // **Precise, not a word that could occur anywhere.** `"remove"` lived here and matched any example
+    // containing it — including, once chapter 4 stopped teaching a limitation that had been lifted, a
+    // CORRECT example. A marker loose enough to catch a working document is a marker that will
+    // eventually demand a refusal from one. `on:click=line.id` names the handler that IS refused and
+    // nothing else.
+    if contains(body, "on:click=line.id") { return "STAR-E007"; }
+    if contains(body, "Msg.Toggle(todo.id)") { return "STAR-E007"; }
+    if contains(body, "# A component with nothing declared") { return "STAR-E003"; }
+    // **BMX's code, not star's, and that is the point of keeping this table honest.** A comment is the
+    // format's construct, so the refusal is `BMX-E007` — and the marker is the whole offending line,
+    // because `<!--` alone appears in the CORRECT example three paragraphs above and would demand a
+    // refusal from a document that must be accepted.
+    if contains(body, "Total: 5 <!-- fix this -->") { return "BMX-E007"; }
+    // The unquoted multi-class form, which is the one mistake anybody using utility CSS will make. The
+    // marker is the whole head, because `class=card` on its own is CORRECT and appears three paragraphs
+    // above — a looser marker would demand a refusal from a working example.
+    if contains(body, "class=card shadow-sm p-4") { return "STAR-E026"; }
+    return "";
+}
+
+// What is actually put to the generator for one example.
+//
+// **An example that is MEANT to be refused is fed verbatim — only the STAR-E003 one, and only that
+// one.** The preamble supplies a `props` block to fragments, which quietly repairs the one example
+// whose whole point is not having one, and a test that repairs its input tests the repair. Every OTHER
+// refusal fragment still needs the preamble, or it hits E003 before reaching the refusal it is
+// demonstrating.
+pure function assembled(body: String, want: String) -> String allocates {
+    let mutable source: String = "";
+    if want == "STAR-E003" { source = body; }
+    else { if contains(body, ":props:") { source = body; }
+    else { if contains(body, "===bx") {
+        // A component-mode fragment gets the props its OWN declarations imply. The general preamble
+        // names types no page declares (`lines: [Line]`), which is fine for a structure check and is
+        // not a program — and these blocks go to the compiler.
+        source = body + "\n:props: model: Model\n:!props:\n";
+    } else { source = PREAMBLE + body; } } }
+
+    // A fragment that calls a component needs the import too — the surrounding page has it and the
+    // excerpt does not, which is what makes it a fragment.
+    if contains(source, ":Badge:") && !contains(source, "use \"./Badge.sbmx\"") {
+        source = "===bx\nuse \"./Badge.sbmx\";\n"
+            + "pure function update(msg: Int, m: Int) -> Int \{ return m; \}\n===\n\n" + source;
+    }
+    // A `===bx` section shown to teach ONE thing — an import, a style, an effect — is a fragment too,
+    // and STAR-E008 is right to want an `update` in a real file. Supply the missing half rather than
+    // making every excerpt carry it.
+    if contains(source, "===bx") && !contains(source, "function update") {
+        // The injected `update` has to agree with what the fragment DECLARED: a block that defines a
+        // `Model` gets an update over that Model, or the generated dispatch names a type the example
+        // never wrote. The generated driver names the message type `Msg` and the state `Model`, so a
+        // fragment that shows one framework function still needs both to exist.
+        let mutable head: String = "";
+        if !contains(source, "enum Msg") { head = head + "enum Msg \{ Nothing \}\n"; }
+        if !contains(source, "class Model") { head = head + "class Model \{ count: Int \}\n"; }
+        source = string_replace_first(source, "===bx\n",
+            "===bx\n" + head + "pure function update(msg: Msg, m: Model) -> Model \{ return m; \}\n");
+    }
+    return source;
+}
+
+// ---- and the run ---------------------------------------------------------------------------------
+
+class Tally { wrong: [String], checked: Int, refuted: Int, typechecked: Int }
+
+// The body of an example, indented under the report so a reader can see what was refused.
+pure function shown_body(body: String) -> String allocates {
+    let rows: [String] = string_lines(string_trim(body));
+    let mutable out: String = "";
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        out = out + "      | " + rows[i] + "\n";
+        i += 1;
+    }
+    return out;
+}
+
+// The first line of what a command said, or a stated absence.
+pure function first_line(said: String) -> String {
+    let rows: [String] = string_lines(said);
+    if len(rows) == 0 { return "no output"; }
+    return rows[0];
+}
+
+function run_examples(pages: [String], work: String) -> Tally allocates touches commands, files, input {
+    let mutable wrong: [String] = [];
+    let mutable checked: Int = 0;
+    let mutable refuted: Int = 0;
+    let mutable typechecked: Int = 0;
+    let doc: String = work + "/d.sbmx";
+    let bx: String = work + "/c.bx";
+
+    let mutable p: Int = 0;
+    while p < len(pages) {
+        let text: String = file_read(pages[p]);
+        let blocks: [Fence] = fences(text);
+        let mutable b: Int = 0;
+        while b < len(blocks) {
+            let fence: Fence = blocks[b];
+            if is_example(fence.tag, fence.body) {
+                let body: String = fence.body;
+                let where: String = pages[p] + ":" + to_string(line_of(text, fence.start));
+                let want: String = wanted_code(body);
+                let wrote: Int = file_write(doc, assembled(body, want));
+                let ran: Capture = os_capture_status(
+                    file_quote(GEN) + " " + file_quote(doc) + " c");
+                let mutable said: String = string_trim(ran.output);
+                if len(ran.errors) > 0 { said = string_trim(ran.errors); }
+
+                if len(want) > 0 {
+                    refuted += 1;
+                    if !contains(said, want) {
+                        let mutable got: String = clip(said, 90);
+                        if len(got) == 0 { got = "no error"; }
+                        let x: Int = push(wrong, where + " expected " + want + " and got: " + got);
+                    }
+                } else {
+                    checked += 1;
+                    if ran.code != 0 {
+                        let y: Int = push(wrong, where + " is refused:\n      "
+                            + clip(first_line(said), 110) + "\n" + shown_body(body));
+                    } else {
+                        // **Generation checks structure; it cannot check a NAME.** An example calling
+                        // `command_get(...)` generates perfectly and does not exist — which is how
+                        // chapter 7 was first written, and how chapter 6 shipped a linker line naming
+                        // two functions that had been renamed. So a component-mode example goes to the
+                        // real compiler.
+                        //
+                        // The BODY is what is asked, not the assembled source: the `===bx` section
+                        // injected above to give a fragment its `update` is scaffolding, and a fragment
+                        // that never showed one is not a program anybody would compile.
+                        if has_bx_section(body) {
+                            typechecked += 1;
+                            let put: Int = file_write(bx, ran.output);
+                            let judged: Capture = os_capture_status(
+                                "cd " + file_quote(work) + " && burxt check " + file_quote("c.bx"));
+                            if judged.code != 0 {
+                                let mutable told: String = string_trim(judged.output);
+                                if len(judged.errors) > 0 { told = string_trim(judged.errors); }
+                                let z: Int = push(wrong, where + " generates but does not compile:\n"
+                                    + "      " + clip(first_line(told), 130) + "\n" + shown_body(body));
+                            }
+                        }
+                    }
+                }
+            }
+            b += 1;
+        }
+        p += 1;
+    }
+    return Tally { wrong: wrong, checked: checked, refuted: refuted, typechecked: typechecked };
+}
+
+// `^===bx` at the start of a line, which is what makes a block component mode.
+pure function has_bx_section(body: String) -> Bool {
+    let mutable i: Int = 0;
+    while i < len(body) {
+        if string_matches_at(body, "===bx", i) { return true; }
+        i = next_line(body, i);
+    }
+    return false;
+}
+
+// ---- the program ---------------------------------------------------------------------------------
+
+function pages_of(directory: String) -> [String] allocates touches commands, files, input {
+    let mutable out: [String] = [];
+    match file_walk(directory) {
+        None => {
+            return out;
+        }
+        Some(paths) => {
+            let mutable i: Int = 0;
+            while i < len(paths) {
+                if string_ends_with(paths[i], ".md") {
+                    let x: Int = push(out, paths[i]);
+                }
+                i += 1;
+            }
+            return out;
+        }
+    }
+}
+
+if !file_exists(GEN) {
+    print("build the generator first:\n  burxt build examples/generate.bx -o star-generate");
+    exit(2);
+}
+
+let pages: [String] = pages_of("docs");
+// **A suite that found nothing is not a suite that passed.** `refs.bx` learned this the hard way: a
+// walk that lost its root reports zero problems out of zero claims, which reads exactly like success.
+if len(pages) == 0 {
+    print_error("no `.md` page under docs/ — the walk has lost its root");
+    exit(2);
+}
+
+// **Read with `file_read_maybe`, because `file_read` on a missing file ends the program** with
+// `burxt runtime error: cannot open file for reading` and exit 70 — a message about a file handle from
+// a tool whose subject is documentation. Every tool here is run from the repository root, and this is
+// the one place that assumption can be stated rather than discovered. The Python derived its root from
+// `__file__` and so ran from anywhere; that is the one thing it did better, and this is the answer.
+let mutable source: String = "";
+match file_read_maybe(FRAMEWORK) {
+    None => {
+        print_error("cannot read " + FRAMEWORK + " — run this from the repository root");
+        exit(2);
+    }
+    Some(text) => {
+        source = text;
+    }
+}
+let said: String = sayable(source);
+
+let mutable wrong: [String] = [];
+let hidden: [String] = hidden_fences(pages);
+let mutable h: Int = 0;
+while h < len(hidden) { let a: Int = push(wrong, hidden[h]); h += 1; }
+let prose: [String] = quoted_prose(pages, source);
+let mutable q: Int = 0;
+while q < len(prose) { let b: Int = push(wrong, prose[q]); q += 1; }
+let codes: [String] = quoted_codes(pages, source, said);
+let mutable c: Int = 0;
+while c < len(codes) { let d: Int = push(wrong, codes[c]); c += 1; }
+let confused: [String] = confused_extensions(pages);
+let mutable x: Int = 0;
+while x < len(confused) { let e: Int = push(wrong, confused[x]); x += 1; }
+
+match file_temp_directory("star-docs") {
+    None => {
+        print_error("cannot make a temporary directory");
+        exit(2);
+    }
+    Some(work) => {
+        // Components the pages show the reader, written beside the examples so a page teaching
+        // `::: Badge` is checked against a `Badge` that exists. Its props are the ones the pages use —
+        // a component here that did not match the documented call would make this check a fiction.
+        let badge: Int = file_write(work + "/Badge.sbmx",
+            ":props: amount: Int, tone: String\n:!props:\n\n:span: class=badge\n"
+            + "\{\{ tone \}\}: \{\{ to_string(amount) \}\}\n:!span:\n");
+        let tally: Tally = run_examples(pages, work);
+        let mutable t: Int = 0;
+        while t < len(tally.wrong) { let f: Int = push(wrong, tally.wrong[t]); t += 1; }
+
+        if len(wrong) > 0 {
+            print(to_string(len(wrong)) + " problem(s) in "
+                + to_string(tally.checked + tally.refuted) + " examples:");
+            print("");
+            let mutable w: Int = 0;
+            while w < len(wrong) {
+                print("  " + wrong[w]);
+                print("");
+                w += 1;
+            }
+            exit(1);
+        }
+        // **A suite that found nothing is not a suite that passed**, and the Python could print
+        // `0 examples generate ... 0 are refused` and exit 0. Both numbers are the output of a
+        // matcher, and this file's own history is patterns that stopped matching — the `:::` fence
+        // respelled in 0.7 — so neither zero looks like a failure. Not a threshold: nothing here is
+        // capped and both counts move freely. It is the claim that the suite still has a subject.
+        //
+        // Each guard was driven by a build with the matcher broken on purpose, and the second control
+        // is the one that taught something. `wanted_code` forced to answer "" — every refusal marker
+        // respelled out from under it — does NOT reach the count below: the ten fixtures stop being
+        // expected refusals and become ten `is refused` failures instead, which is louder and names
+        // each page. **So the marker-respelling family is already fatal through the refusal path**,
+        // and this guard is not what catches it. What it catches is the pages losing their refusal
+        // fixtures altogether — a real loss of coverage, and the only way to reach a `refuted` of
+        // zero without a failure above.
+        if tally.checked == 0 {
+            print_error("no example generated at all — the fence matching has stopped finding them");
+            exit(1);
+        }
+        if tally.refuted == 0 {
+            print_error("not one example on the site is expected to be refused any more — the pages"
+                + " have lost their refusal fixtures, and a suite of nothing but acceptances cannot"
+                + " see a refusal that stopped happening");
+            exit(1);
+        }
+        print(to_string(tally.checked) + " examples generate (" + to_string(tally.typechecked)
+            + " of them typecheck), " + to_string(tally.refuted)
+            + " are refused exactly as their page promises");
+    }
+}

@@ -1,0 +1,402 @@
+// Package the extension as a .vsix, with no toolchain and in no other language.
+//
+//     burxt build editors/vscode/pack.bx -o star-pack
+//     ./star-pack                                     # from the repository ROOT
+//     code --install-extension editors/vscode/star-burxt.vsix
+//
+// `star-pack` is a built binary like every other tool here and belongs in `.gitignore` beside
+// `star-refs` and `star-showcase` — it is not there yet, and an untracked binary in the root is how a
+// `git add -A` commits a 400KB executable.
+//
+// A port of `pack.py`, which was adapted from BMX's packer, which adapted Burxt's. A .vsix is a ZIP
+// with three things in it: an OPC content-types map, a VSIX manifest, and the extension under
+// `extension/`. `vsce` does more than this — linting, dependency bundling, marketplace checks — and
+// all of it is for publishing, none of it for installing locally. The extension has no npm
+// dependencies (`client.js` requires `vscode`, `child_process` and `fs`; the server takes node
+// builtins only; there is no `node_modules`), so a packer in the standard library is the whole job,
+// and it keeps the promise that this directory needs no toolchain to use.
+//
+// Why package at all when `editors/README.md` says a symlink works: an installed extension is
+// registered, versioned, upgradable and uninstallable through the normal UI. A symlink works until
+// something scans the registry and does not find you.
+//
+// ---- and it was Python until Andre's directive ---------------------------------------------------
+//
+// This file was the ledger's largest `blocked` entry for one named reason — the language had no ZIP
+// writer — and `std/zip.bx` shipped to close it. The port itself is unremarkable: read a JSON file,
+// escape five characters, concatenate two XML documents, read eight files as bytes, write an archive.
+// `std/json.bx` walks `package.json` by matching the `Json` enum, which is what `json.loads` was for.
+//
+// ---- what this writes, measured against `pack.py`'s bytes ---------------------------------------
+//
+// Both packers were run on the same input and both archives were taken apart field by field — the
+// central directory AND every local header, because the format stores its metadata twice and Python's
+// `zipfile` resolves entries through the central copy only. A wrong local header is invisible to
+// `testzip()`; the `std/zip.bx` authors found that by zeroing a local CRC and watching their own test
+// stay green. Both archives here agree with themselves on all eight duplicated fields.
+//
+// **Identical, for all eleven entries:** the names, the order, the byte contents, the CRC-32s, the
+// uncompressed sizes, and the timestamp — one stamp, `(33, 0)`, in both. `unzip -t` and `testzip()`
+// pass on both. So the port is content-exact, and the XML it builds is exact to the byte: the
+// `[Content_Types].xml` and `extension.vsixmanifest` entries compare equal, which is the only thing
+// that could have gone wrong in the escaping and the concatenation.
+//
+// **Different, and deliberately so:**
+//
+//   * the method — 8 versus 0, so the compressed sizes and every offset after the first differ, and
+//     the archive is 43,751 bytes where `pack.py`'s is 24,998. `pack.py` opens with
+//     `zipfile.ZIP_DEFLATED`; `std/zip.bx` is stored-only *by design* and says so in its own header:
+//     *"a packaged extension is a few hundred kilobytes of text that is transferred once and
+//     unpacked once, so compression buys a download nobody is waiting on and costs an implementation
+//     of DEFLATE."* Matching Python here would mean matching zlib's level-6 heuristics, not merely
+//     emitting valid DEFLATE — a compressor is not a field a caller can fill in.
+//   * `version made by` — 0x0314 versus 0x0014. Python's `ZipInfo` takes `create_system = 3` on a
+//     POSIX host, which declares *"this archive carries Unix metadata"*; `std/zip.bx` declares
+//     system 0, meaning it claims none.
+//   * external attributes — 0x01A40000 versus 0x00000000. `pack.py`'s `entry()` stamps
+//     `0o644 << 16` on every entry. Zero means *no mode claimed*, so an extractor applies its own
+//     default under the user's umask, which is the better answer for a package people download:
+//     mode bits invented by a packer are mode bits that follow the file forever.
+//
+// **The committed `star-burxt.vsix` is `pack.py`'s bytes, and this program does not re-baseline it.**
+// Not a judgement about which archive is better — a measured conflict. `tests/extension.py` names
+// `pack.py` as the packer of record (`subprocess.run([sys.executable, EXT / "pack.py"])`) and asserts
+// the committed bytes are what *it* writes, so committing a stored archive turns that check red while
+// changing nothing about the extension: run against the stored artefact, thirteen of the fourteen
+// checks pass — including the fixed timestamp and all four install shapes, `.vsix` extraction among
+// them — and only *"the committed .vsix is what the packer writes"* fails. Retiring `pack.py` and
+// re-baselining the artefact is therefore one commit, in which that test's packer of record moves
+// here in the same breath. Splitting it across two leaves the tree red in between, which is how a
+// 19,000-byte change to a committed binary comes to look like a mistake.
+//
+// **The timestamp half of reproducibility already agrees, and was checked rather than assumed.**
+// Two packs of one input gave the same 43,751 bytes. `zip_dos_date()` is 33 and
+// `zip_dos_time()` is 0 — 1980-01-01 00:00:00, exactly `pack.py`'s `EPOCH` and exactly what
+// `tests/extension.py` asserts as a property of the archive. Both packers had the same reasoning and
+// arrived at the same constant: without it the two entries written from strings take the current time
+// and the staged manifest carries a fresh mtime, so the bytes move on every run — and **a committed
+// artefact that cannot be reproduced cannot be checked against its source.** A stale .vsix then
+// becomes undetectable, which matters most in CI, where the pack step overwrites the evidence one
+// line before the inspect step looks at it. BMX also recorded the trap and it is worth not
+// re-entering: a reproducibility check that packs twice in a row PASSES on a non-reproducible packer,
+// because a zip stores timestamps at two-second granularity and back-to-back runs share a bucket.
+//
+// ---- three things here are star's rather than BMX's ----------------------------------------------
+//
+// Each is a defect avoided rather than taste, and each survived the port unchanged.
+//
+// `extensionKind` is `["workspace"]`, READ from `package.json` with no default, and this program
+// refuses rather than guessing. BMX's packer defaults to `["ui", "workspace"]` because a grammar
+// spawns nothing — but this extension spawns `star-check`, and a UI-side load on WSL, SSH or a
+// container puts the extension where the binary is not. Taking BMX's default would have produced an
+// extension that highlights and never checks, on exactly the setups where that is hardest to notice.
+// The Python raised `SystemExit` from inside `manifest()`; a `pure function` here cannot exit, so the
+// refusal is at the top level a few lines before the manifest is built. Same answer, one frame out.
+//
+// The FILES list is authored, not globbed — a stray file never ships. That cuts both ways and the
+// first direction is the live one: `config.mjs` sits in this directory and is a TEST (it asserts the
+// folding markers and the icons' ink fraction; `tools/check-all.sh` and CI run it). A glob would ship
+// a test to every user — and it would now ship `pack.bx` and `pack.py` too. Four of the six icons are
+// for `docs/` and for that test, and only the one `package.json` names is packaged. The other
+// direction is why `tests/extension.py` exists: a list can also omit, and an omitted file ships an
+// extension that is broken rather than large.
+//
+// And `burxt.package` is STAGED into this directory from the repository root, which is the part that
+// was not cosmetic. The server reads the version by walking up until it finds that manifest, and
+// **`cp -r editors/vscode ~/.vscode/extensions/star-burxt` — the install `docs/editor.md` offers as
+// the equal of a symlink — landed it where no parent held one, so it answered `initialize` with
+// `0.0.0`.** The symlink escaped only by accident: node resolves a module's realpath, so it lands
+// back in the checkout. A .vsix is that same failure made unconditional, because an archive contains
+// `extension/` and nothing above it. Staging the manifest beside the server fixes all four shapes —
+// checkout, copy, symlink, archive — with one mechanism and no change to the resolution logic.
+// `tests/extension.py` asserts the staged copy is byte-identical to the root one, because two copies
+// of a version is how they drift. Staged with `file_read_bytes`/`write_bytes` rather than as text for
+// that reason: byte-identical is the assertion, so bytes are what get moved.
+//
+// **Paths are relative to the repository root, which `pack.py` did not need.** Python had `__file__`
+// and resolved both directories from it; a compiled Burxt program knows where it was run, not where
+// its source lived, so this reads `editors/vscode/...` and checks that directory exists before doing
+// anything. Running it from elsewhere is refused with the command to run instead, which is the
+// failure that costs a reader ten seconds rather than a wrong archive.
+use "std/files.bx";
+use "std/string.bx";
+use "std/json.bx";
+use "std/zip.bx";
+
+const HERE: String = "editors/vscode";
+const ROOT_MANIFEST: String = "burxt.package";
+
+// The icon `package.json` names. It appears three times in the VSIX manifest and once in the FILES
+// list, and a fourth spelling of it is how the archive comes to declare an asset it does not carry.
+const ICON: String = "icons/sbmx-gear-icon-128.png";
+
+// Everything that belongs in the package. Listed rather than globbed — see the header: this directory
+// holds two packers, a test and five icons that are not the extension's.
+//
+// A `const` may name a literal and `[String]` has none, so the list is built by a function — which
+// every other function can then read, unlike a top-level `let`.
+pure function packaged() -> [String] allocates {
+    let mutable out: [String] = [];
+    let a: Int = push(out, "package.json");
+    let b: Int = push(out, "client.js");
+    let c: Int = push(out, "server/star-lsp.mjs");
+    // Staged from the repository root a moment before packing. The server walks up for this, and
+    // without it in the archive there is nothing above `extension/` to find.
+    let d: Int = push(out, "burxt.package");
+    let e: Int = push(out, "language-configuration.json");
+    let f: Int = push(out, "syntaxes/sbmx.tmLanguage.json");
+    // Injected into BMX rather than contributed as a language, so it colours a slot and a block head
+    // in a `.bmx` as well as a `.sbmx`. `package.json` names it; leaving it out is a silent
+    // half-install.
+    let g: Int = push(out, "syntaxes/star-injection.tmLanguage.json");
+    let h: Int = push(out, ICON);
+    let i: Int = push(out, "README.md");
+    return out;
+}
+
+// `burxt.package` has no extension in the usual sense — OPC maps by suffix, so `.package` needs a
+// line here or the archive declares a part it has no type for.
+pure function content_types() -> String allocates {
+    let mutable out: String = "";
+    out = out + "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
+    out = out + "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">\n";
+    out = out + "  <Default Extension=\".json\" ContentType=\"application/json\"/>\n";
+    out = out + "  <Default Extension=\".js\" ContentType=\"application/javascript\"/>\n";
+    out = out + "  <Default Extension=\".mjs\" ContentType=\"application/javascript\"/>\n";
+    out = out + "  <Default Extension=\".package\" ContentType=\"text/plain\"/>\n";
+    out = out + "  <Default Extension=\".png\" ContentType=\"image/png\"/>\n";
+    out = out + "  <Default Extension=\".svg\" ContentType=\"image/svg+xml\"/>\n";
+    out = out + "  <Default Extension=\".md\" ContentType=\"text/markdown\"/>\n";
+    out = out + "  <Default Extension=\".xml\" ContentType=\"text/xml\"/>\n";
+    out = out + "  <Default Extension=\".vsixmanifest\" ContentType=\"text/xml\"/>\n";
+    out = out + "</Types>\n";
+    return out;
+}
+
+// ---- reading package.json ---------------------------------------------------
+//
+// The same five characters Python's version escaped, in the same order — `&` first, or the entities
+// the later replacements introduce get their own ampersands escaped a second time.
+pure function escape(text: String) -> String allocates {
+    let mutable out: String = string_replace(text, "&", "&amp;");
+    out = string_replace(out, "<", "&lt;");
+    out = string_replace(out, ">", "&gt;");
+    out = string_replace(out, "\"", "&quot;");
+    return out;
+}
+
+// A string member, or the fallback — `pkg.get(name, fallback)`. A member that is present but is not
+// a string reads as absent rather than as an error, which is Python's behaviour here too: every one
+// of these fields is a string in every `package.json` VS Code will load, so a shape check would be a
+// second refusal for a case that cannot arrive through the editor.
+pure function text_at(value: Json, name: String, fallback: String) -> String {
+    match json_at(value, name) {
+        None => { return fallback; }
+        Some(found) => {
+            match json_as_text(found) {
+                None => { return fallback; }
+                Some(text) => { return text; }
+            }
+        }
+    }
+}
+
+// `pkg.get(outer, {}).get(inner, fallback)` — one level down, for `engines.vscode` and
+// `repository.url`. A missing `repository` is normal (this one has none) and answers "".
+pure function text_under(value: Json, outer: String, inner: String, fallback: String) -> String {
+    match json_at(value, outer) {
+        None => { return fallback; }
+        Some(found) => { return text_at(found, inner, fallback); }
+    }
+}
+
+// The strings of a list member, or none of them — `",".join(pkg.get(name, []))` wants this and so
+// does `extensionKind`. Non-string elements are skipped rather than rendered, because a `Tags` field
+// carrying `null` would be a manifest the marketplace rejects for a reason nobody would find.
+pure function texts_at(value: Json, name: String) -> [String] allocates {
+    let mutable out: [String] = [];
+    match json_at(value, name) {
+        None => { return out; }
+        Some(found) => {
+            match found {
+                Null => { return out; }
+                Truth(t) => { return out; }
+                Number(d) => { return out; }
+                Text(s) => { return out; }
+                Object(fields) => { return out; }
+                List(items) => {
+                    let mutable i: Int = 0;
+                    while i < len(items) {
+                        match json_as_text(items[i]) {
+                            None => { }
+                            Some(text) => { let pushed: Int = push(out, text); }
+                        }
+                        i += 1;
+                    }
+                    return out;
+                }
+            }
+        }
+    }
+}
+
+// ---- the manifest -----------------------------------------------------------
+//
+// `kind` arrives already joined, and already checked to be non-empty by the caller. **Read, with no
+// default** — see the header: BMX's packer falls back to `["ui", "workspace"]`, which is right for a
+// grammar and wrong for this, and the fallback is the whole defect. Declared in `package.json` so an
+// editor reading the source folder sees the same answer the archive does.
+pure function manifest(pkg: Json, kind: String) -> String allocates {
+    let tags: String = string_join(texts_at(pkg, "keywords"), ",");
+    let categories: String = string_join(texts_at(pkg, "categories"), ",");
+    let name: String = text_at(pkg, "name", "");
+
+    let mutable out: String = "";
+    out = out + "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
+    out = out + "<PackageManifest Version=\"2.0.0\" xmlns=\"http://schemas.microsoft.com/developer/vsx-schema/2011\" xmlns:d=\"http://schemas.microsoft.com/developer/vsx-schema-design/2011\">\n";
+    out = out + "  <Metadata>\n";
+    out = out + "    <Identity Language=\"en-US\" Id=\"" + escape(name)
+            + "\" Version=\"" + escape(text_at(pkg, "version", ""))
+            + "\" Publisher=\"" + escape(text_at(pkg, "publisher", "")) + "\"/>\n";
+    out = out + "    <DisplayName>" + escape(text_at(pkg, "displayName", name)) + "</DisplayName>\n";
+    out = out + "    <Description xml:space=\"preserve\">" + escape(text_at(pkg, "description", ""))
+            + "</Description>\n";
+    out = out + "    <Tags>" + escape(tags) + "</Tags>\n";
+    out = out + "    <Categories>" + escape(categories) + "</Categories>\n";
+    out = out + "    <GalleryFlags>Public</GalleryFlags>\n";
+    out = out + "    <Properties>\n";
+    out = out + "      <Property Id=\"Microsoft.VisualStudio.Code.Engine\" Value=\""
+            + escape(text_under(pkg, "engines", "vscode", "")) + "\"/>\n";
+    out = out + "      <Property Id=\"Microsoft.VisualStudio.Code.ExtensionDependencies\" Value=\"\"/>\n";
+    out = out + "      <Property Id=\"Microsoft.VisualStudio.Code.ExtensionPack\" Value=\"\"/>\n";
+    out = out + "      <Property Id=\"Microsoft.VisualStudio.Code.ExtensionKind\" Value=\""
+            + escape(kind) + "\"/>\n";
+    out = out + "      <Property Id=\"Microsoft.VisualStudio.Services.Links.Source\" Value=\""
+            + escape(text_under(pkg, "repository", "url", "")) + "\"/>\n";
+    out = out + "    </Properties>\n";
+    out = out + "    <Icon>extension/" + ICON + "</Icon>\n";
+    out = out + "  </Metadata>\n";
+    out = out + "  <Installation>\n";
+    out = out + "    <InstallationTarget Id=\"Microsoft.VisualStudio.Code\"/>\n";
+    out = out + "  </Installation>\n";
+    out = out + "  <Dependencies/>\n";
+    out = out + "  <Assets>\n";
+    out = out + "    <Asset Type=\"Microsoft.VisualStudio.Code.Manifest\" Path=\"extension/package.json\" Addressable=\"true\"/>\n";
+    out = out + "    <Asset Type=\"Microsoft.VisualStudio.Services.Content.Details\" Path=\"extension/README.md\" Addressable=\"true\"/>\n";
+    out = out + "    <Asset Type=\"Microsoft.VisualStudio.Services.Icons.Default\" Path=\"extension/"
+            + ICON + "\" Addressable=\"true\"/>\n";
+    out = out + "  </Assets>\n";
+    out = out + "</PackageManifest>\n";
+    return out;
+}
+
+// ---- packing ----------------------------------------------------------------
+
+if !file_is_directory(HERE) {
+    print_error("cannot find " + HERE + " — run this from the repository root: ./star-pack");
+    exit(2);
+}
+
+let package_json: String = HERE + "/package.json";
+if !file_is_file(package_json) {
+    print_error("cannot read " + package_json);
+    exit(2);
+}
+
+match json_parse(file_read(package_json)) {
+    Error(why) => {
+        print_error(package_json + " is not readable JSON: " + why);
+        exit(2);
+    }
+    Ok(pkg) => {
+        // **Read, with no default, and the refusal is the point.** `client.js` spawns `star-check`, so
+        // a UI-side load on a remote puts the extension where the binary is not. An empty list counts
+        // as absent: `Value=""` in the manifest is the same silence as no property at all.
+        let kinds: [String] = texts_at(pkg, "extensionKind");
+        if len(kinds) == 0 {
+            print_error("package.json declares no `extensionKind`. This extension spawns `star-check`, so it must");
+            print_error("say [\"workspace\"] — a UI-side load on WSL, SSH or a container colours documents and never");
+            print_error("checks one, which is the failure that looks like the extension working");
+            exit(1);
+        }
+
+        // **The filename carries no version, and that is a fix inherited rather than a style copied.**
+        // BMX measured what the alternative costs: `bmx-<version>.vsix` put the version in seven
+        // places — two READMEs, three doc pages, the packer's docstring, CI — so bumping it broke every
+        // install command in the repository, and **thirty commits changed the package while the version
+        // never moved off 0.1.0.** VS Code decides whether to offer an update by comparing versions, so
+        // everyone who installed the first one keeps a stale grammar and is told they are current. A
+        // version belongs where a tool reads it. `tests/extension.py` fails if `package.json` is not
+        // bumped.
+        let version: String = text_at(pkg, "version", "");
+        let out_path: String = HERE + "/" + text_at(pkg, "name", "extension") + ".vsix";
+
+        // Staged rather than symlinked, because a symlink inside a zip is a file nobody can read.
+        // Written into this directory rather than only into the archive, so `cp -r` gets it too — that
+        // install is documented and it is the one that was broken.
+        match file_read_bytes(ROOT_MANIFEST) {
+            None => {
+                print_error("cannot read " + ROOT_MANIFEST + ", which is where the version lives");
+                exit(2);
+            }
+            Some(manifest_bytes) => {
+                let staged: Int = write_bytes(HERE + "/burxt.package", manifest_bytes);
+                if staged != len(manifest_bytes) {
+                    print_error("could not stage " + ROOT_MANIFEST + " into " + HERE);
+                    exit(2);
+                }
+            }
+        }
+
+        // An omitted file ships an extension that is broken rather than large, so the whole list is
+        // checked before anything is written and every missing name is reported at once.
+        let names: [String] = packaged();
+        let mutable missing: [String] = [];
+        let mutable m: Int = 0;
+        while m < len(names) {
+            if !file_is_file(HERE + "/" + names[m]) {
+                let gone: Int = push(missing, names[m]);
+            }
+            m += 1;
+        }
+        if len(missing) > 0 {
+            print_error("cannot package, these are missing: " + string_join(missing, ", "));
+            exit(1);
+        }
+
+        // The two generated entries first, in the order a reader of `pack.py` expects them, then the
+        // files under `extension/`. `zip_into` writes the local headers in the order given and the
+        // central directory in that same order, so this list IS the archive's layout.
+        let mutable entries: [ZipEntry] = [];
+        let types_entry: Int = push(entries,
+                zip_entry_text("[Content_Types].xml", content_types()));
+        let vsix_entry: Int = push(entries,
+                zip_entry_text("extension.vsixmanifest", manifest(pkg, string_join(kinds, ","))));
+
+        let mutable f: Int = 0;
+        while f < len(names) {
+            match file_read_bytes(HERE + "/" + names[f]) {
+                None => {
+                    print_error("cannot read " + HERE + "/" + names[f]);
+                    exit(2);
+                }
+                Some(bytes) => {
+                    let added: Int = push(entries, zip_entry("extension/" + names[f], bytes));
+                }
+            }
+            f += 1;
+        }
+
+        // Every entry carries `zip_dos_date()` / `zip_dos_time()` — 1980-01-01, the earliest a zip can
+        // represent — because `std/zip.bx` stamps them and has no other setting. Two packs of one
+        // input therefore give identical bytes, which is what makes the committed artefact checkable
+        // at all.
+        let written: Int = zip_write(out_path, entries);
+        if written <= 0 {
+            print_error("could not write " + out_path);
+            exit(2);
+        }
+        print("wrote " + out_path + " (" + to_string(written) + " bytes, version " + version + ")");
+        print("install with:  code --install-extension " + out_path);
+    }
+}

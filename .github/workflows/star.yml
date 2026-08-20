@@ -417,4 +417,4 @@ jobs:
           node examples/prove-partition.mjs /tmp/build/page.o /tmp/build/page.wasm
 
       - name: Every example in the documentation actually works
-        run: python3 verify-docs.py
+        run: ./star-docs

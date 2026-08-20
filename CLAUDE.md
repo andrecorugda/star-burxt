@@ -14,7 +14,7 @@ printf 'use "std/html.bx";\n' > /tmp/probe.bx && burxt check /tmp/probe.bx
 
 The probe is the one that matters. Every component star generates opens with `use "std/html.bx"`, so
 a compiler that cannot resolve the standard library fails **every** suite — `star-surface`,
-`drive-lsp`, `verify-docs` and `star-check` all go red at once and none of the errors are about the
+`drive-lsp`, `star-docs` and `star-check` all go red at once and none of the errors are about the
 code you changed. The library is found by the compiler's installation, never by proximity to the
 program, and there are two places it looks: `BURXT_LIB`, then `../lib/burxt` beside the binary. There
 is deliberately no `/usr/local/lib/burxt` fallback — it was removed because it could only fire when the
@@ -38,6 +38,12 @@ burxt build examples/generate.bx -o star-generate    # .sbmx  -> component .bx
 burxt build examples/check.bx    -o star-check       # all three layers of problem, one command
 burxt build examples/build.bx    -o star-build       # .sbmx  -> component -> wasm
 burxt build tools/liquid.bx      -o star-liquid
+burxt build tools/docs.bx        -o star-docs
+burxt build tools/languages.bx   -o star-languages
+burxt build tools/refs.bx        -o star-refs
+burxt build tools/showcase.bx    -o star-showcase
+burxt build tests/guarantees.bx  -o star-guarantees
+burxt build tests/consuming.bx   -o star-consuming
 burxt build tools/limits.bx      -o star-limits
 burxt build tools/surface.bx     -o star-surface
 burxt build tools/content.bx     -o star-content
@@ -53,9 +59,9 @@ There is no test-name filter. The granular unit is the suite, or one document:
 
 ```sh
 ./star-check examples/Todos.sbmx           # one component, all three layers
-python3 test.py                            # the guarantees (generator accept + refusals)
-python3 verify-docs.py                     # every .sbmx on the site, generated AND compiled
-python3 tests/extension.py                 # the packaged extension, through every install shape
+./star-guarantees                          # the guarantees (generator accept + refusals)
+./star-docs                                # every .sbmx on the site, generated AND compiled
+python3 tests/extension.py                 # the packaged extension (still Python: needs a zip reader)
 node tools/paints.mjs                      # the site's syntax colouring
 node editors/vscode/config.mjs             # folding markers and icon geometry
 STAR_CHECK=./star-check node editors/lsp/drive-lsp.mjs    # the language server's protocol
@@ -127,10 +133,17 @@ once true of where the server file is and false of what it reports.
 
 **Comments carry the measurement, not the description.** Long block comments here record what broke,
 what was counted, and why the current shape is the one that survives — matching that density is part
-of matching the style. Prose in `docs/` and `README.md` is held to the code by `verify-docs.py`,
-`tools/refs.py` and `star-limits`, so changing a claim usually means changing a check.
+of matching the style. Prose in `docs/` and `README.md` is held to the code by `star-docs`,
+`star-refs` and `star-limits`, so changing a claim usually means changing a check.
 
 ## Note
 
-`verify-docs.py` walks `docs/` only, so `editors/README.md` and other non-`docs/` prose are checked by
-nothing. `test.py` and `verify-docs.py` are still Python and, per `README.md`, should not stay that way.
+`star-docs` walks `docs/` only, so `editors/README.md` and other non-`docs/` prose are checked by
+nothing.
+
+**Nothing in this repository may depend on another language to check itself.** `./star-languages`
+prints the ledger — every non-Burxt file declares `not-burxt: <category> <reason>` in its own first
+twenty lines, and a file that declares none fails the build. `./star-languages --files` lists them.
+`gap` is the only column that should move, and it is being driven to zero: the guarantees, the
+documented examples, the consumer test, the refs check and the showcase are Burxt now. What is left in
+`blocked` waits on `std/zip.bx` gaining deflate and a reader.

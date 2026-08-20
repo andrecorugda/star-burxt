@@ -55,7 +55,7 @@ Then `burxt fetch`. Full instructions: [star.burxt-lang.org/install](https://sta
 | `tests/consumer/` | what an outside package compiles — the whole job on the published names |
 | `tools/showcase.py`, `shoot.mjs` | the landing page's screenshot and its source panel |
 | `tests/guarantees.bx` | the guarantees, in Burxt |
-| `verify-docs.py` | every example on the site — generated **and compiled** |
+| `tools/docs.bx` | every example on the site — generated **and compiled** |
 | `docs/` | the site |
 
 ## The supported surface is six names
@@ -91,7 +91,7 @@ job.
 ./tools/check-all.sh     # everything, and it EXITS NON-ZERO when something fails
 
 ./star-guarantees        # the guarantees. The ACCEPTING case runs first and its failure is fatal.
-python3 verify-docs.py   # every .sbmx example on the site — generated AND compiled
+./star-docs              # every .sbmx example on the site — generated AND compiled
 node tools/paints.mjs    # the site colours burxt, bmx, sbmx and css
 
 burxt build tools/liquid.bx -o star-liquid && ./star-liquid   # the site: raw blocks, front matter, CNAME
@@ -107,7 +107,7 @@ The guarantees are mostly refusals, and a suite of nothing but refusals is satis
 refuses everything — so the accepting case runs first and nothing below it means anything if it
 fails.
 
-`verify-docs.py` exists because the docs are a tutorial. It found chapter 1 teaching a document the
+`tools/docs.bx` exists because the docs are a tutorial. It found chapter 1 teaching a document the
 generator refuses, on the day it was written.
 
 `tools/liquid.bx` exists because there is no Ruby here, so Jekyll only runs after a push and the
@@ -124,7 +124,7 @@ and left a path unquoted by accident.
 **Nothing in this repository should depend on another language to check itself**, and
 `./star-languages` prints how far that is from true — every non-Burxt file declares why it is not, in
 its own first twenty lines, and a file that declares none fails the build. `gap` is the only column
-that should move. `verify-docs.py` is what remains of the biggest one.
+that should move. The last of it is the language server, which is being ported now.
 
 `docs/assets/site.css` and `site.js` are byte copies of burxt-lang.org's — re-copy rather than edit.
 `docs/assets/star.css` is this site's own.

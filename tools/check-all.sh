@@ -93,7 +93,7 @@ printf 'ok\n'
 
 run "the site is Liquid-safe"        ./star-liquid
 run "the guarantees"                 ./star-guarantees
-run "every documented example"       python3 verify-docs.py
+run "every documented example"       ./star-docs
 run "the highlighter"                node tools/paints.mjs
 run "the editor configuration"       node editors/vscode/config.mjs
 run "the packaged extension, every install shape" bash -c '
