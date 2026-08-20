@@ -1,3 +1,22 @@
+// **DO NOT RUN THIS YET. `pack.py` is the packer of record.**
+//
+// Two things in this directory can write `star-burxt.vsix`, and that is a temporary state with a stated
+// end: `pack.py` goes the day a Burxt release carries `std/zip.bx`. Until then, running `./star-pack`
+// produces a *deflated-by-Burxt* archive where the committed one is *deflated-by-zlib* — every entry's
+// content identical, the central directory and compressed sizes not — and `tests/extension.py` then
+// fails with *"the committed .vsix is not what the packer writes"*, which is a **misleading** message
+// for somebody who has just run a packer.
+//
+// **One thing should produce the artefact under test.** The markup session reached that rule the hard
+// way today: they had a step that packed in place beside the check that judged the artefact, wrapped it
+// in park-and-restore plumbing, and the plumbing's own unexported variable is what made their fix
+// verify itself for the wrong reason. They then deleted the step instead — *"a guard is code, and code
+// is where the next defect lives"*, so deleting it deleted the guard and the guard's bug together.
+//
+// This file is not deleted because it is finished, reviewed work with hours to wait, and a
+// delete-then-restore invites drift. So the collision is named at the top rather than guarded against
+// in code, and it ends when the release lands.
+//
 // Package the extension as a .vsix, with no toolchain and in no other language.
 //
 //     burxt build editors/vscode/pack.bx -o star-pack
