@@ -73,14 +73,58 @@ if made != 0 { print_error("cannot make " + out); exit(2); }
 // **The generator is CALLED, not re-implemented.** The first version of this file built the program
 // out of `star_generate`'s pieces itself and produced a component missing its own `===bx` section —
 // two emitters, and the second one was wrong within an hour of being written. There is one emitter.
-let generator: String = os_env_or("STAR_GENERATE", "./star-generate");
+// **`./star-generate` was the default, and a leading `./` is a path into whichever directory you
+// happen to be standing in.** It works everywhere in this repository — every check and every CI step
+// runs from the root, where the binary sits — and it failed for the only person who matters: somebody
+// who declared star as a dependency, built the commands the way `docs/install.md` says to, and put
+// them on PATH. They got `sh: 1: ./star-generate: not found`, and a ZERO-BYTE `.bx` left behind
+// looking like output.
+//
+// Found by building a real consumer repository rather than by anything in here, and it could not have
+// been found any other way: a test that runs from this root cannot tell a sibling from a `PATH` lookup,
+// because both resolve. `STAR_GENERATE` existed as an escape hatch and was documented nowhere, so it
+// was reachable only by reading this line.
+//
+// Order: the variable if set, then a sibling if there is one, then `PATH`. The sibling keeps this
+// repository's own runs working with no environment set.
+let mutable generator: String = os_env_or("STAR_GENERATE", "");
+if len(generator) == 0 {
+    if file_exists("./star-generate") { generator = "./star-generate"; }
+    else { generator = "star-generate"; }
+}
 let generated: Int = os_run(shell_quote(generator) + " " + shell_quote(path) + " " + shell_quote(name)
     + " > " + shell_quote(bx));
-if generated != 0 { exit(generated); }
+if generated != 0 {
+    // **The shell's redirect creates the file before the generator is even found**, so a failure
+    // leaves a truncated artefact that the next reader cannot distinguish from a real one. Remove it:
+    // no output is an honest answer and an empty file is not.
+    let gone: Bool = file_delete(bx);
+    print_error("`" + generator + "` did not run. star's commands are built from its own checkout —"
+        + " see `docs/install.md` — and must be on PATH or named by STAR_GENERATE.");
+    exit(generated);
+}
 
 match file_read_maybe(bx) {
     None => { print_error("the generator wrote nothing to " + bx); exit(2); }
     Some(program) => {
+        // **A stateless component links to a module that exports NOTHING, and the linker is right to
+        // do it.** `--gc-sections` keeps only what an export roots, and this build's roots are
+        // `first`, `frame`, `arrived` and `watch` — none of which a document without `to_text` and
+        // `from_text` ever defines. So the output was a 1,615-byte `.wasm` with no `bx.` export at
+        // all, written with exit 0: a file that exists, loads, and can do nothing.
+        //
+        // `examples/app.js` already says the right sentence, but it says it at MOUNT time, in a
+        // browser console, to somebody who has already deployed. Saying it here costs one string
+        // comparison and says it where the person is standing. Found by a consumer build asserting
+        // the module's EXPORTS rather than its size — the same 122-byte lesson the language session
+        // paid for, arriving here through star's own build tool.
+        if !string_contains(program, "function " + name + "_first") {
+            print_error("`" + name + "` does not carry its own state, so this would write a module"
+                + " that exports nothing. Add `to_text` and `from_text` to its `===bx` section —"
+                + " nothing in Burxt holds state between two calls, so the host has to.");
+            let gone: Bool = file_delete(bx);
+            exit(2);
+        }
         let compiled: Int = os_run("burxt build " + shell_quote(bx)
             + " --target wasm32-unknown-unknown -o " + shell_quote(object));
         if compiled != 0 { exit(compiled); }

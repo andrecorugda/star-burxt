@@ -209,6 +209,15 @@ jobs:
           python3 tests/extension.py
           python3 tests/extension.py --prove-it
 
+      # **Runs star from OUTSIDE, with the commands only on PATH.** Every other step here runs from the
+      # repository root, where `./star-generate` and a PATH lookup resolve to the same file — so no other
+      # step can see a hardcoded relative path, and one shipped.
+      - name: star used as a dependency, from outside
+        run: |
+          set -eux
+          python3 tests/consuming.py
+          python3 tests/consuming.py --prove-it
+
       - name: A .sbmx document becomes a component the compiler judges
         run: python3 test.py
 

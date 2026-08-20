@@ -97,6 +97,8 @@ run "the highlighter"                node tools/paints.mjs
 run "the editor configuration"       node editors/vscode/config.mjs
 run "the packaged extension, every install shape" bash -c '
   python3 tests/extension.py && python3 tests/extension.py --prove-it'
+run "star used as a dependency, from outside" bash -c '
+  python3 tests/consuming.py && python3 tests/consuming.py --prove-it'
 # **A check that REGENERATES the artefact it is verifying cannot see a stale one**, and this line said
 # "the showcase is current" while quietly making it current. CI had it right — generate, then `git diff`
 # — and the local runner did not, so a stale `showcase.html` could be committed and every local run would
