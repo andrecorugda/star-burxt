@@ -22,7 +22,15 @@ notices that work could have run in parallel.
   `let` is invisible to function bodies; `const` is scalars only; a `pure function` cannot return a
   locally-built array; `/` on two Ints is refused, use `divide_floor`; every literal `{` in a string
   must be `\{`; effects must be declared and `touches output` is not one; `mutable` parameters are
-  not available on methods; `self` is reserved.
+  not available on methods and the keyword goes BEFORE the name (`mutable t: Tally`), which is how a
+  counter gets threaded past the top-level-`let` rule; `self` is reserved.
+- **A gate that finds nothing must say so, not pass.** Zero is a passing count for anything that
+  reports `N things checked` and does not floor it, and `star-guarantees` printed `every guarantee
+  holds` with no number at all — which is what it would print over zero guarantees. Six gates here
+  needed the floor. The markup session hit the mirror image: a summary true about what ran and silent
+  about what it skipped. And the number has to be measured rather than counted from the source — 111
+  call sites run 148 guarantees, so grepping understates by 37, in the direction that reads as a
+  smaller suite passing.
 - **Give every agent a correctness bar that is not "it compiles"** — agreement with the thing it
   replaces, on a *planted failure* as well as on success, and the plant verified present before any
   verdict is read. `sed` cannot plant a defect containing a brace: it reads `\{` as an interval, so
