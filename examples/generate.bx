@@ -63,7 +63,7 @@ match file_read_maybe(path) {
                     si += 1;
                 }
                 sheet = sheet + component.style;
-                if len(bmx_strip_end(sheet)) > 0 {
+                if !star_is_blank(sheet) {
                     let wrote_css: Int = file_write(star_without_extension(path) + ".css", sheet);
                 }
                 print("// GENERATED from " + path + " by star-burxt. Do not edit.");

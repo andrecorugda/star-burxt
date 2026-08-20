@@ -142,7 +142,7 @@ public function star_resolve(path: String, source: String, written: Bool) -> [St
                                 let wrote: Int = file_write(out,
                                     "// GENERATED from " + child_path + " by star-burxt. Do not edit.\n"
                                     + star_source_of(built, star_function_name(child_name)));
-                                if len(bmx_strip_end(built.style)) > 0 {
+                                if !star_is_blank(built.style) {
                                     let styled: Int = file_write(here + stem + ".css", built.style);
                                 }
                             }

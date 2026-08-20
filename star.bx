@@ -114,6 +114,32 @@ public class StarComponent {
     argument_list: String,
 }
 
+// Is this section empty of anything that matters?
+//
+// **`bmx_strip_end` strips trailing SPACES and nothing else** — not newlines, not tabs. That is right
+// for BMX's indentation rule and wrong for asking "is there anything here", which is what four call
+// sites were asking it. The markup session found the same trap in their own suite: used on refusal
+// fixtures it left the newline on, so every one of 35 cases compared `BMX-E031\n` against
+// `BMX-E031 at 0: …` and failed while all 57 AST cases passed — a clean split down the middle of a
+// suite, which reads exactly like a defect in refusal handling.
+//
+// Here it produced a subtler thing. `===bx` with a single blank line between the fences flipped the
+// component-mode switch, so a document demanded `Msg` and `update`; the same section with nothing
+// between the fences did not. **Two documents that mean the same thing, and star spoke a different
+// language to each** — reachable by pressing return.
+//
+// The name is the trap and it is not BMX's to fix: `strip_end` sounds like a trim. So this asks the
+// question it means.
+pure function star_is_blank(text: String) -> Bool {
+    let mutable i: Int = 0;
+    while i < len(text) {
+        let c: Int = byte_at(text, i);
+        if c != 32 && c != 10 && c != 13 && c != 9 { return false; }
+        i += 1;
+    }
+    return true;
+}
+
 // ---- `.sbmx` sections, split off before BMX ever sees the file ----------------
 //
 // A component file has two halves: Burxt in `===bx`, and markup. The markup goes to BMX; the code
@@ -2512,14 +2538,14 @@ public function star_generate(source: String, name: String, known: [StarKnown]) 
     // marker and no attribute on its elements — the scoping machinery costs nothing when unused.
     let local: String = star_section(source, "style.local");
     let mutable marker: String = "";
-    if len(bmx_strip_end(local)) > 0 {
+    if !star_is_blank(local) {
         marker = name;
     }
     let mutable style: String = star_section(source, "style.global");
     if len(marker) > 0 {
         style = style + star_scoped_css(local, marker);
     }
-    let component_mode: Bool = len(bmx_strip_end(code)) > 0;
+    let component_mode: Bool = !star_is_blank(code);
     if component_mode && !star_mentions(code, "function update(") {
         return Result.Error("STAR-E008: this document has a `===bx` section, so its `on:` handlers"
             + " are MESSAGES and something has to turn a message into the next state. Add"

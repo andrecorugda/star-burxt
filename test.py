@@ -142,6 +142,21 @@ def main():
     check("a component with a ===bx section compiles", "no errors" in compile_component(component),
           compile_component(component))
 
+    # **A `===bx` section that holds only whitespace is not a `===bx` section.** It flipped the mode
+    # switch and demanded `Msg` and `update`, while the same section with nothing between the fences did
+    # not — two documents that mean the same thing, and star spoke a different language to each. The
+    # cause was `bmx_strip_end`, which strips trailing SPACES and not newlines, asked "is there anything
+    # here" by four call sites. The markup session hit the same trap in their own suite and told us: used
+    # on refusal fixtures it left the newline on, so 35 cases failed and 57 passed — a clean split down
+    # the middle, which reads like a defect in refusal handling rather than a space-stripper.
+    #
+    # Reachable by pressing return, which is why it is guarded rather than just fixed.
+    blank_bx = ":props: n: Int\n:!props:\n\n:button: on:click=n + 1\nbump\n:!button:\n"
+    for shape, doc in (("a blank line", "===bx\n\n===\n\n" + blank_bx),
+                       ("nothing at all", "===bx\n===\n\n" + blank_bx)):
+        check("a `===bx` section holding %s is expression mode, not component mode" % shape,
+              "no errors" in compile_component(doc), compile_component(doc))
+
     emitted = generate(component).stdout
     check("STATE IS A RECORD HOLDING A LIST — the thing the region rule refused until today",
           "class Model { count: Int, history: [Int] }" in emitted, emitted)
