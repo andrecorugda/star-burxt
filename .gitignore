@@ -28,7 +28,18 @@ examples/*.bx
 # builds locally forever and CI has never seen it."*
 !examples/prove-partition.bx
 examples/*.check.bx
+# **And the same thing one line down, found the same way.** `examples/theme.css` is hand-written — the
+# page-level half of star's design system, documented on `docs/how-do-i.md`, read by the gallery and by
+# `star-reachable` — and it has never been committed. A fresh clone of this repository fails with
+# `ENOENT: examples/theme.css`. Nothing could see it: CI has no gallery step, and every developer machine
+# has the file. It took cloning the repository and following CLAUDE.md's own build block.
+#
+# `star-languages` now holds this rule by provenance rather than by list: everything star generates under
+# `examples/` is generated from a document, so an ignored `examples/X.ext` is an artefact exactly when
+# `examples/X.sbmx` exists. Sixteen ignored files here, fifteen with a document, and this was the one
+# without.
 examples/*.css
+!examples/theme.css
 examples/*.o
 examples/*.wasm
 star-languages

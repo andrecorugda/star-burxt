@@ -1,0 +1,172 @@
+/* star's design system — the page-level half of styling.
+ *
+ * A component's `===style.local` is SCOPED to that component, which is right for what makes it itself:
+ * a board is 320px, a snake segment is 18px. What every component shares — type, colour, spacing, the
+ * shape of a button — is the page's, and that is what this file is. The split is the same one Tailwind,
+ * Bootstrap and Ant make; star just does not need a build step to get there, because `class=` is an
+ * attribute and nothing in the framework inspects it.
+ *
+ * Which is also the point worth making to anyone arriving from React: **star does not fight your CSS.**
+ * Swap this file for Tailwind's or Bootstrap's and every component keeps working, because star never
+ * looks at a class name. `examples/Tailwind.sbmx` is the same component written in Tailwind's utilities
+ * to prove it.
+ */
+
+:root {
+  --bx-brand:      #E8502A;
+  --bx-brand-deep: #c33d1b;
+  --bx-brand-wash: #fef1ec;
+
+  --bx-ink:        #14161a;
+  --bx-ink-soft:   #5b6270;
+  --bx-ink-faint:  #8b93a1;
+
+  --bx-ground:     #f6f7fa;
+  --bx-surface:    #ffffff;
+  --bx-raised:     #ffffff;
+  --bx-line:       #e3e6ea;
+  --bx-line-soft:  #eef0f3;
+
+  --bx-ok:         #17864b;
+  --bx-warn:       #a26708;
+
+  --bx-r-sm: 6px;
+  --bx-r:    10px;
+  --bx-r-lg: 14px;
+
+  --bx-shadow:    0 1px 2px rgba(20, 22, 26, .05), 0 10px 30px -18px rgba(20, 22, 26, .22);
+  --bx-shadow-sm: 0 1px 2px rgba(20, 22, 26, .07);
+  --bx-ring:      0 0 0 3px rgba(232, 80, 42, .28);
+
+  --bx-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --bx-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bx-brand-wash: #2a1710;
+    --bx-ink:        #eef0f4;
+    --bx-ink-soft:   #a8b0bd;
+    --bx-ink-faint:  #79808d;
+    --bx-ground:     #0e1014;
+    --bx-surface:    #171a20;
+    --bx-raised:     #1d2128;
+    --bx-line:       #272c35;
+    --bx-line-soft:  #21252c;
+    --bx-shadow:     0 1px 2px rgba(0, 0, 0, .5), 0 10px 30px -18px rgba(0, 0, 0, .8);
+    --bx-shadow-sm:  0 1px 2px rgba(0, 0, 0, .45);
+  }
+}
+
+/* ---- the page ------------------------------------------------------------------------------- */
+
+body.bx {
+  margin: 0;
+  padding: 2.5rem 1.5rem;
+  background: var(--bx-ground);
+  color: var(--bx-ink);
+  font: 15px/1.55 var(--bx-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.bx-shell { max-width: 44rem; margin: 0 auto; }
+
+.bx-head { margin: 0 0 1.6rem; }
+.bx-head h1 { margin: 0; font-size: 1.35rem; font-weight: 650; letter-spacing: -.01em; }
+.bx-head p  { margin: .35rem 0 0; color: var(--bx-ink-soft); font-size: .95rem; }
+
+/* ---- surfaces ------------------------------------------------------------------------------- */
+
+.bx-card {
+  background: var(--bx-surface);
+  border: 1px solid var(--bx-line);
+  border-radius: var(--bx-r-lg);
+  box-shadow: var(--bx-shadow);
+  padding: 1.4rem 1.5rem;
+}
+
+.bx-card + .bx-card { margin-top: 1rem; }
+
+.bx-title { margin: 0 0 .2rem; font-size: 1.02rem; font-weight: 620; letter-spacing: -.005em; }
+.bx-muted { color: var(--bx-ink-soft); font-size: .9rem; margin: 0; }
+.bx-figure { font: 650 2rem/1.1 var(--bx-font); letter-spacing: -.02em; }
+.bx-mono   { font-family: var(--bx-mono); font-variant-numeric: tabular-nums; }
+
+.bx-stack   { display: flex; flex-direction: column; gap: .55rem; }
+.bx-row     { display: flex; align-items: center; gap: .55rem; }
+.bx-spread  { display: flex; align-items: center; justify-content: space-between; gap: .8rem; }
+.bx-divider { height: 1px; background: var(--bx-line-soft); margin: 1rem -1.5rem; border: 0; }
+
+/* ---- controls ------------------------------------------------------------------------------- */
+
+.bx-btn {
+  font: 500 .92rem/1 var(--bx-font);
+  color: var(--bx-ink);
+  background: var(--bx-raised);
+  border: 1px solid var(--bx-line);
+  border-radius: var(--bx-r-sm);
+  padding: .52rem .85rem;
+  cursor: pointer;
+  box-shadow: var(--bx-shadow-sm);
+  transition: background .12s ease, border-color .12s ease, transform .06s ease;
+}
+.bx-btn:hover  { border-color: var(--bx-ink-faint); }
+.bx-btn:active { transform: translateY(1px); }
+.bx-btn:focus-visible { outline: 0; box-shadow: var(--bx-ring); }
+
+.bx-btn-primary {
+  color: #fff;
+  background: var(--bx-brand);
+  border-color: var(--bx-brand-deep);
+}
+.bx-btn-primary:hover { background: var(--bx-brand-deep); border-color: var(--bx-brand-deep); }
+
+.bx-btn-quiet { background: transparent; box-shadow: none; border-color: transparent; color: var(--bx-ink-soft); }
+.bx-btn-quiet:hover { background: var(--bx-line-soft); border-color: transparent; }
+
+.bx-btn-icon { width: 2rem; padding: .5rem 0; text-align: center; font-weight: 600; }
+
+.bx-input, .bx-select, .bx-area {
+  font: .95rem/1.4 var(--bx-font);
+  color: var(--bx-ink);
+  background: var(--bx-surface);
+  border: 1px solid var(--bx-line);
+  border-radius: var(--bx-r-sm);
+  padding: .5rem .65rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.bx-input:focus, .bx-select:focus, .bx-area:focus { outline: 0; border-color: var(--bx-brand); box-shadow: var(--bx-ring); }
+.bx-area { min-height: 5.5rem; resize: vertical; font-family: inherit; }
+
+.bx-label { display: block; font-size: .82rem; font-weight: 560; color: var(--bx-ink-soft);
+            text-transform: uppercase; letter-spacing: .06em; margin-bottom: .3rem; }
+
+.bx-check { display: flex; align-items: center; gap: .5rem; font-size: .95rem; }
+.bx-check input { width: 1.05rem; height: 1.05rem; accent-color: var(--bx-brand); }
+
+.bx-fieldset { border: 1px solid var(--bx-line); border-radius: var(--bx-r); padding: .8rem 1rem 1rem;
+               margin: 0; }
+.bx-fieldset legend { font-size: .82rem; font-weight: 560; color: var(--bx-ink-soft);
+                      text-transform: uppercase; letter-spacing: .06em; padding: 0 .35rem; }
+
+/* ---- small pieces --------------------------------------------------------------------------- */
+
+.bx-badge {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font: 560 .78rem/1 var(--bx-font);
+  padding: .32rem .55rem;
+  border-radius: 999px;
+  background: var(--bx-brand-wash);
+  color: var(--bx-brand-deep);
+}
+.bx-badge-quiet { background: var(--bx-line-soft); color: var(--bx-ink-soft); }
+.bx-badge-ok    { background: rgba(23, 134, 75, .12); color: var(--bx-ok); }
+
+.bx-board { border-radius: var(--bx-r); overflow: hidden; box-shadow: var(--bx-shadow-sm); }
+
+/* Rhythm inside a card, so a component does not have to remember it. A row of buttons after content
+ * needs air, and a caption under the controls needs a little more than a paragraph gap. */
+.bx-card > .bx-row  { margin-top: .9rem; }
+.bx-card > .bx-muted:last-child { margin-top: .8rem; }
+.bx-card > .bx-figure { margin: .2rem 0 0; }

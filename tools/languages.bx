@@ -201,6 +201,44 @@ while h < len(hidden) {
     h += 1;
 }
 
+// ---- the same rule again, for everything else under examples/ ------------------------------------
+//
+// **The `.bx` half above was written for the fourth instance of this and a fifth was already sitting
+// beside it.** `examples/theme.css` — hand-written, 6.7KB, documented in `docs/how-do-i.md`, read by
+// the gallery and by `star-reachable` — is swallowed by `examples/*.css`, which exists for the fifteen
+// stylesheets star GENERATES beside their documents. It has never been committed. A fresh clone gets
+// `ENOENT: examples/theme.css`, and it was found by cloning this repository and following CLAUDE.md's
+// own build block, because nothing else can see it: CI has no gallery step, and here the file exists.
+//
+// **A generated stylesheet cannot announce itself the way a component does** — it is CSS the browser
+// parses, and star emits no banner. So the rule is provenance instead: everything star generates under
+// `examples/` is generated FROM a document, so an ignored `examples/X.ext` is an artefact exactly when
+// `examples/X.sbmx` exists. Sixteen ignored files, fifteen with a document, one without, and the one
+// without is the source. No allowlist to maintain, and it holds for `.css` and `.bx` alike.
+let ignored_all: Capture = os_capture_status(
+    "git ls-files --others --ignored --exclude-standard -- 'examples/*'");
+let beside: [String] = string_lines(ignored_all.output);
+let mutable e: Int = 0;
+while e < len(beside) {
+    let path: String = string_trim(beside[e]);
+    // The compiler's own intermediates, which are generated from the component rather than the
+    // document and so have no `.sbmx` of their own.
+    let intermediate: Bool = string_ends_with(path, ".o") || string_ends_with(path, ".wasm")
+        || string_ends_with(path, ".check.bx");
+    if len(path) > 0 && !intermediate {
+        let dot: Int = string_rfind(path, ".");
+        if dot > 0 {
+            let document: String = substring(path, 0, dot) + ".sbmx";
+            if !file_exists(document) {
+                let x: Int = push(failures, path + " is ignored by git and no `" + document
+                    + "` generates it, so it is a SOURCE that exists only on the machine that wrote it."
+                    + " Name it back in beside the other `!examples/...` lines");
+            }
+        }
+    }
+    e += 1;
+}
+
 print(to_string(burxt_lines) + " lines of Burxt; " + to_string(other_lines) + " not");
 let mutable c: Int = 0;
 while c < len(categories()) {

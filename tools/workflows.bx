@@ -1,5 +1,5 @@
-// Every binary CI runs is built before CI runs it, and every binary the suite runs is one the
-// documentation tells a reader to build.
+// Every binary CI runs is built before CI runs it, every binary the suite runs is one the
+// documentation tells a reader to build, and every check the suite runs is one CI runs too.
 //
 //     burxt build tools/workflows.bx -o star-workflows
 //     ./star-workflows
@@ -48,6 +48,19 @@
 //
 // Order is not the question in this pair — the block is a prerequisite, run before anything — so this
 // half asks only whether the line is there.
+//
+// ---- and the pair that hid a file for as long as the file existed --------------------------------
+//
+// CLAUDE.md calls `check-all.sh` *"everything CI runs"*, and it was one check short. `tools/gallery.mjs`
+// ran in the suite and in no workflow — so `examples/theme.css`, a hand-written stylesheet the gallery
+// copies, sat swallowed by `examples/*.css` from the day it was written and no runner ever tried to
+// read it. **A check that only ever runs where the tree is already complete cannot find an incomplete
+// tree**, and that is the whole class these three reds came from.
+//
+// So the third pair: every `./star-…`, `node …` and `python3 …` the suite runs must appear somewhere in
+// the workflow. Named-anywhere is deliberately weak — it asks whether CI knows about the check at all,
+// not how it is invoked — because the strong version would be a second copy of the suite and would
+// disagree with it.
 use "std/files.bx";
 use "std/string.bx";
 use "std/os.bx";
@@ -261,10 +274,64 @@ while n < len(suite_names) {
     n += 1;
 }
 
+// ---- the suite against the workflow ---------------------------------------------------------------
+
+let ci: String = file_read(".github/workflows/star.yml");
+let site_ci: String = file_read(".github/workflows/site.yml");
+
+// Everything the suite invokes, whatever language it is written in.
+let mutable invoked: [String] = [];
+let mutable q: Int = 0;
+while q < len(suite) {
+    if !is_comment(suite[q]) {
+        let mutable found: [String] = all_after(suite[q], "./");
+        let scripts: [String] = string_split(suite[q], " ");
+        let mutable j: Int = 0;
+        while j < len(scripts) {
+            let word: String = string_trim(scripts[j]);
+            if string_ends_with(word, ".mjs") || string_ends_with(word, ".py") {
+                let x: Int = push(found, word);
+            }
+            j += 1;
+        }
+        let mutable f2: Int = 0;
+        while f2 < len(found) {
+            let mutable seen: Bool = false;
+            let mutable k: Int = 0;
+            while k < len(invoked) {
+                if invoked[k] == found[f2] {
+                    seen = true;
+                }
+                k += 1;
+            }
+            if !seen {
+                let x: Int = push(invoked, found[f2]);
+            }
+            f2 += 1;
+        }
+    }
+    q += 1;
+}
+
 if prove {
-    // Two plants, one per half, so a control that passes proves BOTH halves can still fail.
-    if len(failures) < 2 {
-        print("CONTROL FAILED: two plants, " + to_string(len(failures)) + " reported");
+    let x: Int = push(invoked, "tools/a-check-ci-never-runs.mjs");
+}
+
+let mutable v: Int = 0;
+while v < len(invoked) {
+    if string_find(ci, invoked[v]) < 0 && string_find(site_ci, invoked[v]) < 0 {
+        let x: Int = push(failures, "tools/check-all.sh runs `" + invoked[v]
+            + "` and no workflow names it, so it runs only where the tree is already complete."
+            + " That is how examples/theme.css stayed uncommitted for its whole life: the gallery"
+            + " was suite-only, and every machine that ran it already had the file");
+    }
+    v += 1;
+}
+
+if prove {
+    // Three plants, one per pair, so a control that passes proves all three can still fail.
+    if len(failures) < 3 {
+        print("CONTROL FAILED: three plants, " + to_string(len(failures)) + " reported");
         let mutable f: Int = 0;
         while f < len(failures) {
             print("  " + failures[f]);
@@ -272,7 +339,7 @@ if prove {
         }
         exit(1);
     }
-    print("control held: both plants reported");
+    print("control held: all three plants reported");
     exit(0);
 }
 if len(failures) > 0 {
@@ -287,3 +354,4 @@ if len(failures) > 0 {
 
 print(to_string(checked) + " binaries are run by a workflow, and each is built before it runs");
 print(to_string(len(suite_names)) + " binaries are run by the suite, and each is documented as built");
+print(to_string(len(invoked)) + " checks are run by the suite, and each is named by a workflow");

@@ -313,6 +313,18 @@ jobs:
           ./star-showcase
           git diff --exit-code -- docs/_includes/showcase.html
 
+      # **The one check the suite ran and CI did not, and the hole it left.** `examples/theme.css` is a
+      # hand-written stylesheet the gallery copies, and `examples/*.css` — written for the fifteen
+      # stylesheets star generates — had swallowed it since it was created. A fresh clone failed with
+      # `ENOENT`, and no runner had ever tried: the gallery lived only in `check-all.sh`, and on every
+      # developer machine the file is right there. `./star-workflows` now holds the suite and this file
+      # to each other, so a check that runs in one and not the other is a failure rather than a gap.
+      - name: The gallery page matches the examples it shows
+        run: |
+          set -eux
+          node tools/gallery.mjs --include-only
+          git diff --exit-code -- docs/_includes/gallery.html
+
       # **Every example on the site is generated.** A tutorial that teaches something the tool
       # refuses is worse than no tutorial: the reader concludes they made the mistake. This found
       # exactly that the day it was written — chapter 1 opened with a document the generator
