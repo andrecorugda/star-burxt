@@ -79,9 +79,32 @@ runner could not build it. Before adopting a new standard-library module, build 
 release `docs/install.md` tells a reader to install:
 
 ```sh
-tar xzf burxt-<version>-linux-x86_64.tar.gz -C /tmp/rel --strip-components=1
-for f in tools/*.bx tests/*.bx examples/*.bx; do BURXT_LIB=/tmp/rel/lib burxt build "$f" -o /tmp/x || echo "FAILS: $f"; done
+tar xzf ~/burxt/dist/burxt-<version>-linux-x86_64.tar.gz -C /tmp/rel --strip-components=1
+for f in tools/*.bx tests/*.bx examples/*.bx editors/**/*.bx star.bx resolve.bx; do
+  BURXT_LIB=/tmp/rel/lib /tmp/rel/burxt build "$f" -o /tmp/x || echo "FAILS: $f"
+done
 ```
+
+**Use the release's BINARY, not just its library.** The first version of this recipe ran the *installed*
+compiler against the release `lib/`, which is only half a check — and on this machine the two are not
+the same program:
+
+```
+139bdd88ece836ab486d636be5a61706   the released 1.4.0
+5d1d88c27ab1b02cf436116e470e2554   ~/.local/bin/burxt
+```
+
+**Both report `burxt 1.4.0`.** The installed one is a build from source with `zip.bx` and `deflate.bx`
+in its library, which is exactly why the packer compiled here and `main` went red on a clean runner:
+nothing said no, because locally nothing could. The markup session found this by checksumming rather
+than by trusting `--version`, after the same version string had already hidden a *stale* compiler
+earlier the same day — the number moves only when the tag does, so it cannot distinguish two builds in
+either direction.
+
+The cheap narrow form, when the question is only whether one symbol is in the release, needs no build —
+`git grep -l "function <name>(" v1.4.0 -- lib` in `~/burxt`. One trap: `print_error`, `substring`,
+`push` and `len` are **compiler builtins** and are not in `lib` at all, so their absence reads like a
+missing dependency and is not one.
 
 ## Build and test
 
