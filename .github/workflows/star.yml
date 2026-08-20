@@ -282,6 +282,17 @@ jobs:
           ./star-workflows
           ./star-workflows --prove-it
 
+      # **A control that cannot fail is worse than no control**, because every other kind of broken
+      # check announces itself by crashing and doing nothing looks exactly like passing. `star-versions`
+      # advertised `--prove-it` with the flag hardcoded to `false` AND was never invoked with it — two
+      # independent signatures, either of which names the defect alone, so this asks for both.
+      - name: Every advertised control can fail and is actually run
+        run: |
+          set -eux
+          burxt build tools/controls.bx -o star-controls
+          ./star-controls
+          ./star-controls --prove-it
+
       - name: Every line that is not Burxt says why
         run: |
           set -eux

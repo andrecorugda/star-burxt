@@ -171,6 +171,7 @@ burxt build tools/collection.bx  -o star-collection
 burxt build tools/reachable.bx   -o star-reachable
 burxt build tools/versions.bx    -o star-versions
 burxt build tools/workflows.bx   -o star-workflows
+burxt build tools/controls.bx    -o star-controls
 burxt build editors/lsp/drive-lsp.bx -o star-drive-lsp
 ```
 

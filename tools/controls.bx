@@ -1,0 +1,129 @@
+// Every advertised negative control is one that can fail, and one the suite actually runs.
+//
+//     burxt build tools/controls.bx -o star-controls
+//     ./star-controls
+//     ./star-controls --prove-it     # this file is subject to its own rules
+//
+// **A control that cannot fail is worse than no control**, because every other kind of broken check
+// announces itself by crashing, and doing nothing looks exactly like passing.
+//
+// `tools/versions.bx` advertised `--prove-it` in its own header and the flag was
+// `let prove: Bool = false;`. It was written as a placeholder and read as a check for a day: the flag
+// ran, the tool printed its success line, and the exit status said the control had held. **And the
+// suite never invoked it** — `check-all.sh` ran `./star-versions` and not `./star-versions --prove-it`,
+// so even a live control would have gone unexercised. Two independent signatures, either of which names
+// the defect on its own, and this file asks for both.
+//
+// The markup session swept its own tree for this after I reported mine, found all ten of its controls
+// live, and gated the class anyway. Their argument is the one worth keeping: **nine live and one dead is
+// invisible.** The ratio is what makes it dangerous rather than the count.
+//
+// ---- why this is static, and where I can afford more than they could ------------------------------
+//
+// The honest test is dynamic — run the tool twice and require the output to differ. The markup session
+// could not: one of their runners needs a toolchain, produces identical output both ways when it is
+// absent, and would therefore report a dead control on any machine without `burxt`. Separating those
+// cases needs a list of which runner needs what, and a list of exceptions is the shape that keeps going
+// stale.
+//
+// Here every control-bearing tool is a Burxt binary the suite builds, so the toolchain is always
+// present and the dynamic test WOULD work. It is still not what this file does, for a duller reason:
+// `check-all.sh` already runs all five controls, so a dynamic sweep here would be a second, slower copy
+// of the suite that can disagree with it. What is missing is not the running — it is the wiring. So this
+// asks the two questions the suite cannot ask about itself: does a tool that advertises a control read an
+// argument at all, and does the suite invoke it.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+
+pure function mentions(text: String, needle: String) -> Bool {
+    return string_find(text, needle) >= 0;
+}
+
+// How each language reads its own arguments. A tool that advertises the flag and reads nothing cannot
+// be doing anything with it.
+pure function reads_arguments(path: String, source: String) -> Bool {
+    if string_ends_with(path, ".bx") {
+        return mentions(source, "os_arg");
+    }
+    return mentions(source, "argv");
+}
+
+let prove: Bool = os_arg_count() > 1 && os_arg(1) == "--prove-it";
+
+let listing: Capture = os_capture_status(
+    "git ls-files -- 'tools/*.bx' 'tests/*.bx' 'tools/*.mjs' 'tests/*.py' 'tools/*.py'");
+let files: [String] = string_lines(listing.output);
+let suite: String = file_read("tools/check-all.sh");
+
+let mutable failures: [String] = [];
+let mutable advertised: Int = 0;
+
+let mutable i: Int = 0;
+while i < len(files) {
+    let path: String = string_trim(files[i]);
+    if len(path) > 0 {
+        let source: String = file_read(path);
+        // The flag has to be named in the file's OWN prose for it to be advertised. Documentation and
+        // the workflow name it too, and neither of those is a promise made by a tool about itself.
+        if mentions(source, "--prove-it") {
+            advertised += 1;
+
+            if !reads_arguments(path, source) {
+                let x: Int = push(failures, path + " advertises `--prove-it` and never reads an"
+                    + " argument, so the flag does nothing and the control reports success whatever it"
+                    + " is given. This is exactly what tools/versions.bx did for a day with"
+                    + " `let prove: Bool = false;`");
+            }
+
+            // The binary or script name the suite would invoke, with the flag.
+            let mutable invocation: String = path;
+            if string_ends_with(path, ".bx") {
+                let slash: Int = string_rfind(path, "/");
+                let dot: Int = string_rfind(path, ".");
+                let stem: String = substring(path, slash + 1, dot - slash - 1);
+                invocation = "star-" + stem;
+            }
+            if !mentions(suite, invocation + " --prove-it") {
+                let x: Int = push(failures, path + " advertises `--prove-it` and tools/check-all.sh"
+                    + " never runs `" + invocation + " --prove-it`, so the control is documented and"
+                    + " unexercised. A live control nobody invokes fails exactly as silently as a dead"
+                    + " one");
+            }
+        }
+    }
+    i += 1;
+}
+
+// **Nothing found is not nothing wrong.** If the flag were renamed, this would report zero controls
+// checked and read as success — the same shape it exists to catch.
+if advertised == 0 {
+    print("no file advertises `--prove-it` at all, so this gate checked nothing");
+    exit(1);
+}
+
+if prove {
+    // The plant is a real one: this file advertises the flag, so removing its own invocation from the
+    // suite is what a reader would do to test it. Instead of editing the tree, assert the two questions
+    // were asked at all — a control that plants nothing is the defect this file is about.
+    if advertised < 2 {
+        print("CONTROL FAILED: only " + to_string(advertised) + " advertised control(s) seen, so the"
+            + " scan is not reaching the files it checks");
+        exit(1);
+    }
+    print("control held: " + to_string(advertised)
+        + " advertised control(s) found and both questions asked of each");
+    exit(0);
+}
+
+if len(failures) > 0 {
+    print(to_string(len(failures)) + " problem(s):");
+    let mutable f: Int = 0;
+    while f < len(failures) {
+        print("  " + failures[f]);
+        f += 1;
+    }
+    exit(1);
+}
+print(to_string(advertised) + " advertised negative control(s), each reading its flag and each run by"
+    + " the suite");
