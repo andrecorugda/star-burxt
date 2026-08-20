@@ -24,7 +24,11 @@ jobs:
 
       - name: Install Burxt
         env:
-          BURXT_VERSION: "1.3.0"
+          # **The same number as `star.yml`, and that is the point.** This said 1.3.0 while the other
+          # workflow said 1.4.0 — a difference with no stated reason, which went two minor versions
+          # unnoticed. The FLOOR and the CURRENT are allowed to differ; two currents are not.
+          # `tools/versions.bx` fails if these two drift apart again.
+          BURXT_VERSION: "1.4.0"
         run: |
           set -eux
           curl -fsSL -o /tmp/burxt.tar.gz \

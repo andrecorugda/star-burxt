@@ -113,6 +113,7 @@ run "the showcase is current"        bash -c './star-showcase >/dev/null && git 
 run "the gallery page is current"    bash -c 'node tools/gallery.mjs --include-only >/dev/null && git diff --exit-code -- docs/_includes/gallery.html'
 
 run "every advertised ref exists"    ./star-refs
+run "every version named agrees"     ./star-versions
 run "every published limitation holds" ./star-limits
 run "the published surface is the real one" ./star-surface
 run "HTML's content model, both ways" ./star-content

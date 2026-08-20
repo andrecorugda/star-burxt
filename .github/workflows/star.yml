@@ -51,6 +51,9 @@ jobs:
           # CI runs what a reader would install today, which is 1.4.0: verified by checksum against
           # SHA256SUMS, and star is green on it — every gate, all 21 components, all nine wasm-driven tests.
           BURXT_VERSION: "1.4.0"
+          # The advertised minimum, exercised by its own step below. `docs/_config.yml`'s
+          # `star_requires` is where it is decided; `tools/versions.bx` holds these to each other.
+          BURXT_FLOOR: "1.3.0"
         run: |
           set -eux
           curl -fsSL -o /tmp/burxt.tar.gz \
@@ -122,6 +125,30 @@ jobs:
       # This is what replaces it, and it does the real thing: `burxt fetch` clones BMX at the commit
       # `burxt.package` pins and writes `burxt.lock`. **No rewriting.** The manifest CI uses is the
       # manifest a user gets, which is the only version of this step that can prove anything.
+      # **The floor is a capability claim, so it is built against rather than asserted.**
+      # `docs/install.md` promised "1.3.0 or newer" for two minor versions and NO 1.3.0 tarball was ever
+      # downloaded — the one number a reader acts on could have been false the whole time. The honest
+      # check is the old release, not a higher number: install it beside the current one, build the three
+      # commands a reader is told to build, and compile a component with it.
+      - name: The advertised floor still holds
+        env:
+          BURXT_FLOOR: "1.3.0"
+        run: |
+          set -eux
+          curl -fsSL -o /tmp/floor.tar.gz \
+            "https://github.com/andrecorugda/burxt/releases/download/v${BURXT_FLOOR}/burxt-${BURXT_FLOOR}-linux-x86_64.tar.gz"
+          mkdir -p /tmp/floor && tar xzf /tmp/floor.tar.gz -C /tmp/floor --strip-components=1
+          /tmp/floor/burxt --version | head -1
+          for f in examples/generate.bx examples/check.bx examples/build.bx; do
+            BURXT_LIB=/tmp/floor/lib /tmp/floor/burxt build "$f" -o /tmp/floor/out
+          done
+          # And the claim's own two specifics: an update returning a record that holds a list, and a
+          # `pure` function calling the JSON encoder. A component that compiles is the whole promise.
+          BURXT_LIB=/tmp/floor/lib /tmp/floor/burxt build examples/generate.bx -o /tmp/floor/gen
+          printf ':props: count: Int\n:!props:\n\nAt {{ to_string(count) }}.\n\n:button: on:click=count + 1\nmore\n:!button:\n' > /tmp/floor/d.sbmx
+          /tmp/floor/gen /tmp/floor/d.sbmx c > /tmp/floor/c.bx
+          BURXT_LIB=/tmp/floor/lib /tmp/floor/burxt check /tmp/floor/c.bx
+
       - name: Fetch the BMX dependency at its pinned commit
         run: |
           set -eux
@@ -230,6 +257,12 @@ jobs:
       # lines, and this fails on one that declares none. A prose audit goes stale the moment somebody
       # adds a file; a threshold is a number somebody raises when it is inconvenient. The rule is to
       # know what the number is, and which column it sits in.
+      - name: Every Burxt version this repository names agrees
+        run: |
+          set -eux
+          burxt build tools/versions.bx -o star-versions
+          ./star-versions
+
       - name: Every line that is not Burxt says why
         run: |
           set -eux

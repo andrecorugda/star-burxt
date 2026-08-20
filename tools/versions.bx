@@ -1,0 +1,148 @@
+// Every Burxt version this repository names, held to one floor and one current release.
+//
+//     burxt build tools/versions.bx -o star-versions
+//     ./star-versions
+//     ./star-versions --prove-it     # the negative control
+//
+// **Four places named a version and two disagreed, and nothing checked any of them.**
+// `docs/install.md` promised *"1.3.0 or newer"*, `docs/_config.yml` said `1.3.0`,
+// `.github/workflows/site.yml` installed **1.3.0** and `.github/workflows/star.yml` installed
+// **1.4.0** — a difference with no stated reason, which is drift rather than design. And the floor was
+// prose: **no 1.3.0 tarball was ever built against**, so the one number a reader acts on could have
+// been false for two minor versions and nothing would have said so.
+//
+// The language session's framing is why this is small rather than a project: *"the honest way to verify
+// a floor is to build against the old tarball, not to raise the number."* A floor is a capability claim,
+// and a capability claim nothing exercises cannot fail for the reason it exists.
+//
+// ---- two numbers, two jobs, each named once ------------------------------------------------------
+//
+//   THE FLOOR      `docs/_config.yml`'s `star_requires` — the minimum a reader is promised. The site
+//                  reads it, `docs/install.md` states it in prose, and `star.yml` builds against it on
+//                  every push so the promise is exercised rather than asserted.
+//
+//   THE CURRENT    `BURXT_VERSION` in both workflows — the newest release, which is what a reader
+//                  actually installs today. **Both workflows must carry the same number**, because two
+//                  "current" values is the disagreement this file exists to end.
+//
+// So the floor and the current are allowed to differ — that is the point — and everything claiming to
+// be one of them must agree with everything else claiming to be the same one.
+use "std/files.bx";
+use "std/string.bx";
+
+pure function contains(haystack: String, needle: String) -> Bool {
+    return string_find(haystack, needle) >= 0;
+}
+
+// The value of a `key: "value"` line, quotes stripped. Enough for a YAML scalar and no more — this
+// repository has no YAML parser and does not need one.
+pure function scalar(text: String, key: String) -> String allocates {
+    let rows: [String] = string_lines(text);
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        let line: String = string_trim(rows[i]);
+        if string_starts_with(line, key) {
+            let after: String = string_trim(substring(line, len(key), len(line) - len(key)));
+            let mutable out: String = after;
+            if string_starts_with(out, ":") { out = string_trim(substring(out, 1, len(out) - 1)); }
+            let mutable clean: String = "";
+            let mutable c: Int = 0;
+            while c < len(out) {
+                let ch: String = substring(out, c, 1);
+                if ch != "\"" && ch != "'" { clean = clean + ch; }
+                c += 1;
+            }
+            return string_trim(clean);
+        }
+        i += 1;
+    }
+    return "";
+}
+
+// The version in `**Burxt X or newer.**`, which is the sentence a reader acts on.
+pure function prose_floor(text: String) -> String allocates {
+    let marker: String = "**Burxt ";
+    let at: Int = string_find(text, marker);
+    if at < 0 { return ""; }
+    let from: Int = at + len(marker);
+    let mutable stop: Int = from;
+    while stop < len(text) && substring(text, stop, 1) != " " { stop += 1; }
+    return substring(text, from, stop - from);
+}
+
+// `a >= b` over `major.minor.patch`. A string comparison would put 1.10.0 below 1.4.0.
+pure function at_least(a: String, b: String) -> Bool {
+    let x: [String] = string_split(a, ".");
+    let y: [String] = string_split(b, ".");
+    let mutable i: Int = 0;
+    while i < 3 {
+        let mutable p: Int = 0;
+        let mutable q: Int = 0;
+        if i < len(x) { p = string_to_int(x[i], 0); }
+        if i < len(y) { q = string_to_int(y[i], 0); }
+        if p > q { return true; }
+        if p < q { return false; }
+        i += 1;
+    }
+    return true;
+}
+
+let prove: Bool = false;
+
+let config: String = file_read("docs/_config.yml");
+let install: String = file_read("docs/install.md");
+let star_ci: String = file_read(".github/workflows/star.yml");
+let site_ci: String = file_read(".github/workflows/site.yml");
+
+let floor: String = scalar(config, "star_requires");
+let mutable stated: String = prose_floor(install);
+let floor_ci: String = scalar(star_ci, "BURXT_FLOOR");
+let star_pin: String = scalar(star_ci, "BURXT_VERSION");
+let site_pin: String = scalar(site_ci, "BURXT_VERSION");
+
+let mutable failures: [String] = [];
+
+if len(floor) == 0 {
+    let a: Int = push(failures, "docs/_config.yml declares no `star_requires`, so nothing else has a"
+        + " floor to agree with");
+}
+
+// **The sentence a reader acts on, against the value the site is configured with.** These are two
+// files and they can disagree, which is the whole reason this check exists.
+if len(floor) > 0 && stated != floor {
+    let b: Int = push(failures, "docs/install.md promises `Burxt " + stated + " or newer` and"
+        + " docs/_config.yml says the floor is `" + floor + "`. One of them is what a reader installs"
+        + " and the other is what the site believes");
+}
+
+// The floor CI builds against must be the floor that is advertised, or the test proves a number
+// nobody was promised.
+if len(floor) > 0 && floor_ci != floor {
+    let c: Int = push(failures, ".github/workflows/star.yml builds the floor test against `" + floor_ci
+        + "` and the advertised floor is `" + floor + "`. A floor test on the wrong release exercises"
+        + " nothing anybody was told");
+}
+
+// **One current number.** Two workflows installing different releases is the drift this file ends.
+if star_pin != site_pin {
+    let d: Int = push(failures, "star.yml installs `" + star_pin + "` and site.yml installs `"
+        + site_pin + "`. The floor and the current are allowed to differ; two currents are not — a"
+        + " difference with no stated reason is drift, and it went two minor versions unnoticed");
+}
+
+if len(floor) > 0 && !at_least(star_pin, floor) {
+    let e: Int = push(failures, "CI installs `" + star_pin + "`, which is below the advertised floor `"
+        + floor + "`");
+}
+
+print(to_string(len(failures)) + " problem(s) in the versions this repository names");
+if len(failures) > 0 {
+    let mutable f: Int = 0;
+    while f < len(failures) {
+        print("  " + failures[f]);
+        f += 1;
+    }
+    exit(1);
+}
+print("  floor   " + floor + "   advertised, configured, and built against on every push");
+print("  current " + star_pin + "   installed by both workflows");
