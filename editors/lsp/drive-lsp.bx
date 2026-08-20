@@ -1,0 +1,461 @@
+// The language server, spoken to over JSON-RPC exactly as an editor would.
+//
+//     burxt build editors/lsp/drive-lsp.bx -o star-drive-lsp
+//     STAR_CHECK=./star-check ./star-drive-lsp
+//
+// **A server tested only by opening an editor is a server whose protocol handling is a guess.** This
+// speaks the messages that matter, on a document with a real problem in each of the three layers, and
+// asserts the diagnostics come back on the right lines.
+//
+// ---- and it was JavaScript, in `drive-lsp.mjs` --------------------------------------------------
+//
+// It moved for the reason the server beside it moved — Andre's directive, *"I will not accept a
+// language that really depends on another language"* — and it had to move IN THE SAME CHANGE. A driver
+// is what says the server works; leaving the driver in Node would have meant the file proving `node`
+// is unnecessary could only be run by `node`, which is the same joke `tools/languages.bx` refuses
+// about a Python program auditing Python.
+//
+// ---- one frame at a time became one stream, and that is a real design change -------------------
+//
+// The JavaScript held the server open and awaited each reply before sending the next request. **Burxt
+// cannot do that, and the reason is specific: there is no `popen` and no `pipe`.** `os_capture_status`
+// runs a command to completion; `os_run` gives an exit code. Nothing in the standard library hands
+// back a pair of file descriptors to a live child, so a Burxt program cannot hold a conversation with
+// one.
+//
+// It does not need to. **Not one request here depends on a reply**, because the protocol under test is
+// request/response with no server-initiated negotiation: the `initialize` reply is read, never
+// branched on. So the whole session is written to a file, the server is run once with its stdin on it,
+// and the reply frames are parsed out of its stdout afterwards. Every message is still framed, every
+// `Content-Length` is still honoured, and the replies are still matched to the requests that caused
+// them by position.
+//
+// **What batching gains, stated because it is not obvious.** Every frame arrives in ONE read, which is
+// a case the awaiting driver never produced and an editor certainly can — and it is the case the
+// JavaScript SERVER cannot survive: it publishes diagnostics from a `.then()`, so `process.exit(0)` on
+// the `exit` notification fires before any of them flush. Fed this same file, `star-lsp.mjs` answers
+// `initialize` and `shutdown` and drops all six diagnostic frames on the floor. The Burxt server is
+// synchronous throughout and answers every one.
+//
+// **What batching loses, and how it is bought back.** A batch cannot see whether the server answered
+// before the stream ended — a server that read to EOF first and then replied would pass every
+// assertion below. That is not a small distinction: it is the whole difference between a server and a
+// filter, and `lib/os.bx` says it beside `os_read_line` — reading to EOF is not a slow version of
+// answering, it is a deadlock. So one assertion runs a second session through a pipe that **withholds
+// the second frame until the first has been answered**, and cannot pass unless the server replies, and
+// flushes, mid-stream. `timeout` is what stops that from hanging if it does not.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+use "std/json.bx";
+
+// How many verdicts a run reaches. **A number CHECKED against at the bottom, not a comment** — and it
+// was a comment for the length of one test run, which is how this paragraph got written: it said 12
+// while the run printed 13, and nothing noticed because the number was only ever read on the way out
+// of a failure. A count nobody compares is a decoration.
+//
+// It is worth comparing because of how this driver fails. It reads its verdicts out of parsed frames,
+// and the failure mode of a frame parser that breaks is not a wrong answer, it is NO answer — every
+// lookup returns the empty String and a whole scenario can go quiet. `refs.bx`'s rule: a suite that
+// found nothing is not a suite that passed.
+const ASSERTIONS: Int = 13;
+
+// The reply frames one session produces: `initialize`, one `publishDiagnostics` per document opened,
+// and `shutdown`. **`refs.bx`'s rule — a suite that found nothing is not a suite that passed** — so
+// this is asserted rather than assumed, and it is the first assertion for that reason.
+const FRAMES: Int = 6;
+
+pure function contains(haystack: String, needle: String) -> Bool {
+    return string_find(haystack, needle) >= 0;
+}
+
+// ---- the documents under test -------------------------------------------------------------------
+//
+// A `const` may name a literal and these are literals, but they are functions anyway: a top-level
+// `let` is invisible to every function body, and the documents are needed inside `run`.
+//
+// Every `{` and `}` is escaped, which is the whole shape of writing a `.sbmx` document inside a Burxt
+// string — a slot is `\{\{ … \}\}`.
+
+// 1. A well-formed component with a typo in a slot — the layer only the compiler can find, reached
+//    through the GENERATED component and mapped back by name.
+pure function document_typo() -> String allocates {
+    return ":props: count: Int\n:!props:\n\nAt \{\{ to_string(cuont) \}\}.\n";
+}
+
+// 2. Not a component: an unknown block. star's own rule, already positioned.
+pure function document_unknown() -> String allocates {
+    return ":props: n: Int\n:!props:\n\n:mystery:\nhi\n:!mystery:\n";
+}
+
+// 3. Not a document: a missing fence. BMX's rule.
+pure function document_fence() -> String allocates {
+    return ":props: n: Int\n:!props:\n\n:div:\nno closing fence\n";
+}
+
+// 4. A clean component, which must report nothing — see `run` for why it is asserted last.
+pure function document_clean() -> String allocates {
+    return ":props: count: Int\n:!props:\n\nAt \{\{ to_string(count) \}\}.\n";
+}
+
+// ---- framing ------------------------------------------------------------------------------------
+
+pure function frame(message: Json) -> String allocates {
+    let body: String = json_render(message);
+    return "Content-Length: " + to_string(len(body)) + "\r\n\r\n" + body;
+}
+
+pure function request(id: Int, method: String) -> String allocates {
+    let mutable fields: [Field] = [];
+    let a: Int = push(fields, json_field("jsonrpc", json_text("2.0")));
+    let b: Int = push(fields, json_field("id", json_int(id)));
+    let c: Int = push(fields, json_field("method", json_text(method)));
+    return frame(json_object(fields));
+}
+
+pure function notification(method: String) -> String allocates {
+    let mutable fields: [Field] = [];
+    let a: Int = push(fields, json_field("jsonrpc", json_text("2.0")));
+    let b: Int = push(fields, json_field("method", json_text(method)));
+    return frame(json_object(fields));
+}
+
+// `textDocument/didOpen`, built through `json.bx` rather than by concatenation so the document's
+// quotes, backslashes and newlines are escaped by the same code that will read them back.
+pure function did_open(uri: String, text: String) -> String allocates {
+    let mutable document: [Field] = [];
+    let d1: Int = push(document, json_field("uri", json_text(uri)));
+    let d2: Int = push(document, json_field("languageId", json_text("sbmx")));
+    let d3: Int = push(document, json_field("version", json_int(1)));
+    let d4: Int = push(document, json_field("text", json_text(text)));
+    let mutable params: [Field] = [];
+    let p1: Int = push(params, json_field("textDocument", json_object(document)));
+    let mutable fields: [Field] = [];
+    let a: Int = push(fields, json_field("jsonrpc", json_text("2.0")));
+    let b: Int = push(fields, json_field("method", json_text("textDocument/didOpen")));
+    let c: Int = push(fields, json_field("params", json_object(params)));
+    return frame(json_object(fields));
+}
+
+// Every reply frame in a stream of them, in order. A malformed stream answers what it managed to read
+// rather than a refusal — the frame COUNT is asserted, so a short read is reported as the count it is
+// and not as six scenarios that quietly said nothing.
+function frames_in(stream: String, mutable out: [Json]) -> Int allocates {
+    let mutable at: Int = 0;
+    let mutable reading: Bool = true;
+    while reading {
+        let rest: String = substring(stream, at, len(stream) - at);
+        let split: Int = string_find(rest, "\r\n\r\n");
+        if split < 0 {
+            reading = false;
+        } else {
+            let header: String = string_to_lower_ascii(substring(rest, 0, split));
+            let mark: Int = string_find(header, "content-length:");
+            if mark < 0 {
+                reading = false;
+            } else {
+                let after: String = substring(header, mark + 15, len(header) - mark - 15);
+                let ends: Int = string_find(after, "\r\n");
+                let mutable said: String = after;
+                if ends >= 0 { said = substring(after, 0, ends); }
+                let length: Int = string_to_int(string_trim(said), 0);
+                if split + 4 + length > len(rest) {
+                    reading = false;
+                } else {
+                    let body: String = substring(rest, split + 4, length);
+                    match json_parse(body) {
+                        Error(why) => { reading = false; }
+                        Ok(message) => { let a: Int = push(out, message); }
+                    }
+                    at = at + split + 4 + length;
+                }
+            }
+        }
+    }
+    return len(out);
+}
+
+// ---- reading a reply ----------------------------------------------------------------------------
+//
+// A missing field answers the empty String rather than a refusal, and every assertion below is a
+// String comparison for the same reason the JavaScript's was (`String(got) === String(want)`): a
+// diagnostic that is absent and one that is on the wrong line should both FAIL, and both should print
+// what arrived.
+
+pure function child(value: Json, name: String) -> Json {
+    match json_at(value, name) {
+        None => { return json_null(); }
+        Some(found) => { return found; }
+    }
+}
+
+pure function text_at(value: Json, name: String) -> String {
+    match json_as_text(child(value, name)) {
+        None => { return ""; }
+        Some(said) => { return said; }
+    }
+}
+
+pure function number_at(value: Json, name: String) -> String {
+    match json_as_int(child(value, name)) {
+        None => { return ""; }
+        Some(found) => { return to_string(found); }
+    }
+}
+
+function list_in(value: Json, mutable out: [Json]) -> Int allocates {
+    match value {
+        List(items) => {
+            let mutable i: Int = 0;
+            while i < len(items) {
+                let a: Int = push(out, items[i]);
+                i += 1;
+            }
+        }
+        Truth(ignored) => { }
+        Number(ignored) => { }
+        Text(ignored) => { }
+        Object(ignored) => { }
+        Null => { }
+    }
+    return len(out);
+}
+
+// The diagnostics of one `publishDiagnostics` frame.
+function diagnostics_of(message: Json, mutable out: [Json]) -> Int allocates {
+    return list_in(child(child(message, "params"), "diagnostics"), out);
+}
+
+// The zero-based line a diagnostic starts on, as a String, or `""` when there is no diagnostic — so
+// an absent one fails the line assertion instead of throwing before it.
+pure function start_line(diagnostics: [Json]) -> String {
+    if len(diagnostics) == 0 { return ""; }
+    return number_at(child(child(diagnostics[0], "range"), "start"), "line");
+}
+
+pure function first_code(diagnostics: [Json]) -> String {
+    if len(diagnostics) == 0 { return ""; }
+    return text_at(diagnostics[0], "code");
+}
+
+pure function first_message(diagnostics: [Json]) -> String {
+    if len(diagnostics) == 0 { return ""; }
+    return text_at(diagnostics[0], "message");
+}
+
+// ---- the verdicts -------------------------------------------------------------------------------
+
+// **Printed as it is decided and recorded at the same time.** Burxt has no closures, so the tally
+// cannot hide in the reporter — the array is threaded, which is what the framework does with state
+// and for the same reason.
+//
+// **Every verdict is recorded, not just the failing ones**, so the length of the array answers "how
+// many questions were asked" and not only "how many went wrong". Those are different numbers and it is
+// the first one that catches a scenario which stopped running.
+function verdict(what: String, got: String, want: String, mutable made: [String]) -> Bool {
+    if got == want {
+        print("  ok   " + what);
+        let a: Int = push(made, "ok " + what);
+        return true;
+    }
+    let b: Int = push(made, "FAIL " + what);
+    print("  FAIL " + what);
+    print("       got  " + got);
+    print("       want " + want);
+    return false;
+}
+
+pure function failed(made: [String]) -> Int {
+    let mutable count: Int = 0;
+    let mutable i: Int = 0;
+    while i < len(made) {
+        if string_starts_with(made[i], "FAIL ") { count += 1; }
+        i += 1;
+    }
+    return count;
+}
+
+pure function truth(value: Bool) -> String {
+    if value { return "true"; }
+    return "false";
+}
+
+// ---- running the server -------------------------------------------------------------------------
+
+// The whole session, as the bytes an editor would send.
+pure function session(uri: String) -> String allocates {
+    return request(1, "initialize")
+        + did_open(uri, document_typo())
+        + did_open(uri, document_unknown())
+        + did_open(uri, document_fence())
+        + did_open(uri, document_clean())
+        + request(2, "shutdown")
+        + notification("exit");
+}
+
+// **The one assertion a batch cannot make, made with a pipe that holds its tongue.**
+//
+// The subshell writes the first frame, then waits for the reply FILE to become non-empty before
+// writing the second. A server that read its input to EOF before answering would never let that wait
+// finish, so the only way two frames come back is if the first was answered — and flushed — while the
+// stream was still open. `timeout` is what turns that deadlock into a failed assertion instead of a
+// hung suite.
+//
+// Written as a script file and run with `sh`, rather than quoted into one command line: a JSON frame
+// is full of double quotes and a nested `sh -c` string would need two layers of escaping for no gain.
+function answers_mid_stream(work: String, server: String, checker: String) -> Bool
+        touches commands, files, input {
+    let first: String = work + "/first.frames";
+    let second: String = work + "/second.frames";
+    let replies: String = work + "/mid.replies";
+    let script: String = work + "/mid.sh";
+    let w1: Int = file_write(first, request(1, "initialize"));
+    let w2: Int = file_write(second, request(2, "shutdown") + notification("exit"));
+    let w3: Int = file_write(script,
+        "( cat " + file_quote(first) + "\n"
+        + "  while [ ! -s " + file_quote(replies) + " ]; do sleep 0.05; done\n"
+        + "  cat " + file_quote(second) + "\n"
+        + ") | STAR_CHECK=" + file_quote(checker) + " " + file_quote(server)
+        + " > " + file_quote(replies) + " 2>/dev/null\n");
+    let ran: Capture = os_capture_status("timeout 10 sh " + file_quote(script));
+    let mutable answered: [Json] = [];
+    let counted: Int = frames_in(file_read(replies), answered);
+    return counted == 2;
+}
+
+let checker: String = os_env_or("STAR_CHECK", "star-check");
+// The built binary, beside every other tool this repository builds. Overridable because
+// `tests/extension.py` asks the same question of a server installed somewhere else.
+let server: String = os_env_or("STAR_LSP", "./star-lsp");
+
+let mutable made: [String] = [];
+
+match file_temp_directory("drive-lsp") {
+    None => {
+        print("no scratch directory, so the session cannot be written");
+        exit(2);
+    }
+    Some(work) => {
+        // A document beside the real examples, so component imports resolve the way they would in a
+        // project. It is never created: the server writes its own scratch copy beside it, which is the
+        // mechanism under test.
+        let mutable here: String = ".";
+        match os_cwd() {
+            None => { here = "."; }
+            Some(found) => { here = found; }
+        }
+        let uri: String = "file://" + here + "/examples/.lsp-probe.sbmx";
+
+        let requests: String = work + "/session.frames";
+        let wrote: Int = file_write(requests, session(uri));
+        let ran: Capture = os_capture_status(
+            "STAR_CHECK=" + file_quote(checker) + " " + file_quote(server)
+            + " < " + file_quote(requests));
+
+        let mutable replies: [Json] = [];
+        let counted: Int = frames_in(ran.output, replies);
+
+        // First, because every verdict below is read out of this list and a short one would make them
+        // all say nothing rather than something wrong.
+        let ok: Bool = verdict("the server answers every frame in the session",
+                          to_string(counted), to_string(FRAMES), made);
+        if counted != FRAMES {
+            print("");
+            print("the session was answered " + to_string(counted) + " frame(s) deep, so the "
+                + "assertions below have nothing to read. What it said on stderr:");
+            print(ran.errors);
+            exit(1);
+        }
+
+        let ready: Json = child(replies[0], "result");
+        let a1: Bool = verdict("the server answers initialize",
+                          text_at(child(ready, "serverInfo"), "name"), "star-lsp", made);
+
+        // **This asserts the NAME above, which is the half that never changes.** The server reported
+        // version `0.1.0` while the released tag was `v0.2.0`, and a client LOGS this field — so every
+        // bug report about a diagnostic would have named the wrong version, and nothing here would have
+        // said so. The markup session hit the identical defect in theirs and told me to grep for it.
+        //
+        // Read out of `burxt.package` rather than written down, because a driver that hardcoded the
+        // version would agree with a server that hardcoded a different one.
+        let manifest: String = file_read("burxt.package");
+        let mutable wanted: String = "";
+        let rows: [String] = string_split(manifest, "\n");
+        let mutable r: Int = 0;
+        while r < len(rows) {
+            if string_starts_with(rows[r], "version") && len(wanted) == 0 {
+                let fields: [String] = string_split_space(rows[r]);
+                if len(fields) > 1 { wanted = fields[1]; }
+            }
+            r += 1;
+        }
+        let a2: Bool = verdict("and reports the version the package declares, rather than one of its own",
+                          text_at(child(ready, "serverInfo"), "version"), wanted, made);
+        let a3: Bool = verdict("it offers text sync",
+                          number_at(child(ready, "capabilities"), "textDocumentSync"), "1", made);
+
+        // 1. A well-formed component with a typo in a slot — the layer only the compiler can find.
+        let mutable typo: [Json] = [];
+        let t: Int = diagnostics_of(replies[1], typo);
+        let a4: Bool = verdict("a slot typo is reported", truth(len(typo) >= 1), "true", made);
+        let a5: Bool = verdict("  …on the line the author wrote it", start_line(typo), "3", made);
+        let a6: Bool = verdict("  …naming what is wrong",
+                          truth(contains(first_message(typo), "cuont")), "true", made);
+
+        // 2. Not a component: an unknown block. star's own rule, already positioned.
+        let mutable unknown: [Json] = [];
+        let u: Int = diagnostics_of(replies[2], unknown);
+        let a7: Bool = verdict("an unknown block is reported with its code",
+                          first_code(unknown), "STAR-E001", made);
+        let a8: Bool = verdict("  …on its fence", start_line(unknown), "3", made);
+
+        // 3. Not a document: a missing fence. BMX's rule.
+        let mutable fence: [Json] = [];
+        let f: Int = diagnostics_of(replies[3], fence);
+        let a9: Bool = verdict("a malformed document is reported with BMX's code",
+                          truth(string_starts_with(first_code(fence), "BMX-E")), "true", made);
+
+        // 4. **BMX's structural WARNINGS are gone, and the loss is asserted rather than left silent.**
+        //    The JavaScript server imported `lint` from `reference/bmx.js` and merged BMX-W001 in at
+        //    severity 2; BMX's Burxt implementation has the parser and no lint, so a Burxt server can
+        //    only get them by spawning `node` — which is the one dependency this whole port removes.
+        //    The two assertions that stood here (a warning is reported; it is on the right line below a
+        //    `===bx` section) are blocked on `bmx_lint` existing in `bmx/burxt/bmx.bx`.
+        //
+        //    **A capability that quietly stopped appearing is the failure this replaces.** So the
+        //    server must SAY the warnings are absent, and it says it on stderr, which
+        //    `os_capture_status` keeps apart from the protocol on stdout — a log line written to stdout
+        //    would be read as a frame.
+        let a10: Bool = verdict("and says out loud that BMX's warnings are absent, rather than dropping them"
+                           + " silently",
+                           truth(contains(ran.errors, "BMX's structural warnings are absent")),
+                           "true", made);
+
+        // 5. That it answered at all while the stream was open — see `answers_mid_stream`.
+        let a11: Bool = verdict("it answers a frame before the input ends, which is what makes it a server",
+                           truth(answers_mid_stream(work, server, checker)), "true", made);
+
+        // 6. A clean document reports nothing. **Asserted LAST, after every case that proves the
+        //    server can find something**, because a server that is broken end to end — a checker that
+        //    never runs, a parser that reads no output, a `publish` that sends an empty list — produces
+        //    exactly this answer too. It is the one verdict that is worthless on its own.
+        let mutable clean: [Json] = [];
+        let c: Int = diagnostics_of(replies[4], clean);
+        let a12: Bool = verdict("a clean component reports nothing", to_string(len(clean)), "0", made);
+
+        print("");
+        // The count before the verdicts, because a run that asked the wrong number of questions has
+        // not earned the right to report on the answers.
+        if len(made) != ASSERTIONS {
+            print("this driver reached " + to_string(len(made)) + " verdict(s) where it declares "
+                + to_string(ASSERTIONS) + " — a scenario has stopped asserting, which reads exactly"
+                + " like success");
+            exit(1);
+        }
+        if failed(made) > 0 {
+            print(to_string(failed(made)) + " failure(s) of " + to_string(ASSERTIONS));
+            exit(1);
+        }
+        print("the server speaks the protocol, in " + to_string(ASSERTIONS) + " assertions");
+    }
+}

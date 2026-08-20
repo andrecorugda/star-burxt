@@ -413,8 +413,9 @@ jobs:
       - name: Server code cannot reach the browser
         run: |
           set -eux
+          burxt build examples/prove-partition.bx -o star-partition
           ./star-build examples/Served.sbmx page /tmp/build
-          node examples/prove-partition.mjs /tmp/build/page.o /tmp/build/page.wasm
+          ./star-partition /tmp/build/page.o /tmp/build/page.wasm
 
       - name: Every example in the documentation actually works
         run: ./star-docs

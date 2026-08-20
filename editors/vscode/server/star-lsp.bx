@@ -1,0 +1,797 @@
+// star-lsp — diagnostics for `.sbmx`, over JSON-RPC on stdio. No dependencies, and no interpreter.
+//
+//     burxt build editors/vscode/server/star-lsp.bx -o star-lsp
+//     star-lsp                     (an editor spawns it; it is not run by hand)
+//
+// **A server, not a library, and separate from BMX's.** BMX ships one for `.bmx`; this one owns
+// `.sbmx`. Two extensions cannot fight over a file, ownership matches who owns what — the format
+// versus the framework — and each can do things the other should not. BMX's can hold a conformance
+// opinion about a document; that would be noise in a component.
+//
+// ---- what it reports, and who decides ---------------------------------------------------------
+//
+//     BMX-Ennn    the document is not well formed        BMX's parser
+//     STAR-Ennn   the document is not a component        star's own rules
+//     a type error the code inside it does not compile   the Burxt compiler
+//
+// **All three come from `star-check`, which is the command line.** A server that reimplemented any
+// of them would be a second opinion, and the second opinion is the one that would be wrong. So this
+// file is a protocol wrapper: it runs the same binary a person runs, and turns its output into
+// ranges.
+//
+// ---- the one thing that is genuinely approximate, said out loud --------------------------------
+//
+// A type error points into the GENERATED component, because that is where the code the compiler
+// judged lives. Mapping it back onto the document is done by finding the offending expression in
+// the source — which is exact when the expression appears once and picks the first occurrence when
+// it appears twice. The alternative is a real source map, which needs the emitter to record an
+// offset per expression; that is worth building and is not built.
+//
+// It is marked in the message when it happens, so nobody trusts a position further than it deserves.
+//
+// ---- and it was JavaScript, in `server/star-lsp.mjs` -------------------------------------------
+//
+// Andre's directive is the reason it moved: *"I will not accept a language that really depends on
+// another language."* `./star-languages` counted this file in the `gap` column, and its own claim was
+// the thing that kept it there — the old header said porting it *"costs the documented promise that an
+// editor needs nothing but Node installed"*. **That claim was backwards, and it is the whole argument
+// for this file.** The extension needed THREE things on `PATH`: `node` to run the server, `burxt`
+// because the checker compiles the generated component, and `star-check`. Two of the three are star's
+// own. Only `node` was there to run a wrapper around them — so porting the wrapper does not trade one
+// dependency for another, it **removes** one. The extension now needs `burxt`, `star-check` and
+// `star-lsp`, all three built by the same `burxt build` as every other tool in this repository.
+//
+// ---- reading and writing stdio, which is where a port like this actually lives -----------------
+//
+// **The header framing is read a LINE at a time and the body a BYTE at a time, and the difference is
+// the whole reason this works.** `os_read_all` blocks until EOF, which never arrives for a server —
+// `lib/os.bx` says it out loud beside `os_read_line`: reading to EOF is not a slow version of
+// answering, it is a deadlock. So headers come through `os_read_line` (which also drops a CRLF
+// client's `\r`, so both line endings are read identically) and the body through `os_read_byte`
+// exactly `Content-Length` times. A protocol that frames by byte count may not read a line for its
+// body: a JSON object with a `\n` inside a string literal would be cut in half.
+//
+// **`print` cannot write a frame, and that is not a library gap.** It appends a newline — `lib/cgi.bx`
+// records the same wall and calls it a compiler gap — so a frame written with `print` puts a stray
+// byte between messages. `putchar` through an `external` declaration reaches the same libc the runtime
+// already links, and writes the bytes asked for and no others. Verified with `xxd`: `AB\r\n\r\nCD` out,
+// eight bytes, no ninth. So the gap was in the standard library's surface, not in what a Burxt program
+// can do.
+//
+// **Logging had to find its own stream.** `print` goes to stdout, which here is the protocol — a
+// single log line written with `print` corrupts the frame stream and the client sees a parse error
+// instead of a diagnostic. `fputs` is refused by name (the runtime uses that symbol itself), so the
+// stream is `fdopen(2, "w")` and the bytes go out with `fputc`. It is opened ONCE at the bottom of
+// this file and threaded through every function that can log, because a `fdopen` per log line leaks a
+// `FILE` per line and Burxt has no closures to hide the handle in — the same threading the framework
+// does for state, for the same reason.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+use "std/json.bx";
+
+// The three bytes-in-and-out primitives the standard library does not expose. `CInt` exists only at
+// the C boundary; the values convert at the call.
+external function putchar(byte: CInt) -> CInt touches input;
+external function fdopen(fd: CInt, mode: String) -> CPointer touches input;
+external function fputc(byte: CInt, stream: CPointer) -> CInt touches input;
+
+// A range that runs to the end of the line, rather than one of a measured width. A sentinel and not
+// an `Option<Int>`, because every caller names which of the two it meant at the call site and an
+// `Option` here would be unwrapped four times to say the same thing.
+const WHOLE_LINE: Int = -1;
+
+const SEVERITY_ERROR: Int = 1;
+
+pure function contains(haystack: String, needle: String) -> Bool {
+    return string_find(haystack, needle) >= 0;
+}
+
+// ---- bytes out ---------------------------------------------------------------------------------
+
+// Exactly these bytes on stdout, with nothing appended. See the header on why this is not `print`.
+function write_raw(text: String) -> Bool touches input {
+    let mutable i: Int = 0;
+    let size: Int = len(text);
+    while i < size {
+        let ignored: Int = putchar(byte_at(text, i));
+        i += 1;
+    }
+    return true;
+}
+
+// One JSON-RPC frame. `Content-Length` is the BYTE length of the body, which is what `len` answers —
+// a character count would be right on every ASCII message and wrong on the first document with an
+// accent in it, and a client that trusts the header would then read the next frame's first bytes as
+// the tail of this one.
+function send(message: Json) -> Bool touches input {
+    let body: String = json_render(message);
+    let wrote: Bool = write_raw("Content-Length: " + to_string(len(body)) + "\r\n\r\n" + body);
+    // Flushed on every frame, because a buffered reply is a reply the editor never sees: the client
+    // is waiting on this frame before it sends another, so a full buffer is the deadlock the byte
+    // framing above exists to avoid.
+    let flushed: Bool = os_flush();
+    return wrote;
+}
+
+// A line for whoever is reading stderr — the client logs it. Never stdout: see the header.
+function log(errors: CPointer, text: String) -> Bool touches input {
+    let line: String = "star-lsp: " + text + "\n";
+    let mutable i: Int = 0;
+    while i < len(line) {
+        let ignored: Int = fputc(byte_at(line, i), errors);
+        i += 1;
+    }
+    let flushed: Bool = os_flush();
+    return true;
+}
+
+// ---- bytes in ----------------------------------------------------------------------------------
+
+// The `Content-Length` a header block declared, or -1 when the stream ended first.
+//
+// Every other header is read and dropped. That is deliberate rather than lazy: the only one whose
+// absence this server cannot survive is the length, and a server that refused an unknown header
+// would refuse a client that added one.
+function read_length() -> Int touches input {
+    let mutable length: Int = -1;
+    let mutable reading: Bool = true;
+    while reading {
+        match os_read_line() {
+            None => {
+                // End of input in the MIDDLE of a header block and at its start are the same thing
+                // to a caller that is about to stop.
+                reading = false;
+                length = -1;
+            }
+            Some(line) => {
+                if len(line) == 0 {
+                    reading = false;                 // the blank line that ends the headers
+                } else {
+                    // Case-insensitively, because the field name is case-insensitive in the spec and
+                    // clients differ on it.
+                    let lowered: String = string_to_lower_ascii(line);
+                    if string_starts_with(lowered, "content-length:") {
+                        let said: String = substring(line, 15, len(line) - 15);
+                        length = string_to_int(string_trim(said), 0);
+                    }
+                }
+            }
+        }
+    }
+    return length;
+}
+
+// Exactly `count` bytes, or fewer if the stream ends. Accumulated in CHUNKS: `text += one_byte`
+// copies the whole String on every byte, which is the mistake `lib/os.bx` records having paid for
+// three times, and a document is the biggest thing this server ever reads.
+function read_exact(count: Int) -> String touches input {
+    let mutable text: String = "";
+    let mutable chunk: String = "";
+    let mutable got: Int = 0;
+    while got < count {
+        let b: Int = os_read_byte();
+        if b < 0 {
+            return text + chunk;
+        }
+        chunk += byte_as_string(b);
+        if len(chunk) >= 4096 {
+            text = text + chunk;
+            chunk = "";
+        }
+        got += 1;
+    }
+    return text + chunk;
+}
+
+// ---- the version, which is READ and not written ------------------------------------------------
+//
+// **It said `0.1.0` while the released tag was `v0.2.0`, and a client LOGS this field** — so every bug
+// report about a diagnostic would have named the wrong version. The markup session found the identical
+// defect in theirs and told me to grep for it; the reason it survives is that its own test asserts the
+// serverInfo NAME, which is the half that never changes.
+//
+// `burxt.package` is the one place a version lives now, because **a version that is expensive to change
+// is a version that does not change** — theirs was in a filename and appeared in seven places.
+//
+// **Walked upward rather than counted.** This read `../../burxt.package`, and moving the file one
+// directory deeper — into the extension, so an install can find it — made that path a level short and
+// the server died on startup. A relative count is a dependency on where the file happens to sit;
+// walking up until the manifest appears is a dependency on the repository having one.
+//
+// **The `..` is appended and left for the kernel to resolve, which is the opposite of what the client
+// does.** `path.join` normalises `..` LEXICALLY, and that is the bug `client.js` records: a `..` from a
+// symlinked extension folder resolves outside it. A string handed to `fopen` is resolved by the
+// filesystem instead, so it follows the symlink the way a reader expects.
+pure function version_of(manifest: String) -> String allocates {
+    let rows: [String] = string_split(manifest, "\n");
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        if string_starts_with(rows[i], "version") {
+            let fields: [String] = string_split_space(rows[i]);
+            if len(fields) > 1 {
+                return fields[1];
+            }
+        }
+        i += 1;
+    }
+    return "";
+}
+
+// The directory a path names, or `.` when it names no directory at all — which is what `PATH` lookup
+// hands us in `os_arg(0)`, and the case that made the fallback below worth having.
+pure function directory_of(path: String) -> String {
+    let cut: Int = string_rfind(path, "/");
+    if cut < 0 { return "."; }
+    if cut == 0 { return "/"; }
+    return substring(path, 0, cut);
+}
+
+// Six levels up from wherever the binary is, which reaches the repository root from
+// `editors/vscode/server/` and reaches `editors/vscode/` from an installed extension — the staged copy
+// `pack.py` writes is there for exactly this read, and `tests/extension.py` holds it byte-identical to
+// the root one.
+//
+// **`0.0.0` when nothing is found, and it is a real answer rather than a crash.** A symlink install can
+// land the server where no parent holds a manifest; `tests/extension.py` exists because that shape
+// answered `0.0.0` and looked like it was working.
+function version_here() -> String touches files, input {
+    let argv0: String = os_arg(0);
+    let mutable base: String = directory_of(argv0);
+    if !contains(argv0, "/") {
+        // Invoked by bare name, so `PATH` found it and argv[0] says nothing about where it sits. The
+        // working directory is the only other place with a claim to the project.
+        match os_cwd() {
+            None => { base = "."; }
+            Some(here) => { base = here; }
+        }
+    }
+    let mutable up: Int = 0;
+    let mutable climb: String = "";
+    while up < 6 {
+        match file_read_maybe(base + climb + "/burxt.package") {
+            None => { }
+            Some(manifest) => {
+                let said: String = version_of(manifest);
+                if len(said) > 0 {
+                    return said;
+                }
+            }
+        }
+        climb = climb + "/..";
+        up += 1;
+    }
+    return "0.0.0";
+}
+
+// ---- what a diagnostic is ----------------------------------------------------------------------
+
+// One diagnostic, with its range already in the zero-based coordinates LSP uses. `code` is the empty
+// String when the layer that refused does not issue codes — the Burxt compiler does not — and the
+// field is then left out of the message rather than sent empty, because a client shows a code it is
+// given.
+class Note {
+    line: Int,
+    from: Int,
+    to: Int,
+    severity: Int,
+    source: String,
+    code: String,
+    message: String,
+}
+
+// A whole line, from a one-based line:column pair — or `width` characters of it.
+pure function note_at(text: String, line: Int, column: Int, width: Int,
+                      source: String, code: String, message: String) -> Note allocates {
+    let rows: [String] = string_split(text, "\n");
+    let mutable l: Int = line - 1;
+    if l < 0 { l = 0; }
+    let mutable c: Int = column - 1;
+    if c < 0 { c = 0; }
+    let mutable span: Int = width;
+    if span == WHOLE_LINE {
+        span = 1;
+        if l < len(rows) {
+            let rest: Int = len(rows[l]) - c;
+            if rest > span { span = rest; }
+        }
+    }
+    return Note { line: l, from: c, to: c + span,
+                  severity: SEVERITY_ERROR, source: source, code: code, message: message };
+}
+
+pure function note_json(note: Note) -> Json allocates {
+    let mutable start: [Field] = [];
+    let s1: Int = push(start, json_field("line", json_int(note.line)));
+    let s2: Int = push(start, json_field("character", json_int(note.from)));
+    let mutable end: [Field] = [];
+    let e1: Int = push(end, json_field("line", json_int(note.line)));
+    let e2: Int = push(end, json_field("character", json_int(note.to)));
+    let mutable span: [Field] = [];
+    let r1: Int = push(span, json_field("start", json_object(start)));
+    let r2: Int = push(span, json_field("end", json_object(end)));
+
+    let mutable fields: [Field] = [];
+    let f1: Int = push(fields, json_field("range", json_object(span)));
+    let f2: Int = push(fields, json_field("severity", json_int(note.severity)));
+    let f3: Int = push(fields, json_field("source", json_text(note.source)));
+    if len(note.code) > 0 {
+        let f4: Int = push(fields, json_field("code", json_text(note.code)));
+    }
+    let f5: Int = push(fields, json_field("message", json_text(note.message)));
+    return json_object(fields);
+}
+
+// ---- reading what the checker said, by hand -----------------------------------------------------
+//
+// **Matched by hand rather than by a regular expression, because Burxt has none.** That is a genuine
+// difference from the JavaScript and worth stating: the four patterns below were four `matchAll`
+// calls. Splitting on the separators the format actually uses is less clever and it refuses a
+// malformed line instead of half-matching one, which is the better failure for a reader whose only
+// evidence is a squiggle in the wrong place.
+//
+// The order of the passes is the order the diagnostics arrive in, and it is load-bearing: the driver
+// asserts on the FIRST diagnostic of a document, so a pass that moved would move the answer.
+
+// The one-based line and column in front of a code, from the `path:line:column` a checker prints.
+// `-1` when those two fields are not both numbers, which is how a path with a colon in it declines to
+// be read as a position.
+pure function column_in(head: String) -> Int {
+    let fields: [String] = string_split(head, ":");
+    if len(fields) < 3 { return -1; }
+    match string_parse_int(fields[len(fields) - 1]) {
+        None => { return -1; }
+        Some(column) => { return column; }
+    }
+}
+
+pure function line_in(head: String) -> Int {
+    let fields: [String] = string_split(head, ":");
+    if len(fields) < 3 { return -1; }
+    match string_parse_int(fields[len(fields) - 2]) {
+        None => { return -1; }
+        Some(line) => { return line; }
+    }
+}
+
+// `<path>:<line>:<column>: BMX-Ennn message` — BMX's own, already positioned, so it is trusted
+// exactly as printed.
+function collect_bmx(lines: [String], text: String, mutable out: [Note]) -> Int allocates {
+    let mutable i: Int = 0;
+    while i < len(lines) {
+        let line: String = lines[i];
+        let mark: Int = string_find(line, " BMX-E");
+        if mark > 0 && byte_at(line, mark - 1) == 58 {
+            let head: String = substring(line, 0, mark - 1);
+            let rest: String = substring(line, mark + 1, len(line) - mark - 1);
+            let gap: Int = string_find(rest, " ");
+            if gap > 0 {
+                let at_line: Int = line_in(head);
+                let at_column: Int = column_in(head);
+                if at_line > 0 && at_column > 0 {
+                    let code: String = substring(rest, 0, gap);
+                    let message: String = substring(rest, gap + 1, len(rest) - gap - 1);
+                    let a: Int = push(out, note_at(text, at_line, at_column, WHOLE_LINE,
+                                                   "star", code, message));
+                }
+            }
+        }
+        i += 1;
+    }
+    return len(out);
+}
+
+// `<path>: STAR-Ennn at <line>:<column>: message`, and `<path>: STAR-Ennn: message` for the refusals
+// that are about the whole document rather than a place in it, like a missing `props` block.
+//
+// `positioned` picks which of the two this pass is looking for. They are two passes rather than one
+// for the reason above: the JavaScript matched them with two expressions in this order, and a document
+// that produced both kinds would list them in that order.
+function collect_star(lines: [String], text: String, positioned: Bool, mutable out: [Note]) -> Int
+        allocates {
+    let mutable i: Int = 0;
+    while i < len(lines) {
+        let line: String = lines[i];
+        let mark: Int = string_find(line, " STAR-E");
+        if mark > 0 && byte_at(line, mark - 1) == 58 {
+            let rest: String = substring(line, mark + 1, len(line) - mark - 1);
+            // The code runs to whichever comes first, the space before `at` or the colon that ends an
+            // unpositioned refusal.
+            let gap: Int = string_find(rest, " ");
+            let colon: Int = string_find(rest, ":");
+            if positioned && gap > 0 && string_starts_with(substring(rest, gap, len(rest) - gap), " at ") {
+                let code: String = substring(rest, 0, gap);
+                let after: String = substring(rest, gap + 4, len(rest) - gap - 4);
+                let ends: Int = string_find(after, ": ");
+                if ends > 0 {
+                    // `4:1` — a bare position with no path in front of it, so `line_in` is given the
+                    // three fields it expects.
+                    let where: String = "at:" + substring(after, 0, ends);
+                    let message: String = substring(after, ends + 2, len(after) - ends - 2);
+                    let at_line: Int = line_in(where);
+                    let at_column: Int = column_in(where);
+                    if at_line > 0 && at_column > 0 {
+                        let a: Int = push(out, note_at(text, at_line, at_column, WHOLE_LINE,
+                                                       "star", code, message));
+                    }
+                }
+            }
+            // `colon + 2 <= len(rest)` is not decoration: a line ending in `STAR-E001:` with nothing
+            // after it would ask for a substring of length -1, and the checker printing a code with an
+            // empty message is exactly the malformed output a reader would be debugging when this ran.
+            if !positioned && colon > 0 && (gap < 0 || colon < gap) && colon + 2 <= len(rest) {
+                let code: String = substring(rest, 0, colon);
+                let message: String = substring(rest, colon + 2, len(rest) - colon - 2);
+                // Line 1, column 1: it is the document that is wrong, and pointing at a place in it
+                // would be inventing one.
+                let a: Int = push(out, note_at(text, 1, 1, WHOLE_LINE, "star", code, message));
+            }
+        }
+        i += 1;
+    }
+    return len(out);
+}
+
+// Where in the document a compiler error belongs.
+//
+// The compiler names the thing it objected to — `unknown variable: cuont` — and that name appears in
+// the document, in the slot or head the author wrote. Searching for it beats reporting line 1, and
+// says so when it is a guess.
+//
+// **Leftmost of the three spellings, not first-listed.** The JavaScript was one expression with three
+// alternatives, and a regular expression scans by POSITION: it takes whichever spelling appears
+// earliest in the message, preferring the backticks only on a tie. Reading the alternatives in order
+// instead would pick a backtick from the end of a message over a `unknown variable:` at its start, and
+// name the wrong expression.
+pure function needle_in(message: String) -> String {
+    let mutable best: Int = -1;
+    let mutable found: String = "";
+
+    let tick: Int = string_find(message, "`");
+    if tick >= 0 {
+        let close: Int = string_find_from(message, "`", tick + 1);
+        if close > tick + 1 {
+            best = tick;
+            found = substring(message, tick + 1, close - tick - 1);
+        }
+    }
+
+    let mutable which: Int = 0;
+    while which < 2 {
+        let mutable label: String = "unknown variable: ";
+        if which == 1 { label = "unknown field: "; }
+        let mark: Int = string_find(message, label);
+        if mark >= 0 && (best < 0 || mark < best) {
+            let after: String = substring(message, mark + len(label), len(message) - mark - len(label));
+            let stop: Int = string_find(after, " ");
+            best = mark;
+            if stop < 0 {
+                found = after;
+            } else {
+                found = substring(after, 0, stop);
+            }
+        }
+        which += 1;
+    }
+    return found;
+}
+
+// A type error, which points into the GENERATED component. The four lines are
+//
+//     error: <message>
+//      --> <generated path>:<line>:<column>
+//       |
+//     <n> | <the generated expression>
+//
+// **The generated line is read past and not used, and that was true of the JavaScript too.** It
+// captured the expression into a variable, passed it to the mapper as a third argument, and the mapper
+// never looked at it — the position comes from searching the SOURCE for the name in the message. A
+// parameter nothing reads is a claim that something is being used, so it is gone rather than threaded.
+function collect_types(lines: [String], text: String, mutable out: [Note]) -> Int allocates {
+    let mutable i: Int = 0;
+    while i + 3 < len(lines) {
+        let head: String = lines[i];
+        if string_starts_with(head, "error: ")
+                && string_starts_with(string_trim(lines[i + 1]), "-->")
+                && contains(lines[i + 3], " | ") {
+            let message: String = substring(head, 7, len(head) - 7);
+            let needle: String = needle_in(message);
+            let mutable at_line: Int = 1;
+            let mutable at_column: Int = 1;
+            let mutable width: Int = 1;
+            let mutable exact: Bool = false;
+            if len(needle) > 0 {
+                let index: Int = string_find(text, needle);
+                if index >= 0 {
+                    let before: String = substring(text, 0, index);
+                    at_line = string_count(before, "\n") + 1;
+                    at_column = index - string_rfind(before, "\n");
+                    width = len(needle);
+                    // Exact only when the expression appears ONCE. Twice and this is the first of
+                    // them, which is a guess and is labelled as one below.
+                    exact = string_find_from(text, needle, index + 1) < 0;
+                }
+            }
+            let mutable said: String = message;
+            if !exact {
+                said = message + "\n\n(position approximate — this is a type error in the generated "
+                    + "component, mapped back by searching for the expression)";
+            }
+            let a: Int = push(out, note_at(text, at_line, at_column, width, "burxt", "", said));
+        }
+        i += 1;
+    }
+    return len(out);
+}
+
+// Every diagnostic in what the checker said, in the order the driver asserts on.
+function diagnose(said: String, text: String, mutable out: [Note]) -> Int
+        allocates {
+    let lines: [String] = string_split(said, "\n");
+    let a: Int = collect_bmx(lines, text, out);
+    let b: Int = collect_star(lines, text, true, out);
+    let c: Int = collect_star(lines, text, false, out);
+    let d: Int = collect_types(lines, text, out);
+    return len(out);
+}
+
+// ---- running the real checker -------------------------------------------------------------------
+
+function publish(uri: String, notes: [Note]) -> Bool touches input {
+    let mutable listed: [Json] = [];
+    let mutable i: Int = 0;
+    while i < len(notes) {
+        let a: Int = push(listed, note_json(notes[i]));
+        i += 1;
+    }
+    let mutable params: [Field] = [];
+    let p1: Int = push(params, json_field("uri", json_text(uri)));
+    let p2: Int = push(params, json_field("diagnostics", json_list(listed)));
+    let mutable message: [Field] = [];
+    let m1: Int = push(message, json_field("jsonrpc", json_text("2.0")));
+    let m2: Int = push(message, json_field("method", json_text("textDocument/publishDiagnostics")));
+    let m3: Int = push(message, json_field("params", json_object(params)));
+    return send(json_object(message));
+}
+
+// Written to a file beside the real one, because `star-check` resolves component imports relative to
+// the document — so a page's `use "./Badge.sbmx"` has to be findable. The copy goes in the SAME
+// directory as the real file for exactly that reason; a temp directory would break every import.
+//
+// **The JavaScript made a `mkdtemp` scratch directory and never wrote a byte into it.** It appeared in
+// the ready line and nowhere else, advertising a mechanism the paragraph above exists to say this
+// server deliberately does not use. It is gone.
+//
+// **The checker is run through a shell, which the `spawnSync` it replaces was not**, so the path is
+// quoted with `file_quote`. A document whose name holds a space is the ordinary case that would
+// otherwise become two arguments.
+//
+// `os_capture_status` keeps the two streams APART, and they are concatenated stderr-first here to
+// match the order the JavaScript read them in: `star-check` prints refusals on stderr and its
+// `no problems` line on stdout, so a merge would put the reassurance in front of the refusal.
+function check(errors: CPointer, uri: String, text: String) -> Bool touches commands, files, input {
+    let real: String = string_strip_prefix(uri, "file://");
+    let mutable shadow: String = real + ".lsp.sbmx";
+    if string_ends_with(real, ".sbmx") {
+        shadow = substring(real, 0, len(real) - 5) + ".lsp.sbmx";
+    }
+    let wrote: Int = file_write(shadow, text);
+    if wrote < 0 {
+        let said: Bool = log(errors, "could not write the scratch copy at " + shadow);
+        return publish(uri, []);
+    }
+    let checker: String = os_env_or("STAR_CHECK", "star-check");
+    let ran: Capture = os_capture_status(checker + " " + file_quote(shadow));
+    let mutable notes: [Note] = [];
+    let counted: Int = diagnose(ran.errors + ran.output, text, notes);
+    let dropped: Bool = file_delete(shadow);
+    return publish(uri, notes);
+}
+
+// ---- the protocol, which is four messages and a header ------------------------------------------
+
+pure function text_of(message: Json, path: String) -> String {
+    match json_at(message, "params") {
+        None => { return ""; }
+        Some(params) => {
+            match json_at(params, "textDocument") {
+                None => { return ""; }
+                Some(document) => {
+                    match json_at(document, path) {
+                        None => { return ""; }
+                        Some(value) => {
+                            match json_as_text(value) {
+                                None => { return ""; }
+                                Some(said) => { return said; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// The text of the LAST content change. Sync is FULL (1), so the last change carries the whole
+// document — an incremental client would send a range with each edit and this would be wrong, which
+// is why the capability below says 1 rather than 2.
+pure function changed_text(message: Json) -> String {
+    match json_at(message, "params") {
+        None => { return ""; }
+        Some(params) => {
+            match json_at(params, "contentChanges") {
+                None => { return ""; }
+                Some(changes) => {
+                    match changes {
+                        List(items) => {
+                            if len(items) == 0 { return ""; }
+                            match json_at(items[len(items) - 1], "text") {
+                                None => { return ""; }
+                                Some(value) => {
+                                    match json_as_text(value) {
+                                        None => { return ""; }
+                                        Some(said) => { return said; }
+                                    }
+                                }
+                            }
+                        }
+                        Truth(ignored) => { return ""; }
+                        Number(ignored) => { return ""; }
+                        Text(ignored) => { return ""; }
+                        Object(ignored) => { return ""; }
+                        Null => { return ""; }
+                    }
+                }
+            }
+        }
+    }
+}
+
+pure function method_of(message: Json) -> String {
+    match json_at(message, "method") {
+        None => { return ""; }
+        Some(value) => {
+            match json_as_text(value) {
+                None => { return ""; }
+                Some(said) => { return said; }
+            }
+        }
+    }
+}
+
+// The request's `id`, echoed back exactly as it arrived. A String id is as legal as a number one, so
+// the Json value travels rather than an Int parsed out of it — a client that sent `"id": "7"` and got
+// `7` back has no reply to the request it made.
+pure function id_of(message: Json) -> Json {
+    match json_at(message, "id") {
+        None => { return json_null(); }
+        Some(value) => { return value; }
+    }
+}
+
+// **Diagnostics only, and each omission has a reason.** No formatting: reflowing a block head means
+// deciding what it means, and that is the document's business. No completion yet: it needs the element
+// vocabulary and the imported components, which star knows and this server does not ask for yet.
+function answer_initialize(id: Json, version: String) -> Bool touches input {
+    let mutable diagnostic: [Field] = [];
+    let d1: Int = push(diagnostic, json_field("interFileDependencies", json_truth(true)));
+    let d2: Int = push(diagnostic, json_field("workspaceDiagnostics", json_truth(false)));
+    let mutable capabilities: [Field] = [];
+    let c1: Int = push(capabilities, json_field("textDocumentSync", json_int(1)));
+    let c2: Int = push(capabilities, json_field("diagnosticProvider", json_object(diagnostic)));
+    let mutable info: [Field] = [];
+    let i1: Int = push(info, json_field("name", json_text("star-lsp")));
+    let i2: Int = push(info, json_field("version", json_text(version)));
+    let mutable result: [Field] = [];
+    let r1: Int = push(result, json_field("capabilities", json_object(capabilities)));
+    let r2: Int = push(result, json_field("serverInfo", json_object(info)));
+    let mutable message: [Field] = [];
+    let m1: Int = push(message, json_field("jsonrpc", json_text("2.0")));
+    let m2: Int = push(message, json_field("id", id));
+    let m3: Int = push(message, json_field("result", json_object(result)));
+    return send(json_object(message));
+}
+
+function answer_shutdown(id: Json) -> Bool touches input {
+    let mutable message: [Field] = [];
+    let m1: Int = push(message, json_field("jsonrpc", json_text("2.0")));
+    let m2: Int = push(message, json_field("id", id));
+    let m3: Int = push(message, json_field("result", json_null()));
+    return send(json_object(message));
+}
+
+// One message, answered. `false` means stop reading, which only `exit` asks for.
+//
+// **A method this server does not implement is IGNORED, not refused.** A client sends
+// `workspace/didChangeConfiguration` and half a dozen others whether or not anybody asked; answering
+// them with an error turns a working editor into a wall of notifications.
+function handle(errors: CPointer, version: String, body: String) -> Bool
+        touches commands, files, input {
+    match json_parse(body) {
+        Error(why) => {
+            let said: Bool = log(errors, "bad message: " + why);
+            return true;
+        }
+        Ok(message) => {
+            let method: String = method_of(message);
+            if method == "initialize" {
+                return answer_initialize(id_of(message), version);
+            }
+            if method == "shutdown" {
+                return answer_shutdown(id_of(message));
+            }
+            if method == "exit" {
+                return false;
+            }
+            if method == "textDocument/didOpen" {
+                return check(errors, text_of(message, "uri"), text_of(message, "text"));
+            }
+            if method == "textDocument/didChange" {
+                return check(errors, text_of(message, "uri"), changed_text(message));
+            }
+            if method == "textDocument/didClose" {
+                // Nothing is remembered per document, so closing one is only the squiggles going
+                // away. **The JavaScript kept a `Map` of open documents and never read it** — written
+                // on open, deleted on close, consulted nowhere. State that nothing reads is state that
+                // cannot be wrong and cannot be right, so it is not here.
+                return publish(text_of(message, "uri"), []);
+            }
+            return true;
+        }
+    }
+}
+
+// ---- the gap this port carries, named rather than left to be discovered -------------------------
+//
+// **BMX's four structural warnings are ABSENT here, and the reason is not that they were hard.** The
+// JavaScript server imported `lint` from `.burxt/packages/*/reference/bmx.js` and merged BMX-W001,
+// W002, W003 and W005 in beside star's errors at severity 2. BMX's own Burxt implementation —
+// `bmx/burxt/bmx.bx`, 1,850 lines, pinned at `burxt-0.12.1` in `burxt.package` — has the parser
+// (`bmx_parse`, `bmx_check`, `bmx_where`) and **no lint at all**: the four rules exist only in
+// `reference/bmx.js`, where `tests/lints.mjs` tests them.
+//
+// So there were three ways to keep the warnings and all three are worse than losing them:
+//
+//   * spawn `node` to run the lint — which reinstates the exact dependency this port removes, and
+//     makes the whole file argue against itself;
+//   * reimplement the four rules here — a second opinion in the one file whose header says a second
+//     opinion is the one that would be wrong, and the reason the three ERROR layers all come from
+//     `star-check`. BMX's own comments record W002 and W005 each having been too broad once and
+//     flagging correct code; a copy of a rule that has already been corrected twice upstream is a copy
+//     that will be wrong in a way nobody here can see;
+//   * hold the whole port back for a lint — which leaves `node` on the requirement list to deliver
+//     four warnings that, by their own rule, may never fail a build.
+//
+// **This is `blocked`, not `gap`, in `tools/languages.bx`'s taxonomy: one named thing has to exist.**
+// `bmx_lint(source) -> [BmxWarning]` in `bmx/burxt/bmx.bx`, roughly 150 lines over a tree `bmx_parse`
+// already returns, and this server imports it the way it imports everything else. The half that comes
+// back with it is the one measured line of it that lived HERE rather than upstream: the markup is
+// linted with its `===` sections blanked SPACE FOR SPACE rather than removed, so `### Three` on the
+// eleventh line of a document is reported on the eleventh line and not shifted up by however long the
+// `===bx` section above it is. That rule cost a bug to learn and is written down here so it does not
+// have to be learned again.
+//
+// It is said on startup rather than only in this comment, because a warning that silently stopped
+// appearing is the failure shape `loadLint` already had in the JavaScript — it logged
+// `BMX lint not found under .burxt/packages — warnings will be absent` for the same reason.
+
+let errors: CPointer = fdopen(2, "w");
+let version: String = version_here();
+let checker: String = os_env_or("STAR_CHECK", "star-check");
+
+let ready: Bool = log(errors, "ready (checker: " + checker + ", version: " + version + ")");
+let absent: Bool = log(errors,
+    "BMX's structural warnings are absent: its Burxt implementation has no lint, only "
+    + "reference/bmx.js does. Errors are unaffected — all three layers come from the checker.");
+
+// Frame after frame until the stream ends or `exit` arrives. A length of -1 is end of input, which is
+// what an editor being closed looks like from in here.
+let mutable running: Bool = true;
+while running {
+    let length: Int = read_length();
+    if length < 0 {
+        running = false;
+    } else {
+        running = handle(errors, version, read_exact(length));
+    }
+}

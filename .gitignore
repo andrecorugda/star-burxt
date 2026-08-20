@@ -34,3 +34,4 @@ star-pack
 # Python leaves these behind; nothing here should be tracking them.
 __pycache__/
 star-docs
+star-partition
