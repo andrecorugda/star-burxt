@@ -1,4 +1,5 @@
 #!/bin/sh
+# not-burxt: platform — the runner that executes before any Burxt binary in this repository has been built, so it cannot be one of them
 # Everything CI runs, in one command, with `pipefail` — which is the point of the file.
 #
 # **A pipeline's exit status is the LAST command's, so `python3 test.py | tail -1` reports whether
@@ -99,6 +100,8 @@ run "the packaged extension, every install shape" bash -c '
   python3 tests/extension.py && python3 tests/extension.py --prove-it'
 run "star used as a dependency, from outside" bash -c '
   python3 tests/consuming.py && python3 tests/consuming.py --prove-it'
+run "every line that is not Burxt says why" bash -c '
+  ./star-languages && ./star-languages --prove-it'
 # **A check that REGENERATES the artefact it is verifying cannot see a stale one**, and this line said
 # "the showcase is current" while quietly making it current. CI had it right — generate, then `git diff`
 # — and the local runner did not, so a stale `showcase.html` could be committed and every local run would

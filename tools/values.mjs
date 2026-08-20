@@ -1,3 +1,4 @@
+// not-burxt: platform — mounts a component and reads an event's value
 // What a component RECEIVES from an event, one channel at a time.
 //
 //     node tools/values.mjs <echo.wasm>

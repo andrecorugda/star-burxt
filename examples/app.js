@@ -1,3 +1,4 @@
+// not-burxt: platform — the browser driver: a wasm module cannot supply its own imports and a page has no entry point that is not JavaScript
 // star-burxt's driver: the part JavaScript has to do, and nothing else.
 //
 // **This file holds no application logic.** Copy it once per project and leave it alone.

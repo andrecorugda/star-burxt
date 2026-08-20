@@ -1,3 +1,4 @@
+// not-burxt: platform — reads and writes the address bar
 // star-burxt's router — the half of a single-page app that JavaScript has to do.
 //
 // **A path is a String, and a String crosses the wasm boundary.** So routing needs nothing the

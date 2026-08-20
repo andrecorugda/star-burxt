@@ -1,3 +1,4 @@
+// not-burxt: platform — compares a server-rendered fragment with the browser's
 // Does the server's HTML match what the browser renders?
 //
 //     node tools/hydrates.mjs <component.wasm> <name> <served.html> [state-json]

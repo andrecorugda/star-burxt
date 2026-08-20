@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# not-burxt: gap — walks docs/, generates and compiles each example; nothing here needs Python and README.md has said so for a while
 """Every `.sbmx` example on the site is generated, so the book cannot teach something that is refused.
 
 **A tutorial that teaches a thing the tool rejects is worse than no tutorial**, because the reader

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# not-burxt: gap — walks files and matches strings
 """Every git ref the documentation tells a reader to depend on must exist.
 
     python3 tools/refs.py

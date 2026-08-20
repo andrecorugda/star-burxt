@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# not-burxt: gap — runs the generator and compares its output — subprocess, files and strings, all of which lib/os.bx and lib/files.bx already do
 """star-burxt's guarantee test.
 
 **This is the whole claim, and it is a claim about REFUSALS.** A `.sbmx` component becomes Burxt

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// not-burxt: gap — JSON-RPC over stdio, which Burxt can do; it is Node because the extension spawns node, and porting it costs the documented promise that an editor needs nothing but Node installed
 // star-lsp — diagnostics for `.sbmx`, over JSON-RPC on stdio. No dependencies.
 //
 //     node star-lsp.mjs            (an editor spawns it; it is not run by hand)

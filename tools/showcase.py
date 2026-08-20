@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# not-burxt: gap — turns a component into the landing page's panel — file in, file out
 """The landing page's showcase: a real screenshot in a browser window, beside the markup that made it.
 
     python3 tools/showcase.py        # -> docs/_includes/showcase.html

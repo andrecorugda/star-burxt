@@ -1,3 +1,4 @@
+// not-burxt: platform — instantiates the real wasm in a JS host
 // The driver, exercised against a real WebAssembly module with no browser.
 //
 // **This is the test that would have caught `__multi3`.** A component that round-trips perfectly

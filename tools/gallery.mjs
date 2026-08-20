@@ -1,3 +1,4 @@
+// not-burxt: platform — drives a real browser mounting real wasm, and captures it
 // Every example, captured running, beside the markup that made it.
 //
 //     node tools/gallery.mjs            # -> docs/assets/gallery/*.png and docs/_includes/gallery.html

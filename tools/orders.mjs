@@ -1,3 +1,4 @@
+// not-burxt: platform — mounts a keyed list and reads the DOM order back
 // Does a keyed list end up in the order the view asked for?
 //
 //     node tools/orders.mjs

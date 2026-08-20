@@ -1,3 +1,4 @@
+// not-burxt: platform — mounts a component in a JS host
 // Does this component mount, and does clicking it change the page?
 //
 //     node tools/mounts.mjs <component.wasm> <name>

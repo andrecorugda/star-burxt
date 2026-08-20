@@ -1,3 +1,4 @@
+// not-burxt: platform — loads and runs code.js, which is itself a browser script
 // `code.js` colours a `.sbmx` snippet — checked, rather than eyeballed once.
 //
 //     node tools/paints.mjs

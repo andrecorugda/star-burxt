@@ -1,3 +1,4 @@
+// not-burxt: gap — speaks the protocol to the server over stdio; portable, and paired with the server above so both move together or neither does
 // The language server, spoken to over JSON-RPC exactly as an editor would.
 //
 // **A server tested only by opening an editor is a server whose protocol handling is a guess.** This

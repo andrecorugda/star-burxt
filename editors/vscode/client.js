@@ -1,3 +1,4 @@
+// not-burxt: platform — VS Code's extension API is JavaScript and cannot be anything else
 // The thinnest client that will do: spawn the server, pipe it, let it publish diagnostics.
 //
 // **No `vscode-languageclient` dependency.** That package is the normal answer and it would be the

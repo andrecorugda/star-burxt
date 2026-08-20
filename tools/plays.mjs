@@ -1,3 +1,4 @@
+// not-burxt: platform — plays the game through the driver
 // Play the game, and assert the board.
 //
 //     node tools/plays.mjs <snake.wasm>

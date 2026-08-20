@@ -1,3 +1,4 @@
+// not-burxt: platform — greps a linked wasm module for symbols the browser build must not contain
 // **Server code cannot reach the browser, and this is the proof rather than the claim.**
 //
 // Every meta-framework has a server/client boundary held up by a bundler convention. Here it is a

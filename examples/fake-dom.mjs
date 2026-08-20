@@ -1,3 +1,4 @@
+// not-burxt: platform — stands in for a DOM so the driver can be exercised headless
 // The three methods the driver touches, and nothing else.
 //
 // **Shared by every driver test, because two copies drifted.** `drive.mjs` was written before the

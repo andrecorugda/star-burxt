@@ -1,3 +1,4 @@
+// not-burxt: platform — patches the DOM, which only a JS engine can touch
 // star-burxt's DOM reconciler.
 //
 // This is the one place in the driver that does more than hand bytes over, and it

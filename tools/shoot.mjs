@@ -1,3 +1,4 @@
+// not-burxt: platform — drives a real browser
 // Screenshot a running component, for the site's showcase.
 //
 // **A real screenshot rather than a drawn mock-up.** The landing page claims a document becomes an

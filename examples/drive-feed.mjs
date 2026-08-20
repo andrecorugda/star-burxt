@@ -1,3 +1,4 @@
+// not-burxt: platform — instantiates the real wasm in a JS host
 // Commands and subscriptions, against a real WebAssembly module.
 //
 // **This is the only place the async story is checked**, and it has to be here rather than in

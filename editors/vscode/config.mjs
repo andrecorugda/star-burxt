@@ -1,3 +1,4 @@
+// not-burxt: blocked — asserts the icons' ink fraction, which means inflating a PNG — needs zlib before it needs anything else
 // `language-configuration.json` decides how the editor BEHAVES, and nothing tested it.
 //
 //     node editors/vscode/config.mjs

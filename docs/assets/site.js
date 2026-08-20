@@ -1,3 +1,4 @@
+// not-burxt: vendored — a byte copy of burxt-lang.org's, so the three sites are one site — re-copied when it changes there, never edited here
 /* The site's behaviour, all of it. No framework, no build step, no dependency.
  *
  * Six jobs:

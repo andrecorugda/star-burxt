@@ -1,3 +1,4 @@
+// not-burxt: platform — a wasm host for the handle experiment
 // The host-side half of M17's handle suite — the refusals a HOST can reach and Burxt cannot.
 //
 //     node tools/m17/handles-host.mjs <handles.wasm>

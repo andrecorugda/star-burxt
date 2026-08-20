@@ -1,3 +1,4 @@
+// not-burxt: platform — instantiates wasm and checks what a server receives
 // What a SERVER receives when a component saves something.
 //
 //     node tools/posts.mjs <poster.wasm>

@@ -1,3 +1,4 @@
+// not-burxt: platform — progressive enhancement for the gallery strip, which works with no script at all
 // The gallery strip's arrows, keyboard and counter.
 //
 // **An enhancement, not the mechanism.** The strip is a `scroll-snap` container, so it drags, swipes and

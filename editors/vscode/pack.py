@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# not-burxt: blocked — writes the .vsix, and a .vsix is a ZIP — Burxt has no std/zip.bx, stored-only would be enough, and the same addition unblocks the packer in all three repositories
 """Package the extension as a .vsix, with no toolchain.
 
     python3 editors/vscode/pack.py

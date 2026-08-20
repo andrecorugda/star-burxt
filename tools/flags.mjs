@@ -1,3 +1,4 @@
+// not-burxt: platform — checks the driver's own option handling
 // Does a form show its own state?
 //
 //     node tools/flags.mjs <choices-render>

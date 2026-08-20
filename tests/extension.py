@@ -1,3 +1,4 @@
+# not-burxt: blocked — reads that ZIP back to check the artefact is what the packer writes; same std/zip.bx
 """The packaged extension: the version it declares, the bytes it is made of, and what it answers in
 every way it is installed.
 

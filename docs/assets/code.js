@@ -1,3 +1,4 @@
+// not-burxt: platform — colours code blocks in the reader's browser; Rouge knows neither language. Burxt reaches a browser through wasm now, so this is a weaker claim than it was and is worth revisiting
 // Colour `burxt` and `bmx` code blocks on a Jekyll site.
 //
 // **Why this exists rather than a Rouge lexer.** Rouge is Jekyll's highlighter and it knows neither

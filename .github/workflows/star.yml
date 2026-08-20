@@ -218,6 +218,17 @@ jobs:
           python3 tests/consuming.py
           python3 tests/consuming.py --prove-it
 
+      # **The ledger, not a cap.** Every non-Burxt file declares why it is not, in its own first twenty
+      # lines, and this fails on one that declares none. A prose audit goes stale the moment somebody
+      # adds a file; a threshold is a number somebody raises when it is inconvenient. The rule is to
+      # know what the number is, and which column it sits in.
+      - name: Every line that is not Burxt says why
+        run: |
+          set -eux
+          burxt build tools/languages.bx -o star-languages
+          ./star-languages
+          ./star-languages --prove-it
+
       - name: A .sbmx document becomes a component the compiler judges
         run: python3 test.py
 

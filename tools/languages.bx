@@ -1,0 +1,192 @@
+// Every line in this repository that is not Burxt, with the reason it is not.
+//
+//     burxt build tools/languages.bx -o star-languages
+//     ./star-languages
+//     ./star-languages --prove-it     # the negative control
+//
+// **This exists because the repository surface is what people judge, and it was judging us wrongly.**
+// Andre's friends read the tree, saw Python and JavaScript, and concluded the language was not ready —
+// a conclusion drawn from a directory listing rather than from the 62,749 lines of Burxt that compile
+// themselves one repository over. The count was never the problem. The silence was.
+//
+// So every non-Burxt file declares `not-burxt: <category> <reason>` in its own first twenty lines, and
+// this refuses a file that declares none. **A prose audit goes stale the moment somebody adds a file;
+// a rule that each file carries cannot.** The mechanism is the markup session's, adopted rather than
+// reinvented, and their argument against a threshold is the one worth keeping: a cap is a number
+// somebody raises when it is inconvenient, so this prints the total and caps nothing. The rule is
+// *know what it is*.
+//
+// **And it is written in Burxt, which is not a flourish.** A Python program auditing Python would be
+// the joke about itself, and it would also be one more line in its own `gap` column.
+//
+// The categories, in descending order of how much they can move:
+//
+//   gap        could be Burxt today and is not. The debt. Name it, do not defend it.
+//   blocked    could be Burxt once one named thing exists. A stdlib request with a line count.
+//   platform   a browser or a wasm module supplies it; no language avoids this boundary.
+//   vendored   a byte copy of somebody else's file, which must not be edited at all.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+
+const MARKER: String = "not-burxt:";
+// A `const` may name a literal and `[String]` has none, so the categories are built by a function —
+// which every other function can then read, unlike a top-level `let`.
+pure function categories() -> [String] allocates {
+    let mutable out: [String] = [];
+    let a: Int = push(out, "gap");
+    let b: Int = push(out, "blocked");
+    let c: Int = push(out, "platform");
+    let d: Int = push(out, "vendored");
+    return out;
+}
+
+// Directories whose contents are not this repository's to account for.
+pure function skipped(path: String) -> Bool {
+    return mentions(path, "/.git/") || mentions(path, "/.burxt/")
+        || mentions(path, "/node_modules/") || mentions(path, "/__pycache__/")
+        || mentions(path, "/target/");
+}
+
+pure function is_source(path: String) -> Bool {
+    return string_ends_with(path, ".py") || string_ends_with(path, ".js") || string_ends_with(path, ".mjs")
+        || string_ends_with(path, ".sh") || string_ends_with(path, ".rs") || string_ends_with(path, ".ts");
+}
+
+pure function mentions(haystack: String, needle: String) -> Bool {
+    if len(needle) == 0 { return true; }
+    let mutable i: Int = 0;
+    while i + len(needle) <= len(haystack) {
+        if substring(haystack, i, len(needle)) == needle { return true; }
+        i += 1;
+    }
+    return false;
+}
+
+// A line with its comment leader removed: `//`, `#`, and the spaces around them. Whitespace-only
+// trimming is what `string_trim_start` does, so the leaders come off by hand.
+pure function uncommented(line: String) -> String {
+    let mutable s: String = string_trim(line);
+    let mutable going: Bool = true;
+    while going {
+        going = false;
+        if string_starts_with(s, "//") { s = substring(s, 2, len(s) - 2); going = true; }
+        if string_starts_with(s, "#") { s = substring(s, 1, len(s) - 1); going = true; }
+        let trimmed: String = string_trim_start(s);
+        if len(trimmed) != len(s) { s = trimmed; going = true; }
+    }
+    return s;
+}
+
+// The declaration, read from the first twenty lines only — a reason buried at the bottom of a file is
+// a reason nobody reads.
+pure function declared(text: String) -> String {
+    let rows: [String] = string_split(text, "\n");
+    let mutable i: Int = 0;
+    while i < len(rows) && i < 20 {
+        // **The declaration must OPEN its line, after nothing but a comment leader.** The markup
+        // session found the hole: a file that merely mentions the marker — a checker documenting its
+        // own rule, say — would opt itself out by talking about it. So a mention cannot masquerade as
+        // a declaration.
+        let bare: String = uncommented(rows[i]);
+        if string_starts_with(bare, MARKER) {
+            return string_trim(substring(bare, len(MARKER), len(bare) - len(MARKER)));
+        }
+        i += 1;
+    }
+    return "";
+}
+
+pure function category_of(claim: String) -> String {
+    let mutable c: Int = 0;
+    while c < len(categories()) {
+        if string_starts_with(claim, categories()[c]) { return categories()[c]; }
+        c += 1;
+    }
+    return "";
+}
+
+pure function line_count(text: String) -> Int {
+    return len(string_split(text, "\n"));
+}
+
+let prove: Bool = os_arg_count() > 1 && os_arg(1) == "--prove-it";
+
+let mutable failures: [String] = [];
+let mutable burxt_lines: Int = 0;
+let mutable other_lines: Int = 0;
+let mutable totals: [Int] = [0, 0, 0, 0];
+
+match file_walk(".") {
+    None => {
+        print_error("cannot walk this directory");
+        exit(2);
+    }
+    Some(paths) => {
+        let mutable p: Int = 0;
+        while p < len(paths) {
+            let path: String = paths[p];
+            if !skipped(path) {
+                if string_ends_with(path, ".bx") {
+                    burxt_lines += line_count(file_read(path));
+                }
+                if is_source(path) {
+                    let text: String = file_read(path);
+                    let count: Int = line_count(text);
+                    other_lines += count;
+                    let mutable claim: String = declared(text);
+                    // The control is the defect exactly as it arrives: somebody adds a file and says
+                    // nothing about why it is not Burxt.
+                    if prove && string_ends_with(path, "tools/paints.mjs") { claim = ""; }
+                    let group: String = category_of(claim);
+                    if len(group) == 0 {
+                        let x: Int = push(failures, path + " is not Burxt and does not say why."
+                            + " Put `not-burxt: <gap|blocked|platform|vendored> <reason>` in its first"
+                            + " twenty lines. An unaccounted line is what makes a reader decide the"
+                            + " language could not do it.");
+                    } else {
+                        let mutable c: Int = 0;
+                        while c < len(categories()) {
+                            if categories()[c] == group { totals[c] = totals[c] + count; }
+                            c += 1;
+                        }
+                    }
+                }
+            }
+            p += 1;
+        }
+    }
+}
+
+print(to_string(burxt_lines) + " lines of Burxt; " + to_string(other_lines) + " not");
+let mutable c: Int = 0;
+while c < len(categories()) {
+    if totals[c] > 0 {
+        print("  " + string_pad_end(categories()[c], 10, " ") + string_pad_start(to_string(totals[c]), 6, " "));
+    }
+    c += 1;
+}
+
+if len(failures) > 0 {
+    print("");
+    let mutable f: Int = 0;
+    while f < len(failures) {
+        print("  FAIL  " + failures[f]);
+        f += 1;
+    }
+}
+
+print("");
+if prove {
+    if len(failures) > 0 {
+        print("the control failed as it must — a file that is not Burxt and does not say why is caught");
+        exit(0);
+    }
+    print("THE CONTROL DID NOT FAIL, so this check cannot see the defect it exists for");
+    exit(1);
+}
+if len(failures) > 0 {
+    print(to_string(len(failures)) + " file(s) not Burxt and not accounted for");
+    exit(1);
+}
+print("every line that is not Burxt says why, and `gap` is the only column that should move");

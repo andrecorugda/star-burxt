@@ -1,3 +1,4 @@
+# not-burxt: gap — builds a component from a temp directory with the tools on PATH
 """star used the way a consumer uses it: from somewhere else, with the commands only on `PATH`.
 
     python3 tests/consuming.py
