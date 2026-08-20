@@ -171,6 +171,36 @@ match file_walk(".") {
     }
 }
 
+// ---- and a source file that git cannot see -------------------------------------------------------
+//
+// **`.gitignore`'s own comment predicted this and nothing enforced it.** `examples/*.bx` ignores the
+// components generated beside their `.sbmx`, and the three tool sources that live there are named back
+// in one at a time. A fourth arrived — `prove-partition.bx`, written, built, and verified against the
+// JavaScript it replaced on success AND on failure — was committed with `git add -A`, and was silently
+// not added. `main` went red on `cannot read examples/prove-partition.bx`, and the comment four lines
+// above the rule had already described the outcome: *"a new source file that is silently untracked is
+// the worst shape this can take: it builds locally forever and CI has never seen it."*
+//
+// **A generated component announces itself** — `// GENERATED from … by star-burxt. Do not edit.` — so an
+// ignored `.bx` without that first line is a source nobody can build but the person who wrote it. That
+// distinction is what makes this checkable rather than a list of exceptions to maintain.
+let ignored: Capture = os_capture_status("git ls-files --others --ignored --exclude-standard -- '*.bx'");
+let hidden: [String] = string_lines(ignored.output);
+let mutable h: Int = 0;
+while h < len(hidden) {
+    let path: String = string_trim(hidden[h]);
+    if len(path) > 0 && string_ends_with(path, ".bx") && !skipped("./" + path) {
+        let first: String = file_read(path);
+        if !string_starts_with(first, "// GENERATED") {
+            let x: Int = push(failures, path + " is a Burxt SOURCE that git ignores, so it builds here"
+                + " and does not exist for anybody else. Name it back in beside the other"
+                + " `!examples/…` lines — a generated component says `// GENERATED` on its first line"
+                + " and this one does not");
+        }
+    }
+    h += 1;
+}
+
 print(to_string(burxt_lines) + " lines of Burxt; " + to_string(other_lines) + " not");
 let mutable c: Int = 0;
 while c < len(categories()) {

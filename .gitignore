@@ -20,6 +20,13 @@ examples/*.bx
 !examples/generate.bx
 !examples/check.bx
 !examples/build.bx
+# **Added after this rule's own warning came true.** `prove-partition.bx` was written, built, verified
+# against the JavaScript it replaced on both success and failure, committed with `git add -A` — and
+# silently not added, because `examples/*.bx` swallowed it and nothing names it back in. `main` went red
+# on `cannot read examples/prove-partition.bx`, and the comment four lines above had described exactly
+# that outcome: *"a new source file that is silently untracked is the worst shape this can take: it
+# builds locally forever and CI has never seen it."*
+!examples/prove-partition.bx
 examples/*.check.bx
 examples/*.css
 examples/*.o

@@ -1,0 +1,220 @@
+// **Server code cannot reach the browser, and this is the proof rather than the claim.**
+//
+//     burxt build examples/prove-partition.bx -o star-partition
+//     ./star-partition <object.o> <module.wasm>
+//
+// Every meta-framework has a server/client boundary held up by a bundler convention. Here it is a
+// signature: `load` may `touches network`, a view is `pure`, and the compiler refuses a pure function
+// that calls an impure one — so a page cannot fetch while it renders, and the client's entry points
+// never reach `load`.
+//
+// What that buys is checkable, and this checks it:
+//
+//   1. the secret in `load` is in the wasm OBJECT      — the compiler emitted it
+//   2. it is NOT in the linked client module           — the linker dropped it
+//   3. the client module does not import the network call it makes
+//
+// **Step 1 is the control and it is the point.** Without it, "the secret is absent" would also be true
+// of a grep that could never find anything — which is how a check passes for the wrong reason.
+//
+// ---- and it was filed as `platform`, wrongly ------------------------------------------------------
+//
+// This was `prove-partition.mjs`, declared `platform` on the grounds that it reads a wasm module. That
+// reasoning was wrong and the ledger was sheltering it: the file never RUNS a module. It searches bytes
+// for a string, and it reads the import section — and `tests/consuming.bx` already parses the export
+// section by hand, which is the same walk one section id away. A category that cannot be challenged is
+// a category that hides things, so `platform` should shrink under scrutiny rather than sit there.
+//
+// What genuinely stays `platform` in this repository is the drivers that INSTANTIATE a component:
+// Burxt compiles *to* wasm and has no runtime for it, so mounting a module needs a browser or Node.
+// Reading one does not.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+
+const SECRET: String = "hunter2-should-never-reach-a-browser";
+const NETWORK_CALL: String = "db_lookup";
+
+// Does this file contain those bytes anywhere?
+//
+// **Read as BYTES, not as text, and the runtime insisted.** `file_read` on a wasm object refuses with
+// *"read_file handed back bytes that are not valid UTF-8, at byte 9 — a Burxt String is UTF-8, so this
+// is refused where it enters rather than becoming a wrong answer later. For data that is not text, read
+// it as bytes."* Byte 9 is inside the version word. That refusal is the language doing exactly what it
+// claims: `Buffer.includes` would have searched the same object happily and a mangled decode would have
+// been somebody else's bug later.
+function holds(path: String, needle: String) -> Bool touches files {
+    match file_read_bytes(path) {
+        None => { return false; }
+        Some(bytes) => {
+            let width: Int = len(needle);
+            if width == 0 { return true; }
+            let first: Int = byte_at(needle, 0);
+            let mutable i: Int = 0;
+            while i + width <= len(bytes) {
+                if bytes[i] == first {
+                    let mutable j: Int = 1;
+                    while j < width && bytes[i + j] == byte_at(needle, j) { j += 1; }
+                    if j == width { return true; }
+                }
+                i += 1;
+            }
+            return false;
+        }
+    }
+}
+
+// LEB128, unsigned: the length prefix wasm uses everywhere. Answers the value and the offset after it.
+pure function leb(bytes: [Int], at: Int) -> (Int, Int) {
+    let mutable value: Int = 0;
+    let mutable shift: Int = 0;
+    let mutable i: Int = at;
+    while i < len(bytes) {
+        let byte: Int = bytes[i];
+        value = value + bit_and(byte, 127) * pow_two(shift);
+        i += 1;
+        if bit_and(byte, 128) == 0 { return (value, i); }
+        shift += 7;
+    }
+    return (value, i);
+}
+
+// `shift_left` exists, but the accumulator above wants a multiplier rather than a shifted operand.
+pure function pow_two(shift: Int) -> Int {
+    let mutable out: Int = 1;
+    let mutable i: Int = 0;
+    while i < shift {
+        out = out * 2;
+        i += 1;
+    }
+    return out;
+}
+
+pure function name_at(bytes: [Int], at: Int, count: Int) -> String allocates {
+    let mutable out: String = "";
+    let mutable i: Int = 0;
+    while i < count && at + i < len(bytes) {
+        out = out + byte_as_string(bytes[at + i]);
+        i += 1;
+    }
+    return out;
+}
+
+// Every name a module IMPORTS. Section id 2 is the import section: a count, then per entry a module
+// name, a field name, a kind byte, and the kind's index.
+//
+// **Read rather than executed, which is the whole reason this file could stop being JavaScript.** The
+// sibling walk over section 7 in `tests/consuming.bx` was cross-checked against
+// `WebAssembly.Module.exports` on six real modules and agreed on every name and their order; this is
+// that walk, one id along.
+function wasm_imports(path: String) -> [String] allocates touches files {
+    let mutable found: [String] = [];
+    match file_read_bytes(path) {
+        None => { return found; }
+        Some(bytes) => {
+            if len(bytes) < 8 { return found; }
+            let mutable at: Int = 8;                    // past the magic word and the version
+            while at < len(bytes) {
+                let id: Int = bytes[at];
+                let sized: (Int, Int) = leb(bytes, at + 1);
+                let size: Int = sized.0;
+                let body: Int = sized.1;
+                if id == 2 {
+                    let counted: (Int, Int) = leb(bytes, body);
+                    let mutable entries: Int = counted.0;
+                    let mutable p: Int = counted.1;
+                    while entries > 0 && p < len(bytes) {
+                        let m: (Int, Int) = leb(bytes, p);       // module name length
+                        p = m.1 + m.0;
+                        let f: (Int, Int) = leb(bytes, p);       // field name length
+                        let field: String = name_at(bytes, f.1, f.0);
+                        p = f.1 + f.0;
+                        let pushed: Int = push(found, field);
+                        let kind: Int = bytes[p];
+                        p += 1;
+                        // Every kind is followed by one LEB index, except a memory or a table, which
+                        // carry limits. Only functions matter here and the rest are skipped by shape.
+                        if kind == 0 {
+                            let idx: (Int, Int) = leb(bytes, p);
+                            p = idx.1;
+                        } else {
+                            let flags: Int = bytes[p];
+                            p += 1;
+                            let min: (Int, Int) = leb(bytes, p);
+                            p = min.1;
+                            if flags == 1 {
+                                let max: (Int, Int) = leb(bytes, p);
+                                p = max.1;
+                            }
+                        }
+                        entries -= 1;
+                    }
+                    return found;
+                }
+                at = body + size;
+            }
+            return found;
+        }
+    }
+}
+
+if os_arg_count() < 3 {
+    print_error("usage: star-partition <object.o> <module.wasm>");
+    exit(2);
+}
+let object: String = os_arg(1);
+let module: String = os_arg(2);
+
+let mutable failures: Int = 0;
+
+// ---- the control, first, because the assertion under it is an ABSENCE -----------------------------
+if holds(object, SECRET) {
+    print("  ok   the CONTROL: the secret is in the wasm object, so this grep can find things");
+} else {
+    print("  FAIL the CONTROL: the secret is in the wasm object, so this grep can find things");
+    print("       got false, want true");
+    failures += 1;
+}
+
+if !holds(module, SECRET) {
+    print("  ok   THE SECRET IS NOT IN THE CLIENT MODULE");
+} else {
+    print("  FAIL THE SECRET IS NOT IN THE CLIENT MODULE");
+    print("       got true, want false");
+    failures += 1;
+}
+
+let imports: [String] = wasm_imports(module);
+let mutable reaches: Bool = false;
+let mutable i: Int = 0;
+let mutable listed: String = "";
+while i < len(imports) {
+    if imports[i] == NETWORK_CALL { reaches = true; }
+    listed = listed + " " + imports[i];
+    i += 1;
+}
+
+// **An empty import list would satisfy "does not import it" for the wrong reason.** A module that
+// imports nothing is either a partition working perfectly or a walk that found no section, and those
+// must not print the same line.
+if len(imports) == 0 {
+    print("  FAIL the client's import list is EMPTY, so `does not import` proves nothing —");
+    print("       either the module imports nothing at all or the section walk missed it");
+    failures += 1;
+} else {
+    if !reaches {
+        print("  ok   the client does not import `" + NETWORK_CALL + "`");
+    } else {
+        print("  FAIL the client does not import `" + NETWORK_CALL + "`");
+        print("       got true, want false");
+        failures += 1;
+    }
+}
+print("       client imports:" + listed);
+
+print("");
+if failures > 0 {
+    print(to_string(failures) + " failure(s)");
+    exit(1);
+}
+print("the server half stays on the server");
