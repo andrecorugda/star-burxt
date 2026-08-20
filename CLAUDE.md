@@ -99,14 +99,14 @@ error.
 
 **The version lives in `burxt.package` and nowhere else.** `tools/surface.bx` checks it against the
 git tag, against `editors/vscode/package.json`, and refuses a version *literal* in the language
-server by shape. `editors/vscode/burxt.package` is a staged copy that `pack.py` writes;
+server by shape. `editors/vscode/burxt.package` is a staged copy that `pack.bx` writes;
 `tests/extension.py` asserts it is byte-identical to the root one.
 
 **The editor extension is in `editors/vscode/`**, with the language server *inside* it at
 `server/star-lsp.bx`, compiled to a `star-lsp` binary the extension finds on `PATH` exactly as it
 finds `star-check`. The archive ships no server: it could only carry the packer's platform. **The
 extension needs no `node` at all now** — `burxt`, `star-check`, `star-lsp`. `pack.py`
-writes `star-burxt.vsix` with nothing but the Python standard library. `config.mjs` in that directory
+writes `star-burxt.vsix` through `std/zip.bx`, deflated, with a per-entry stored fallback. `config.mjs` in that directory
 is a **test**, not extension code, and must never ship.
 
 **`docs/` is the Jekyll site** at star.burxt-lang.org. `assets/site.css` and `site.js` are byte copies

@@ -390,7 +390,12 @@ match json_parse(file_read(package_json)) {
         // represent — because `std/zip.bx` stamps them and has no other setting. Two packs of one
         // input therefore give identical bytes, which is what makes the committed artefact checkable
         // at all.
-        let written: Int = zip_write(out_path, entries);
+        // **Deflated, with a per-entry fallback that `zipfile` does not have.** An entry deflate does
+        // not shrink is written STORED, so an incompressible icon cannot make the archive worse than
+        // copying it would. The cost against Python's zlib level 6 is about ten per cent, and the gap
+        // is dynamic Huffman — the language session measured that raising the matcher's chain cap
+        // sixteenfold buys 0.1%, so the remaining ten per cent is a different encoder, not tuning.
+        let written: Int = zip_write_deflated(out_path, entries);
         if written <= 0 {
             print_error("could not write " + out_path);
             exit(2);

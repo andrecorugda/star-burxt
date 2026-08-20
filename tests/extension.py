@@ -165,7 +165,7 @@ def main():
           "editors/vscode/burxt.package is not the repository's — the server reads whichever is nearer, "
           "so a copy install would report a version this repository does not believe")
 
-    # The version a tool actually reads is the one in the manifest, built by `pack.py` from `package.json`.
+    # The version a tool actually reads is the one in the manifest, built by `pack.bx` from `package.json`.
     with zipfile.ZipFile(VSIX) as z:
         manifest = z.read("extension.vsixmanifest").decode()
         packed = json.loads(z.read("extension/package.json"))
@@ -211,7 +211,7 @@ def main():
         strays.append("extension/config.mjs")
     check(not strays,
           "no test and no docs-only icon shipped to users",
-          f"{', '.join(strays)} is in the archive — pack.py's FILES list exists to keep this directory's "
+          f"{', '.join(strays)} is in the archive — pack.bx's FILES list exists to keep this directory's "
           f"tests and the site's artwork out of everyone's editor")
 
     # **Reproducibility first, because it is what makes the next check mean anything.** Asserted as a
@@ -229,7 +229,14 @@ def main():
     # **And the committed artefact is the one the packer writes.** The packed bytes are restored either
     # way, so this never leaves a dirty tree.
     before = VSIX.read_bytes()
-    subprocess.run([sys.executable, str(EXT / "pack.py")], capture_output=True, check=True, cwd=ROOT)
+    # **The packer of record is Burxt now.** `pack.py` is gone; `star-pack` is built from
+    # `editors/vscode/pack.bx` and writes through `std/zip.bx`'s deflating door, with a per-entry stored
+    # fallback so an incompressible icon cannot make the archive worse than copying it would.
+    packer = ROOT / "star-pack"
+    if not packer.exists():
+        subprocess.run(["burxt", "build", "editors/vscode/pack.bx", "-o", "star-pack"],
+                       cwd=ROOT, capture_output=True, check=True)
+    subprocess.run([str(packer)], capture_output=True, check=True, cwd=ROOT)
     after = VSIX.read_bytes()
     VSIX.write_bytes(before)
     if prove:
