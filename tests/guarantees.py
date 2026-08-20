@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# not-burxt: gap — runs the generator and compares its output — subprocess, files and strings, all of which lib/os.bx and lib/files.bx already do
+# not-burxt: gap — BEING REPLACED by tests/guarantees.bx, which carries 12 of these cases so far;
+#            what remains is mechanical and this file is the reference until it is empty — subprocess, files and strings, all of which lib/os.bx and lib/files.bx already do
 """star-burxt's guarantee test.
 
 **This is the whole claim, and it is a claim about REFUSALS.** A `.sbmx` component becomes Burxt
@@ -22,7 +23,9 @@ import subprocess
 import sys
 import tempfile
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
+# One level up, since this moved out of the root — where a file named `test.py` was the first thing
+# a visitor saw and the conclusion they drew from it was the whole reason it moved.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BURXT = os.environ.get("BURXT", "burxt")
 
 

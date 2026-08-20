@@ -233,7 +233,11 @@ jobs:
           ./star-languages --prove-it
 
       - name: A .sbmx document becomes a component the compiler judges
-        run: python3 test.py
+        run: |
+          set -eux
+          burxt build tests/guarantees.bx -o star-guarantees
+          ./star-guarantees
+          python3 tests/guarantees.py
 
       # **The site's own syntax colouring, checked.** A highlighter that stops working fails
       # silently: the page renders and the code is grey again, which is the exact state `code.js`

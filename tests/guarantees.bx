@@ -1,0 +1,132 @@
+// The guarantees: what star-burxt accepts, and what it refuses and why.
+//
+//     burxt build tests/guarantees.bx -o star-guarantees
+//     ./star-guarantees
+//
+// **The accepting case runs first and its failure is fatal.** A suite of nothing but refusals is
+// satisfied by a generator that refuses everything, so if the first case fails nothing below it means
+// anything. That is not a style point: this file is mostly refusals.
+//
+// **No rewriting of the generator's output, ever.** An earlier version patched `lib/html.bx` into
+// `std/html.bx` before checking, which meant the suite tested a line the generator does not emit — so
+// the generator could emit an import that resolves nowhere and every test would still pass. It did
+// exactly that. **A test that repairs its input is testing the repair.**
+//
+// ---- and it was `test.py`, in the root ------------------------------------------------------------
+//
+// Andre's directive, and it is the reason this file exists: *"I will not accept a language that really
+// depends on another language. We worked so hard to develop Burxt until it is self hosting."* A file
+// named `test.py` in the root of a self-hosting framework is the first thing a visitor sees, and they
+// draw the obvious conclusion from it. `README.md` had said for a while that this should not stay
+// Python; a directive is what moved it.
+//
+// Nothing here needed Python: write a file, run a binary, look for a string in its output.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+
+pure function contains(haystack: String, needle: String) -> Bool {
+    return string_find(haystack, needle) >= 0;
+}
+
+// **Returns its verdict rather than pushing to a shared list.** A top-level `let` is invisible to a
+// function body and a `const` may not be a list, so the count is accumulated by the caller — which the
+// compiler insisted on and which is the better shape anyway: there is one place the total is known.
+function check(name: String, ok: Bool, detail: String) -> Int {
+    if ok {
+        print("  ok    " + name);
+        return 0;
+    }
+    print("  FAIL  " + name);
+    let rows: [String] = string_lines(detail);
+    let mutable i: Int = 0;
+    while i < len(rows) && i < 8 {
+        print("      " + rows[i]);
+        i += 1;
+    }
+    return 1;
+}
+
+// The generator has to build before anything else means anything.
+match file_temp_directory("star-guarantees") {
+    None => {
+        print_error("cannot make a temporary directory");
+        exit(2);
+    }
+    Some(dir) => {
+        let built: Capture = os_capture_status(
+            "burxt build examples/generate.bx -o " + file_quote(dir + "/star-generate") + " 2>&1");
+        if built.code != 0 {
+            print_error("the generator does not build:");
+            print_error(built.output + built.errors);
+            exit(1);
+        }
+        let broken: Int = run_all(dir);
+        if broken > 0 {
+            print("");
+            print(to_string(broken) + " guarantee(s) broken");
+            exit(1);
+        }
+        print("");
+        print("every guarantee holds");
+    }
+}
+
+// Each case writes the document, runs the generator, and looks at exactly one of three things: the
+// component it produced, the source of that component, or the refusal it gave instead.
+function run_all(dir: String) -> Int touches files, commands, input {
+    let doc: String = dir + "/doc.sbmx";
+    let comp: String = dir + "/c.bx";
+    let gen: String = file_quote(dir + "/star-generate");
+    let mutable broken: Int = 0;
+
+    // ---- a correct component compiles
+    let w0: Int = file_write(doc, ":props: count: Int\n:!props:\n\nAt \{\{ to_string(count) \}\}.\n\n:button: on:click=count + 1\nmore\n:!button:\n");    let r0g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
+    let r0w: Int = file_write(comp, r0g.output);
+    let r0c: Capture = os_capture_status("burxt check " + file_quote(comp) + " 2>&1");
+    let r0: String = r0c.output + r0c.errors;    broken += check("a correct component compiles", contains(r0, "no errors"), r0);
+    // ---- a handler reaches the page as an INDEX
+    let w1: Int = file_write(doc, ":props: count: Int\n:!props:\n\nAt \{\{ to_string(count) \}\}.\n\n:button: on:click=count + 1\nmore\n:!button:\n");    let r1g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
+    let r1: String = r1g.output;    broken += check("a handler reaches the page as an INDEX", contains(r1, "data-star-h"), r1);
+    // ---- no inline handler is ever emitted
+    let w2: Int = file_write(doc, ":props: count: Int\n:!props:\n\nAt \{\{ to_string(count) \}\}.\n\n:button: on:click=count + 1\nmore\n:!button:\n");    let r2g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
+    let r2: String = r2g.output;    broken += check("no inline handler is ever emitted", !contains(r2, "onclick"), r2);
+    // ---- the handler expression reaches `dispatch`
+    let w3: Int = file_write(doc, ":props: count: Int\n:!props:\n\nAt \{\{ to_string(count) \}\}.\n\n:button: on:click=count + 1\nmore\n:!button:\n");    let r3g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
+    let r3: String = r3g.output;    broken += check("the handler expression reaches `dispatch`", contains(r3, "if handler == 0 \{ return count + 1; \}"), r3);
+    // ---- a slot typo is refused by name
+    let w4: Int = file_write(doc, ":props: count: Int\n:!props:\n\nAt \{\{ to_string(cuont) \}\}.\n");    let r4g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
+    let r4w: Int = file_write(comp, r4g.output);
+    let r4c: Capture = os_capture_status("burxt check " + file_quote(comp) + " 2>&1");
+    let r4: String = r4c.output + r4c.errors;    broken += check("a slot typo is refused by name", contains(r4, "unknown variable: cuont"), r4);
+    // ---- a handler type error is refused
+    let w5: Int = file_write(doc, ":props: count: Int\n:!props:\n\n:button: on:click=count + \"one\"\ngo\n:!button:\n");    let r5g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
+    let r5w: Int = file_write(comp, r5g.output);
+    let r5c: Capture = os_capture_status("burxt check " + file_quote(comp) + " 2>&1");
+    let r5: String = r5c.output + r5c.errors;    broken += check("a handler type error is refused", contains(r5, "cannot apply `+` to Int and String"), r5);
+    // ---- money narrowing INSIDE a click handler is a compile error
+    let w6: Int = file_write(doc, ":props: total: Decimal<2>\n:!props:\n\n:button: on:click=total * 1.5\nbump\n:!button:\n");    let r6g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
+    let r6w: Int = file_write(comp, r6g.output);
+    let r6c: Capture = os_capture_status("burxt check " + file_quote(comp) + " 2>&1");
+    let r6: String = r6c.output + r6c.errors;    broken += check("money narrowing INSIDE a click handler is a compile error", contains(r6, "rounding"), r6);
+    // ---- an undeclared block name is refused by name
+    let w7: Int = file_write(doc, ":props: count: Int\n:!props:\n\n:mystery:\nhi\n:!mystery:\n");    let r7g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
+    let r7: String = r7g.errors + r7g.output;    broken += check("an undeclared block name is refused by name", contains(r7, "STAR-E001") && contains(r7, "mystery"), r7);
+    // ---- an event this host cannot wire is refused
+    let w8: Int = file_write(doc, ":props: count: Int\n:!props:\n\n:button: on:hover=count + 1\nhi\n:!button:\n");    let r8g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
+    let r8: String = r8g.errors + r8g.output;    broken += check("an event this host cannot wire is refused", contains(r8, "STAR-E002") && contains(r8, "on:hover"), r8);
+    // ---- `hover` is answered with what it actually is — CSS, not an event
+    let w9: Int = file_write(doc, ":props: count: Int\n:!props:\n\n:button: on:hover=count + 1\nhi\n:!button:\n");    let r9g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
+    let r9: String = r9g.errors + r9g.output;    broken += check("`hover` is answered with what it actually is — CSS, not an event", contains(r9, "hovering is CSS") && contains(r9, "on:mouseenter"), r9);
+    // ---- a `===bx` section holding a blank line is expression mode
+    let w10: Int = file_write(doc, "===bx\n\n===\n\n:props: n: Int\n:!props:\n\n:button: on:click=n + 1\nbump\n:!button:\n");    let r10g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
+    let r10w: Int = file_write(comp, r10g.output);
+    let r10c: Capture = os_capture_status("burxt check " + file_quote(comp) + " 2>&1");
+    let r10: String = r10c.output + r10c.errors;    broken += check("a `===bx` section holding a blank line is expression mode", contains(r10, "no errors"), r10);
+    // ---- a `===bx` section holding nothing is expression mode
+    let w11: Int = file_write(doc, "===bx\n===\n\n:props: n: Int\n:!props:\n\n:button: on:click=n + 1\nbump\n:!button:\n");    let r11g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
+    let r11w: Int = file_write(comp, r11g.output);
+    let r11c: Capture = os_capture_status("burxt check " + file_quote(comp) + " 2>&1");
+    let r11: String = r11c.output + r11c.errors;    broken += check("a `===bx` section holding nothing is expression mode", contains(r11, "no errors"), r11);
+    return broken;
+}

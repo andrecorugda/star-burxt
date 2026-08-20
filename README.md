@@ -54,7 +54,8 @@ Then `burxt fetch`. Full instructions: [star.burxt-lang.org/install](https://sta
 | `tools/surface.bx` | builds a real dependent package and holds the README's promise to it |
 | `tests/consumer/` | what an outside package compiles — the whole job on the published names |
 | `tools/showcase.py`, `shoot.mjs` | the landing page's screenshot and its source panel |
-| `test.py` | the guarantees |
+| `tests/guarantees.bx` | the guarantees, in Burxt |
+| `tests/guarantees.py` | the cases not ported yet — this file is going away |
 | `verify-docs.py` | every example on the site — generated **and compiled** |
 | `docs/` | the site |
 
@@ -90,7 +91,7 @@ job.
 ```sh
 ./tools/check-all.sh     # everything, and it EXITS NON-ZERO when something fails
 
-python3 test.py          # the guarantees. The ACCEPTING case runs first and its failure is fatal.
+./star-guarantees        # the guarantees. The ACCEPTING case runs first and its failure is fatal.
 python3 verify-docs.py   # every .sbmx example on the site — generated AND compiled
 node tools/paints.mjs    # the site colours burxt, bmx, sbmx and css
 
@@ -99,11 +100,11 @@ burxt build tools/surface.bx -o star-surface && ./star-surface # the surface, fr
 ```
 
 `tools/check-all.sh` exists because **a pipeline's exit status is the last command's**: running
-`python3 test.py | tail -1` reports whether `tail` succeeded, so `set -e` never sees a failing suite.
+`./star-guarantees | tail -1` reports whether `tail` succeeded, so `set -e` never sees a failing suite.
 Three failures sat visible-but-unread that way. A verification script that cannot fail is the same
 defect this project keeps finding elsewhere, in the thing doing the finding.
 
-`test.py` is mostly refusals, and a suite of nothing but refusals is satisfied by a generator that
+The guarantees are mostly refusals, and a suite of nothing but refusals is satisfied by a generator that
 refuses everything — so the accepting case runs first and nothing below it means anything if it
 fails.
 
@@ -121,7 +122,10 @@ rewrite paid for itself immediately: `file_walk` answers an `Option`, so a missi
 for both. `star-build` moved the same way, from a shell script that word-split `$exports` on purpose
 and left a path unquoted by accident.
 
-`test.py` and `verify-docs.py` are still Python and should not stay that way.
+**Nothing in this repository should depend on another language to check itself**, and
+`./star-languages` prints how far that is from true — every non-Burxt file declares why it is not, in
+its own first twenty lines, and a file that declares none fails the build. `gap` is the only column
+that should move. `tests/guarantees.py` and `verify-docs.py` are what remains of the biggest one.
 
 `docs/assets/site.css` and `site.js` are byte copies of burxt-lang.org's — re-copy rather than edit.
 `docs/assets/star.css` is this site's own.

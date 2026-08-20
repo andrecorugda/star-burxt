@@ -27,3 +27,4 @@ examples/*.wasm
 star-languages
 star-refs
 star-showcase
+star-guarantees
