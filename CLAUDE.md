@@ -4,6 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## How this work is run
 
+**`.claude/GOLDEN-RULES.md` is the authority and this section is its summary.** That file is
+`.gitignore`d — it is how the work is done rather than part of the product — and the same file sits in
+every repository in the family. **Read it before doing anything.** Each rule there carries the incident
+it was learned on, because a rule without its incident is a rule somebody argues with.
+
+
 **Coordinate and delegate by default. Do not ask, and do not serialise.** Andre is the author of
 three interlocking products and does not want to be the message bus between them, or the person who
 notices that work could have run in parallel.

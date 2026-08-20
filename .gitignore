@@ -38,3 +38,6 @@ star-partition
 star-lsp
 star-drive-lsp
 
+# **Andre's golden rules, and how this work is run.** Local on purpose: it is how the work is done
+# rather than part of the product, and it is the same file in every repository in the family.
+.claude/
