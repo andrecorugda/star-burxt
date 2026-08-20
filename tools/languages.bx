@@ -48,6 +48,12 @@ pure function skipped(path: String) -> Bool {
         || mentions(path, "/target/");
 }
 
+// `file_walk` answers `./tools/x.py`; a path a reader pastes into an editor should not carry the `./`.
+pure function shown(path: String) -> String {
+    if string_starts_with(path, "./") { return substring(path, 2, len(path) - 2); }
+    return path;
+}
+
 pure function is_source(path: String) -> Bool {
     return string_ends_with(path, ".py") || string_ends_with(path, ".js") || string_ends_with(path, ".mjs")
         || string_ends_with(path, ".sh") || string_ends_with(path, ".rs") || string_ends_with(path, ".ts");
@@ -111,6 +117,9 @@ pure function line_count(text: String) -> Int {
 }
 
 let prove: Bool = os_arg_count() > 1 && os_arg(1) == "--prove-it";
+// **`--files` lists them, because a total is not a work list.** Driving `gap` to zero means knowing
+// which files are left, and asking somebody to grep for the marker is asking them to eyeball it.
+let listing: Bool = os_arg_count() > 1 && os_arg(1) == "--files";
 
 let mutable failures: [String] = [];
 let mutable burxt_lines: Int = 0;
@@ -149,6 +158,10 @@ match file_walk(".") {
                         while c < len(categories()) {
                             if categories()[c] == group { totals[c] = totals[c] + count; }
                             c += 1;
+                        }
+                        if listing {
+                            print("  " + string_pad_end(group, 10, " ")
+                                + string_pad_start(to_string(count), 6, " ") + "  " + shown(path));
                         }
                     }
                 }
