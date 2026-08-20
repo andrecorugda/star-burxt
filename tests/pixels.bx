@@ -1,0 +1,254 @@
+// Does `tools/png.bx` unfilter a PNG correctly, for all five predictors?
+//
+//     burxt build tests/png.bx -o star-png
+//     ./star-png
+//     ./star-png --prove-it     # the negative control
+//
+// **This builds the PNGs it reads, which is the only way to have a ground truth.** Comparing against
+// another decoder proves agreement and not correctness, and it would put a second language in the
+// suite. Here a known raster is filtered with each of the five predictors in turn, wrapped in zlib and
+// in PNG chunks, and the decoder has to hand back exactly what went in.
+//
+// **Why per-filter rather than one image: the corpus does not exercise them evenly.** Across all 29
+// PNGs in this repository the row filters run 248 / 508 / 2960 / 2 / 9095 — Average appears **twice**,
+// in one image, so a decoder with a broken Average filter agrees with everything and fails on the next
+// picture anybody adds. Every filter gets a whole image here.
+//
+// The writer is the compiler's own `deflate_into` with a zlib header and an adler32 trailer added by
+// hand, because `deflate.bx` writes the raw stream a ZIP entry holds rather than a zlib one.
+use "std/deflate.bx";
+use "std/hash.bx";
+use "std/os.bx";
+use "../tools/png.bx";
+
+class Tally { ran: Int, broken: Int }
+
+function check(mutable tally: Tally, ok: Bool, name: String, detail: String) -> Int {
+    tally.ran += 1;
+    if ok {
+        print("  ok    " + name);
+        return 0;
+    }
+    tally.broken += 1;
+    print("  FAIL  " + name);
+    print("        " + detail);
+    return 1;
+}
+
+function put_be32(mutable out: [Int], value: Int) -> Int {
+    let a: Int = push(out, remainder(divide_floor(value, 16777216), 256));
+    let b: Int = push(out, remainder(divide_floor(value, 65536), 256));
+    let c: Int = push(out, remainder(divide_floor(value, 256), 256));
+    let d: Int = push(out, remainder(value, 256));
+    return 4;
+}
+
+function put_tag(mutable out: [Int], a: Int, b: Int, c: Int, d: Int) -> Int {
+    let w: Int = push(out, a);
+    let x: Int = push(out, b);
+    let y: Int = push(out, c);
+    let z: Int = push(out, d);
+    return 4;
+}
+
+// A raster where no two neighbours agree, so a predictor that is wrong cannot look right: every byte
+// is a different function of its row and column.
+function raster(width: Int, height: Int, channels: Int, mutable out: [Int]) -> Int {
+    let mutable row: Int = 0;
+    while row < height {
+        let mutable i: Int = 0;
+        while i < width * channels {
+            let x: Int = push(out, remainder(row * 37 + i * 11 + 5, 256));
+            i += 1;
+        }
+        row += 1;
+    }
+    return len(out);
+}
+
+// The raster, filtered with ONE predictor for every row — which is what makes each filter's own path
+// the thing under test.
+function filtered(pixels: [Int], width: Int, height: Int, channels: Int, filter: Int,
+                  mutable out: [Int]) -> Int {
+    let stride: Int = width * channels;
+    let mutable row: Int = 0;
+    while row < height {
+        let f: Int = push(out, filter);
+        let base: Int = row * stride;
+        let mutable i: Int = 0;
+        while i < stride {
+            let here: Int = pixels[base + i];
+            let mutable left: Int = 0;
+            if i >= channels {
+                left = pixels[base + i - channels];
+            }
+            let mutable up: Int = 0;
+            if row > 0 {
+                up = pixels[base - stride + i];
+            }
+            let mutable up_left: Int = 0;
+            if row > 0 && i >= channels {
+                up_left = pixels[base - stride + i - channels];
+            }
+            let mutable value: Int = here;
+            if filter == 1 { value = here - left; }
+            if filter == 2 { value = here - up; }
+            if filter == 3 { value = here - divide_floor(left + up, 2); }
+            if filter == 4 { value = here - png_paeth(left, up, up_left); }
+            // The encoder wraps the same way the decoder does, and a negative difference has to come
+            // back as a byte: `remainder` toward zero would give -3 where the format says 253.
+            let mutable wrapped: Int = remainder(value, 256);
+            if wrapped < 0 {
+                wrapped += 256;
+            }
+            let x: Int = push(out, wrapped);
+            i += 1;
+        }
+        row += 1;
+    }
+    return len(out);
+}
+
+// A whole PNG. Chunk CRCs are left zero: this decoder does not verify them, and a test that pretended
+// otherwise would be asserting a property nothing here has.
+function png_of(width: Int, height: Int, channels: Int, colour: Int, scanlines: [Int],
+                mutable out: [Int]) -> Int allocates {
+    let sig: Int = put_tag(out, 137, 80, 78, 71);
+    let sig2: Int = put_tag(out, 13, 10, 26, 10);
+
+    let ihdr_len: Int = put_be32(out, 13);
+    let ihdr: Int = put_tag(out, 73, 72, 68, 82);
+    let w: Int = put_be32(out, width);
+    let h: Int = put_be32(out, height);
+    let depth: Int = push(out, 8);
+    let ctype: Int = push(out, colour);
+    // **Three, not four.** IHDR's data is 13 bytes — width 4, height 4, depth 1, colour 1, then
+    // compression, filter and interlace — and writing a fourth zero here made the chunk 14 bytes, which
+    // shifted every offset after it. The decoder then read a length that was not a length and found no
+    // IDAT at all, so `zlib_into` was handed an empty stream and refused it with -1. The failure
+    // pointed at the inflater; the defect was in the test's own encoder, one byte wide.
+    let compression: Int = push(out, 0);
+    let filter_method: Int = push(out, 0);
+    let interlace: Int = push(out, 0);
+    let ihdr_crc: Int = put_be32(out, 0);
+
+    let mutable body: [Int] = [];
+    let head1: Int = push(body, 120);
+    let head2: Int = push(body, 1);
+    let deflated: Int = deflate_into(body, scanlines);
+    let sum: Int = adler32(scanlines);
+    let trail: Int = put_be32(body, sum);
+
+    let idat_len: Int = put_be32(out, len(body));
+    let idat: Int = put_tag(out, 73, 68, 65, 84);
+    let mutable i: Int = 0;
+    while i < len(body) {
+        let x: Int = push(out, body[i]);
+        i += 1;
+    }
+    let idat_crc: Int = put_be32(out, 0);
+
+    let iend_len: Int = put_be32(out, 0);
+    let iend: Int = put_tag(out, 73, 69, 78, 68);
+    let iend_crc: Int = put_be32(out, 0);
+    return len(out);
+}
+
+let prove: Bool = os_arg_count() > 1 && os_arg(1) == "--prove-it";
+let mutable tally: Tally = Tally { ran: 0, broken: 0 };
+
+// Not square, and wider than one pixel of every channel, so a stride mistake cannot cancel out.
+let width: Int = 7;
+let height: Int = 5;
+let channels: Int = 3;
+
+let mutable filter: Int = 0;
+while filter < 5 {
+    let mutable want: [Int] = [];
+    let made: Int = raster(width, height, channels, want);
+
+    let mutable scanlines: [Int] = [];
+    let encoded: Int = filtered(want, width, height, channels, filter, scanlines);
+
+    let mutable bytes: [Int] = [];
+    let built: Int = png_of(width, height, channels, 2, scanlines, bytes);
+
+    let mutable got: [Int] = [];
+    let image: Png = png_read(bytes, got);
+
+    let mutable differs: Int = -1;
+    if len(got) == len(want) {
+        let mutable i: Int = 0;
+        while i < len(want) {
+            if got[i] != want[i] && differs < 0 {
+                differs = i;
+            }
+            i += 1;
+        }
+    }
+    if prove && filter == 3 {
+        // **The plant is the filter the corpus barely covers.** Two rows in 12,813 use Average, so it
+        // is the one a broken decoder would get away with, and the one the control has to prove is
+        // being looked at.
+        differs = 0;
+    }
+
+    let ok: Bool = image.code > 0 && len(got) == len(want) && differs < 0;
+    let x: Int = check(tally, ok,
+        "filter " + to_string(filter) + " round-trips " + to_string(len(want)) + " bytes exactly",
+        "filter " + to_string(filter) + ": zlib returned " + to_string(image.code) + ", got "
+            + to_string(len(got)) + " bytes where " + to_string(len(want))
+            + " were expected, first difference at " + to_string(differs));
+    filter += 1;
+}
+
+// The header, read from the same bytes.
+let mutable one: [Int] = [];
+let one_made: Int = raster(width, height, channels, one);
+let mutable lines: [Int] = [];
+let one_enc: Int = filtered(one, width, height, channels, 4, lines);
+let mutable file: [Int] = [];
+let one_built: Int = png_of(width, height, channels, 2, lines, file);
+let mutable back: [Int] = [];
+let header: Png = png_read(file, back);
+let x6: Int = check(tally,
+    header.width == width && header.height == height && header.channels == channels
+        && header.stride == width * channels,
+    "the header reports " + to_string(header.width) + "x" + to_string(header.height) + " with "
+        + to_string(header.channels) + " channels and stride " + to_string(header.stride),
+    "the header reports " + to_string(header.width) + "x" + to_string(header.height) + " with "
+        + to_string(header.channels) + " channels and stride " + to_string(header.stride));
+
+// A truncated stream must REFUSE rather than return a short raster, because a short raster read as an
+// image is a picture of nothing that looks like a picture.
+let mutable cut: [Int] = [];
+let mutable c: Int = 0;
+while c < divide_floor(len(file), 2) {
+    let x: Int = push(cut, file[c]);
+    c += 1;
+}
+let mutable nothing: [Int] = [];
+let truncated: Png = png_read(cut, nothing);
+let x7: Int = check(tally, truncated.code < 0 || len(nothing) == 0,
+    "a truncated PNG is refused (code " + to_string(truncated.code) + ") rather than half-decoded",
+    "a truncated PNG returned " + to_string(len(nothing)) + " bytes with code "
+        + to_string(truncated.code));
+
+print("");
+if prove {
+    if tally.broken > 0 {
+        print("the control failed as it must — " + to_string(tally.broken) + " caught");
+        exit(0);
+    }
+    print("THE CONTROL DID NOT FAIL, so this check cannot see a broken predictor");
+    exit(1);
+}
+if tally.broken > 0 {
+    print(to_string(tally.broken) + " of " + to_string(tally.ran) + " broken");
+    exit(1);
+}
+if tally.ran != 7 {
+    print("only " + to_string(tally.ran) + " of 7 checks ran");
+    exit(1);
+}
+print("all five predictors round-trip, and the decoder is the one two checks share");

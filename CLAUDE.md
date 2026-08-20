@@ -182,6 +182,8 @@ burxt build tools/workflows.bx   -o star-workflows
 burxt build tools/controls.bx    -o star-controls
 burxt build tools/flags.bx       -o star-flags
 burxt build tests/extension.bx   -o star-extension
+burxt build tests/pixels.bx      -o star-pixels
+burxt build tools/icons.bx       -o star-icons
 burxt build editors/lsp/drive-lsp.bx -o star-drive-lsp
 ```
 

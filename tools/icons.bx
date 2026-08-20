@@ -1,0 +1,239 @@
+// Do the file icons fill their box the way the family agreed?
+//
+//     burxt build tools/icons.bx -o star-icons
+//     ./star-icons
+//     ./star-icons --prove-it     # the negative control
+//
+// **Andre's complaint about the `.bx` icon was that it "looks like it is really sticking to the edge
+// making it no space on the file tree line."** Measured by the language session, it filled 86% of its
+// height — four clear pixels at 48px — and the fix was to crop each source to its own ink and centre it
+// at 70%.
+//
+// The consistency is the point rather than the padding: `.bx`, `.bmx` and `.sbmx` sit on consecutive
+// rows of a file tree, and an eye reads inconsistent margins as misalignment rather than as three
+// different logos. So this asserts the FRACTION, not the bytes. A byte comparison against a
+// re-derivation would need the derivation script and would go green on any pair of files that agree with
+// each other — including two that are both wrong. **A new drop of artwork nobody re-derived is exactly
+// the case this has to catch**, and the artwork arrives from another repository.
+//
+// ---- this was half of editors/vscode/config.mjs, and only half of it could move ------------------
+//
+// That file was declared `blocked — asserts the icons' ink fraction, which means inflating a PNG`, and
+// 1.6.0 unblocked exactly that. But the file's other twelve checks build `new RegExp(...)` from
+// `language-configuration.json` and test strings against it, and **that is not portable in the sense
+// that matters**: the value of those checks is that the editor's own engine folds BMX's fences, so a
+// Burxt matcher agreeing with the markers would be testing a different engine and calling it the same
+// answer. The regex half stayed where it is, with a reason that says regex rather than zlib.
+//
+// The unfiltering lives in `tools/png.bx`, shared with the gallery, because two checks needing pixels
+// is one decoder and not two.
+use "std/files.bx";
+use "std/string.bx";
+use "std/json.bx";
+use "std/os.bx";
+use "png.bx";
+
+class Tally { ran: Int, broken: Int }
+
+function check(mutable tally: Tally, ok: Bool, name: String, detail: String) -> Int {
+    tally.ran += 1;
+    if ok {
+        print("  ok    " + name);
+        return 0;
+    }
+    tally.broken += 1;
+    print("  FAIL  " + name);
+    print("        " + detail);
+    return 1;
+}
+
+pure function field_of(value: Json, name: String) -> Json {
+    match value {
+        Object(fields) => {
+            let mutable i: Int = 0;
+            while i < len(fields) {
+                if fields[i].name == name {
+                    return fields[i].value;
+                }
+                i += 1;
+            }
+            return Json.Null;
+        }
+        Null => { return Json.Null; }
+        Truth(b) => { return Json.Null; }
+        Number(digits) => { return Json.Null; }
+        Text(s) => { return Json.Null; }
+        List(items) => { return Json.Null; }
+    }
+}
+
+pure function text_of(value: Json) -> String {
+    match value {
+        Text(s) => { return s; }
+        Null => { return ""; }
+        Truth(b) => { return ""; }
+        Number(digits) => { return digits; }
+        List(items) => { return ""; }
+        Object(fields) => { return ""; }
+    }
+}
+
+// The rows an icon's ink occupies, as a percentage of its height, times ten — so 700 is 70.0% and the
+// tolerance is expressed without a Decimal. **A row counts as ink when any pixel's alpha clears 8**,
+// which is the same threshold the JavaScript used: a PNG's fully-transparent margin is not always
+// exactly zero after a resample.
+function ink_tenths(path: String) -> Int touches files {
+    let mutable bytes: [Int] = [];
+    match file_read_bytes(path) {
+        None => { return 0 - 1; }
+        Some(read) => { bytes = read; }
+    }
+    let mutable pixels: [Int] = [];
+    let image: Png = png_read(bytes, pixels);
+    if image.code < 0 || image.height <= 0 {
+        return 0 - 2;
+    }
+    let mutable top: Int = 0 - 1;
+    let mutable bottom: Int = 0 - 1;
+    let mutable row: Int = 0;
+    while row < image.height {
+        let base: Int = row * image.stride;
+        // Without an alpha channel every pixel is opaque, so every row is ink and the fraction is 1.
+        let mutable opaque: Bool = image.channels != 4;
+        if image.channels == 4 {
+            let mutable x: Int = 0;
+            while x < image.width && !opaque {
+                if pixels[base + x * 4 + 3] > 8 {
+                    opaque = true;
+                }
+                x += 1;
+            }
+        }
+        if opaque {
+            if top < 0 {
+                top = row;
+            }
+            bottom = row;
+        }
+        row += 1;
+    }
+    if top < 0 {
+        return 0;
+    }
+    return divide_floor((bottom - top + 1) * 1000, image.height);
+}
+
+function size_of(path: String) -> Int touches files {
+    let mutable bytes: [Int] = [];
+    match file_read_bytes(path) {
+        None => { return 0 - 1; }
+        Some(read) => { bytes = read; }
+    }
+    let mutable pixels: [Int] = [];
+    let image: Png = png_read(bytes, pixels);
+    if image.width != image.height {
+        return 0;
+    }
+    return image.width;
+}
+
+let prove: Bool = os_arg_count() > 1 && os_arg(1) == "--prove-it";
+let mutable tally: Tally = Tally { ran: 0, broken: 0 };
+
+let declared_text: String = file_read("editors/vscode/package.json");
+let mutable declared: Json = Json.Null;
+match json_parse(declared_text) {
+    Ok(value) => { declared = value; }
+    Error(why) => {
+        print_error("editors/vscode/package.json does not parse: " + why);
+        exit(2);
+    }
+}
+
+let mutable languages: [Json] = [];
+match field_of(field_of(declared, "contributes"), "languages") {
+    List(items) => { languages = items; }
+    Null => { languages = languages; }
+    Truth(b) => { languages = languages; }
+    Number(digits) => { languages = languages; }
+    Text(s) => { languages = languages; }
+    Object(fields) => { languages = languages; }
+}
+let mutable sbmx_icon: String = "";
+let mutable l: Int = 0;
+while l < len(languages) {
+    if text_of(field_of(languages[l], "id")) == "sbmx" {
+        match field_of(languages[l], "icon") {
+            Object(fields) => { sbmx_icon = "declared"; }
+            Text(s) => { sbmx_icon = s; }
+            Null => { sbmx_icon = sbmx_icon; }
+            Truth(b) => { sbmx_icon = sbmx_icon; }
+            Number(digits) => { sbmx_icon = sbmx_icon; }
+            List(items) => { sbmx_icon = sbmx_icon; }
+        }
+    }
+    l += 1;
+}
+if prove {
+    sbmx_icon = "";
+}
+let x1: Int = check(tally, len(sbmx_icon) > 0,
+    "the `.sbmx` language declares a file icon",
+    "no `icon` on the sbmx language, so the file tree shows the generic document glyph");
+
+let mutable sizes: [Int] = [];
+let s1: Int = push(sizes, 48);
+let s2: Int = push(sizes, 128);
+let mutable s: Int = 0;
+while s < len(sizes) {
+    let size: Int = sizes[s];
+    let path: String = "editors/vscode/icons/sbmx-gear-icon-" + to_string(size) + ".png";
+    let square: Int = size_of(path);
+    let x2: Int = check(tally, square == size,
+        "the " + to_string(size) + "px icon is square at its declared size",
+        path + " reports " + to_string(square) + ", which is not a square " + to_string(size));
+
+    let mutable tenths: Int = ink_tenths(path);
+    if prove && size == 48 {
+        // 86% is the measured value of the icon Andre complained about, so the control is the defect
+        // as it actually arrived rather than an arbitrary number.
+        tenths = 860;
+    }
+    let mutable off: Int = tenths - 700;
+    if off < 0 {
+        off = 0 - off;
+    }
+    // **Rounded for display, not floored.** The JavaScript printed `Math.round(fraction * 100)` and
+    // this printed a floor, so the same 70.83% measurement read as 71% there and 70% here. The verdict
+    // was identical either way — both compare the tenths against the same tolerance — but a number a
+    // person reads should not disagree with the tool it replaced, or the first thing they conclude is
+    // that the port changed the artwork.
+    let shown: Int = divide_floor(tenths + 5, 10);
+    // 70% is the family's number. The tolerance is a few pixels at 48px, not a licence to drift.
+    let x3: Int = check(tally, off <= 30,
+        "and the " + to_string(size) + "px ink fills " + to_string(shown)
+            + "% of the box, which must be 70% ± 3",
+        "the " + to_string(size) + "px ink fills " + to_string(shown)
+            + "% — an icon at 86% sits against the filename, and the three file types must agree with"
+            + " each other");
+    s += 1;
+}
+
+print("");
+if prove {
+    if tally.broken > 0 {
+        print("the control failed as it must — " + to_string(tally.broken) + " caught");
+        exit(0);
+    }
+    print("THE CONTROL DID NOT FAIL, so this check cannot see a drifted icon");
+    exit(1);
+}
+if tally.broken > 0 {
+    print(to_string(tally.broken) + " of " + to_string(tally.ran) + " broken");
+    exit(1);
+}
+if tally.ran != 5 {
+    print("only " + to_string(tally.ran) + " of 5 checks ran");
+    exit(1);
+}
+print("the file icons fill their box the way the family agreed");

@@ -135,6 +135,10 @@ run "the published surface is the real one" ./star-surface
 run "HTML's content model, both ways" ./star-content
 run "the collection and the directory agree" ./star-collection
 run "every CSS rule can match something" ./star-reachable
+run "every PNG predictor round-trips"  ./star-pixels
+run "the pixel control holds"         ./star-pixels --prove-it
+run "the file icons fill their box"   ./star-icons
+run "the icon control holds"          ./star-icons --prove-it
 
 # **Local now, because it stopped needing a JS host.** It was `tools/flags.mjs`, declared `platform`, and
 # the declaration was false twice: it does not check the driver's options, and it execs a NATIVE binary

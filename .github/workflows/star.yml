@@ -377,6 +377,21 @@ jobs:
           burxt build tools/reachable.bx -o star-reachable
           ./star-reachable
 
+      # **The decoder two checks share, tested against PNGs it builds itself.** Comparing against another
+      # decoder proves agreement, not correctness, and would put a second language in the suite. Across
+      # the 29 PNGs in this repository the row filters run 248/508/2960/2/9095 — Average appears TWICE,
+      # in one image — so a decoder with a broken Average filter agrees with everything here and fails on
+      # the next picture anybody adds. Every predictor gets a whole image.
+      - name: Every PNG predictor round-trips, and the icons fill their box
+        run: |
+          set -eux
+          burxt build tests/pixels.bx -o star-pixels
+          ./star-pixels
+          ./star-pixels --prove-it
+          burxt build tools/icons.bx -o star-icons
+          ./star-icons
+          ./star-icons --prove-it
+
       # **A collection is a claim about coverage, and a claim nobody runs goes stale in the direction
       # nobody checks.** Either a document arrives and no row is added — so the table understates star and
       # the playground never shows it — or a row outlives its file and sends a reader nowhere. Both
