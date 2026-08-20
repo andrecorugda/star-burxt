@@ -180,12 +180,19 @@ burxt build tools/reachable.bx   -o star-reachable
 burxt build tools/versions.bx    -o star-versions
 burxt build tools/workflows.bx   -o star-workflows
 burxt build tools/controls.bx    -o star-controls
+burxt build tools/flags.bx       -o star-flags
 burxt build editors/lsp/drive-lsp.bx -o star-drive-lsp
 ```
 
 ```sh
-./tools/check-all.sh    # everything CI runs, and it EXITS NON-ZERO when something fails
+./tools/check-all.sh    # EXITS NON-ZERO when something fails, and names what it did not run
 ```
+
+**It is not everything CI runs, and it says so on its last line.** This file claimed it was; CI runs a
+dozen more — the wasm and browser-host group, which needs a built module and a JS host. That may be the
+right trade for a local suite, but `everything green` was the last line a person read before comparing it
+to a CI run. The suite now prints how many checks passed and lists the ones it skipped, and
+`./star-workflows` computes both lists rather than either being written down.
 
 There is no test-name filter. The granular unit is the suite, or one document:
 

@@ -425,7 +425,8 @@ jobs:
           set -eux
           ./star-generate examples/Choices.sbmx choices --fragment > /tmp/build/choices-r.bx
           burxt build /tmp/build/choices-r.bx -o /tmp/build/choices-render
-          node tools/flags.mjs /tmp/build/choices-render
+          burxt build tools/flags.bx -o star-flags
+          ./star-flags /tmp/build/choices-render
 
       # **A game, because a form asks star one question and a game asks the other four:** a tick that
       # runs only while the state says so, four global keys, a list that moves and grows every frame,

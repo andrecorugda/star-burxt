@@ -1,5 +1,6 @@
 // Every binary CI runs is built before CI runs it, every binary the suite runs is one the
-// documentation tells a reader to build, and every check the suite runs is one CI runs too.
+// documentation tells a reader to build, every check the suite runs is one CI runs too — and the
+// checks CI runs that the suite does NOT are counted out loud.
 //
 //     burxt build tools/workflows.bx -o star-workflows
 //     ./star-workflows
@@ -61,6 +62,23 @@
 // the workflow. Named-anywhere is deliberately weak — it asks whether CI knows about the check at all,
 // not how it is invoked — because the strong version would be a second copy of the suite and would
 // disagree with it.
+//
+// ---- and the direction that pair does not cover -------------------------------------------------
+//
+// The pair above is one-way, and asking the reverse question found the claim false. **`CLAUDE.md` and
+// `check-all.sh`'s own header both called the suite "everything CI runs", and it is a dozen checks
+// short** — the wasm and browser-host group, which needs a built module and a JS host. I wrote
+// "eleven" here from a throwaway script that missed one; the count below is printed rather than
+// asserted for that reason, and the prose no longer carries a number at all.
+//
+// That may well be the right trade for a local suite; what is not right is `everything green` as the
+// last line a person reads before comparing it to CI. It is the markup session's finding in the other
+// repository, exactly: *a summary true about what ran and silent about what did not.* Their fix is the
+// one copied here — **name the gap and say the number is not comparable** — and it is printed by the
+// runner rather than written in prose, because a count in a docstring is a claim with nothing behind it.
+//
+// Reported, not failed. An allowlist of permitted absences is the shape that goes stale, and the number
+// moving is not by itself a defect. What was a defect was nobody being told.
 use "std/files.bx";
 use "std/string.bx";
 use "std/os.bx";
@@ -111,6 +129,11 @@ pure function workflows() -> [String] allocates {
 }
 
 let prove: Bool = os_arg_count() > 1 && os_arg(1) == "--prove-it";
+// `check-all.sh`'s `run()` discards a passing check's output — which is right for 24 checks and wrong
+// for the one that has something to say on success. So the list has its own mode, and the suite's last
+// line calls it. **The first version of this printed the gap only on the normal path, where the suite
+// swallowed it** — a report nobody could see, in the tool written because nobody was being told.
+let only_gap: Bool = os_arg_count() > 1 && os_arg(1) == "--only-gap";
 
 let mutable failures: [String] = [];
 let mutable checked: Int = 0;
@@ -328,6 +351,61 @@ while v < len(invoked) {
     v += 1;
 }
 
+// ---- the reverse direction, counted out loud -----------------------------------------------------
+
+// Everything the WORKFLOW invokes, by the same reading as the suite.
+let mutable ci_runs: [String] = [];
+let ci_rows: [String] = string_lines(ci);
+let mutable c: Int = 0;
+while c < len(ci_rows) {
+    if !is_comment(ci_rows[c]) {
+        let mutable found: [String] = all_after(ci_rows[c], "./");
+        let words: [String] = string_split(ci_rows[c], " ");
+        let mutable j: Int = 0;
+        while j < len(words) {
+            let word: String = string_trim(words[j]);
+            if string_ends_with(word, ".mjs") || string_ends_with(word, ".py") {
+                let x: Int = push(found, word);
+            }
+            j += 1;
+        }
+        let mutable f3: Int = 0;
+        while f3 < len(found) {
+            let mutable seen: Bool = false;
+            let mutable k: Int = 0;
+            while k < len(ci_runs) {
+                if ci_runs[k] == found[f3] {
+                    seen = true;
+                }
+                k += 1;
+            }
+            if !seen {
+                let x: Int = push(ci_runs, found[f3]);
+            }
+            f3 += 1;
+        }
+    }
+    c += 1;
+}
+
+let mutable local_only: [String] = [];
+let mutable ci_only: [String] = [];
+let mutable r: Int = 0;
+while r < len(ci_runs) {
+    let mutable in_suite: Bool = false;
+    let mutable k: Int = 0;
+    while k < len(invoked) {
+        if invoked[k] == ci_runs[r] {
+            in_suite = true;
+        }
+        k += 1;
+    }
+    if !in_suite {
+        let x: Int = push(ci_only, ci_runs[r]);
+    }
+    r += 1;
+}
+
 if prove {
     // Three plants, one per pair, so a control that passes proves all three can still fail.
     if len(failures) < 3 {
@@ -352,6 +430,25 @@ if len(failures) > 0 {
     exit(1);
 }
 
+if only_gap {
+    let mutable o: Int = 0;
+    while o < len(ci_only) {
+        print("  " + ci_only[o]);
+        o += 1;
+    }
+    exit(0);
+}
+
 print(to_string(checked) + " binaries are run by a workflow, and each is built before it runs");
 print(to_string(len(suite_names)) + " binaries are run by the suite, and each is documented as built");
 print(to_string(len(invoked)) + " checks are run by the suite, and each is named by a workflow");
+if len(ci_only) > 0 {
+    print("");
+    print(to_string(len(ci_only)) + " check(s) CI runs that the suite does NOT, so `everything green`"
+        + " locally is not the same statement as a green run:");
+    let mutable o: Int = 0;
+    while o < len(ci_only) {
+        print("  " + ci_only[o]);
+        o += 1;
+    }
+}

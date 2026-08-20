@@ -1,6 +1,9 @@
 #!/bin/sh
 # not-burxt: platform — the runner that executes before any Burxt binary in this repository has been built, so it cannot be one of them
-# Everything CI runs, in one command, with `pipefail` — which is the point of the file.
+# Every check that can run without a browser, in one command, with `pipefail` — which is the point of
+# the file. **This line used to say "everything CI runs" and that was false by a dozen checks**: the wasm
+# and browser-host group needs a built module and a JS host and runs only on a runner. The last line names
+# them, because the number a person compares to CI has to say what it left out.
 #
 # **A pipeline's exit status is the LAST command's, so `python3 test.py | tail -1` reports whether
 # `tail` succeeded.** I ran the suite that way for a week and `set -e` never saw three failures; they
@@ -9,11 +12,18 @@
 set -eu
 if [ -n "${BASH_VERSION-}" ]; then set -o pipefail; fi
 
+# **Counted, not grepped.** The first version of the summary line used `grep -c '^run '`, which reports
+# 23 where 25 checks ran: two of them — the compiler probe and the per-document loop — print their own
+# `ok` and never go through this function. A number that is not the number is the defect this very line
+# was added to fix, so it is incremented where a check passes.
+ran=0
+
 run() {
     printf '  %-46s' "$1"
     shift
     if out=$("$@" 2>&1); then
         printf 'ok\n'
+        ran=$((ran + 1))
     else
         printf 'FAILED\n'
         printf '%s\n' "$out" | sed 's/^/      /'
@@ -90,6 +100,7 @@ if ! out=$(burxt check "$probe/pure.bx" 2>&1); then
     exit 1
 fi
 printf 'ok\n'
+ran=$((ran + 1))
 
 run "the site is Liquid-safe"        ./star-liquid
 run "the guarantees"                 ./star-guarantees
@@ -125,6 +136,16 @@ run "HTML's content model, both ways" ./star-content
 run "the collection and the directory agree" ./star-collection
 run "every CSS rule can match something" ./star-reachable
 
+# **Local now, because it stopped needing a JS host.** It was `tools/flags.mjs`, declared `platform`, and
+# the declaration was false twice: it does not check the driver's options, and it execs a NATIVE binary
+# with JSON on stdin. So it ran only on a runner for no reason that survived the question *which job runs
+# this, and is that job allowed to need Burxt?*
+render=$(mktemp -d)
+./star-generate examples/Choices.sbmx choices --fragment > "$render/choices-r.bx"
+burxt build "$render/choices-r.bx" -o "$render/choices-render" >/dev/null 2>&1
+run "a form shows its own state"      ./star-flags "$render/choices-render"
+rm -rf "$render"
+
 printf '  %-46s' "every component checks clean"
 for doc in examples/*.sbmx; do
     if ! ./star-check "$doc" >/dev/null 2>&1; then
@@ -132,5 +153,15 @@ for doc in examples/*.sbmx; do
     fi
 done
 printf 'ok\n'
+ran=$((ran + 1))
 
-printf '\neverything green\n'
+# **`everything green` was the last line, and CI runs twelve checks this does not.** The wasm and
+# browser-host group needs a built module and a JS host, which may well be the right trade for a local
+# suite — but the number a person compares to a CI run has to say what it left out. The markup session
+# found the same shape in its own runner (three groups skipping above a total that ignored them) and the
+# fix is theirs: name the gap, and print it from the runner rather than asserting it in prose.
+printf '\n%s local checks green.\n' "$ran"
+gap=$(./star-workflows --only-gap)
+if [ -n "$gap" ]; then
+    printf 'NOT run here, but run by CI — so this is not a green run:\n%s\n' "$gap"
+fi

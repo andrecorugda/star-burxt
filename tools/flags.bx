@@ -1,0 +1,167 @@
+// Does a form show its own state?
+//
+//     burxt build tools/flags.bx -o star-flags
+//     ./star-flags <choices-render>
+//
+// **HTML has no false.** `checked="false"` is checked; the only spelling that means "not checked" is for
+// the attribute not to be there. So a boolean attribute cannot carry a computed value, and until star
+// compiled `checked={{ model.agree }}` into a DECISION rather than a value, a form could not show its own
+// state: server-rendering `Choices.sbmx` with `agree: true` produced an unticked box and an unselected
+// dropdown. The model was right and the page was wrong, with nothing reported — and a checkbox is the
+// first thing anybody tries.
+//
+// This runs the native renderer twice, because the property is about presence and ABSENCE, and a test
+// that only looks at one state cannot tell an attribute that is always there from one that is never
+// there. Both columns, again.
+//
+// ---- why this stopped being a `.mjs`, and the question that moved it ------------------------------
+//
+// It was `tools/flags.mjs`, declared `not-burxt: platform — checks the driver's own option handling`.
+// **The reason was false twice over.** It does not check the driver's options; it renders a component
+// twice and compares which attributes are present. And nothing it does needs a JavaScript runtime: it
+// execs a NATIVE binary, writes JSON to its stdin, and reads HTML off its stdout.
+//
+// The language session passed on the sorting question that found it, from the markup session:
+// **"which job runs this, and is that job allowed to need Burxt?"** The job here is a CI step, and every
+// other check in this repository is a Burxt binary — so the answer was yes, and the entry was `gap` filed
+// under `platform`. That is the column the ledger warns about: `gap` is the debt and is supposed to move,
+// `platform` is the architecture and must shrink under challenge rather than shelter things.
+//
+// The regexes are gone because Burxt has none, and the replacement is narrower on purpose: `tag_holding`
+// finds a tag by its opening angle bracket and requires the needle inside THAT tag, where
+// `/<input[^>]*value="cool"[^>]*>/` would also match across a malformed one.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+
+pure function contains(haystack: String, needle: String) -> Bool {
+    return string_find(haystack, needle) >= 0;
+}
+
+// The first `<tag …>` whose own text contains `needle`. Returns "" when there is none, so an absent
+// element cannot pass an absence check — a missing tag would otherwise satisfy "carries nothing".
+pure function tag_holding(html: String, open: String, needle: String) -> String allocates {
+    let mutable from: Int = 0;
+    while from < len(html) {
+        let at: Int = string_find_from(html, open, from);
+        if at < 0 {
+            return "";
+        }
+        let close: Int = string_find_from(html, ">", at);
+        if close < 0 {
+            return "";
+        }
+        let tag: String = substring(html, at, close - at + 1);
+        if contains(tag, needle) {
+            return tag;
+        }
+        from = close + 1;
+    }
+    return "";
+}
+
+class Tally { ran: Int, broken: Int }
+
+function check(mutable tally: Tally, name: String, ok: Bool, detail: String) -> Int {
+    tally.ran += 1;
+    if ok {
+        print("  ok    " + name);
+        return 0;
+    }
+    tally.broken += 1;
+    print("  FAIL  " + name);
+    // **`substring` REFUSES a length past the end**, where JavaScript's `.slice(0, 300)` truncates. The
+    // first version of this port carried `substring(detail, 0, 300)` and trapped with
+    // `does not fit — this string has 94 bytes` — on the FAILURE path only, so it passed every success
+    // run and crashed the moment it had something to report, exiting 70 instead of 1. It was the planted
+    // defect that found it: agreement on success is the half that proves nothing.
+    let mutable cut: Int = 300;
+    if len(detail) < cut {
+        cut = len(detail);
+    }
+    print("        " + substring(detail, 0, cut));
+    return 1;
+}
+
+if os_arg_count() < 2 {
+    print_error("usage: star-flags <choices-render>");
+    exit(2);
+}
+let renderer: String = os_arg(1);
+
+match file_temp_directory("star-flags") {
+    None => {
+        print_error("cannot make a temporary directory");
+        exit(2);
+    }
+    Some(dir) => {
+        // The state goes in on stdin, which a captured command reaches by redirection.
+        let on_state: String = dir + "/on.json";
+        let off_state: String = dir + "/off.json";
+        let wrote_on: Int = file_write(on_state,
+            "\{\"size\": \"large\", \"tone\": \"cool\", \"agree\": true, \"note\": \"\"\}");
+        let wrote_off: Int = file_write(off_state,
+            "\{\"size\": \"small\", \"tone\": \"warm\", \"agree\": false, \"note\": \"\"\}");
+        if wrote_on < 0 || wrote_off < 0 {
+            print_error("cannot write the states to render");
+            exit(2);
+        }
+
+        let render_on: Capture = os_capture_status(
+            file_quote(renderer) + " < " + file_quote(on_state));
+        let render_off: Capture = os_capture_status(
+            file_quote(renderer) + " < " + file_quote(off_state));
+        if render_on.code != 0 || render_off.code != 0 {
+            print_error("the renderer failed:");
+            print_error(render_on.errors + render_off.errors);
+            exit(1);
+        }
+        let on: String = render_on.output;
+        let off: String = render_off.output;
+
+        let mutable tally: Tally = Tally { ran: 0, broken: 0 };
+
+        // The control first: both renders must actually be forms, or every absence below is vacuous.
+        let x1: Int = check(tally, "both renders produced a form",
+            contains(on, "type=\"checkbox\"") && contains(off, "type=\"checkbox\""),
+            substring(on, 0, 120));
+        let x2: Int = check(tally, "and they are not the same page", on != off, "");
+
+        let box_on: String = tag_holding(on, "<input", "type=\"checkbox\"");
+        let box_off: String = tag_holding(off, "<input", "type=\"checkbox\"");
+        let x3: Int = check(tally, "a checked box carries `checked`",
+            contains(box_on, "checked=\"\""), box_on);
+        let x4: Int = check(tally, "an unchecked box carries NOTHING — the only false HTML understands",
+            len(box_off) > 0 && !contains(box_off, "checked"), box_off);
+
+        let opt_large: String = tag_holding(on, "<option", "value=\"large\"");
+        let opt_small_on: String = tag_holding(on, "<option", "value=\"small\"");
+        let opt_small_off: String = tag_holding(off, "<option", "value=\"small\"");
+        let x5: Int = check(tally, "the chosen option is `selected`",
+            contains(opt_large, "selected=\"\""), opt_large);
+        let x6: Int = check(tally, "the others are not",
+            len(opt_small_on) > 0 && !contains(opt_small_on, "selected"), opt_small_on);
+        let x7: Int = check(tally, "and the choice follows the state",
+            contains(opt_small_off, "selected=\"\""), opt_small_off);
+
+        let radio_cool: String = tag_holding(on, "<input", "value=\"cool\"");
+        let radio_warm: String = tag_holding(on, "<input", "value=\"warm\"");
+        let x8: Int = check(tally, "the chosen radio is checked",
+            contains(radio_cool, "checked=\"\""), radio_cool);
+        let x9: Int = check(tally, "the other radio is not",
+            len(radio_warm) > 0 && !contains(radio_warm, "checked"), radio_warm);
+
+        print("");
+        if tally.broken > 0 {
+            print(to_string(tally.broken) + " of " + to_string(tally.ran) + " failure(s)");
+            exit(1);
+        }
+        // Zero is not a pass: nine checks or this gate ran a shape it was not written for.
+        if tally.ran != 9 {
+            print("only " + to_string(tally.ran) + " of 9 checks ran");
+            exit(1);
+        }
+        print("a form rendered on the server shows its own state, in all "
+            + to_string(tally.ran) + " checks");
+    }
+}
