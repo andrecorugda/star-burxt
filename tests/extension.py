@@ -1,7 +1,9 @@
-# not-burxt: blocked — needs INFLATE, not `std/zip.bx`. That module ships in Burxt 1.5.0 and the packer
-#            is Burxt because of it — but it WRITES. This reads: every entry in the archive is
-#            deflated and two entries' CONTENT is parsed, so a reader is a separate module and is
-#            not built yet. The reason said `same std/zip.bx` and was stale the moment 1.5.0 landed
+# not-burxt: blocked — on A RELEASE, which is a more honest dependency than either module. `std/zip.bx`
+#            ships in 1.5.0 and writes; this READS, and every entry is deflated while two entries'
+#            CONTENT is parsed. Two things would unblock it and NEITHER is in a release: inflate
+#            (unauthorised, and `config.mjs` needs it anyway), or a stored-entry option in `zip.bx` —
+#            fifteen lines, designed, costing 1,858 bytes to store the two entries a verifier must
+#            read. A module in somebody's tree that CI cannot download is inventory, not delivery
 """The packaged extension: the version it declares, the bytes it is made of, and what it answers in
 every way it is installed.
 
