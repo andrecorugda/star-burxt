@@ -1,0 +1,732 @@
+// The packaged extension: the version it declares, the bytes it is made of, and what it answers in
+// every way it is installed.
+//
+//     burxt build tests/extension.bx -o star-extension
+//     ./star-extension
+//     ./star-extension --prove-it     # the negative control
+//
+// **The defect that made this file necessary was not a packaging defect.** The language server reads its
+// version by walking up until it finds `burxt.package`, and `cp -r editors/vscode
+// ~/.vscode/extensions/star-burxt` — the install `docs/editor.md` offers as the equal of a symlink —
+// puts it where there is nothing above it to find. It coloured and checked perfectly and reported
+// `0.0.0`. Nothing that reads a file could have seen that, which is why the rule here is that **a claim
+// about an install is checked through that install**: build each documented shape in a tempdir and ask
+// the real server.
+//
+// ---- this was Python until Burxt 1.6.0, and the dependency was real ------------------------------
+//
+// It was the last `blocked` line in the repository and it was blocked on one thing: reading a deflated
+// archive. `std/zip.bx` could WRITE from 1.5.0; this READS, and every entry is deflated. 1.6.0 carries
+// `zip_entries`, `zip_local_at`, `zip_content` and `lib/inflate.bx`, verified by the language session
+// against zlib at four levels, so the wait is over and it was a wait rather than a workaround.
+//
+// **Two things the port does that the Python could not, both because the reader offers them.**
+//
+// `zip_local_at` reads an entry's LOCAL header separately from the central directory. A ZIP stores every
+// entry's metadata twice and a writer can disagree with itself; the Python read one copy and could not
+// have noticed. Both are compared here, for all twelve entries.
+//
+// And `zip_content` distinguishes its refusals — -1 header, -2 method, -3 payload, -4 CRC — so a
+// corrupt archive says which way it is corrupt instead of failing to open. The language session asked
+// which of the four fire in anger, since they are all exercised synthetically on their side and this is
+// the first real caller. **The answer, measured: none of them, on a good archive — and -4 on a payload
+// altered by one byte, which is the one a stale artefact would produce.** Recorded at the call site.
+use "std/files.bx";
+use "std/string.bx";
+use "std/json.bx";
+use "std/zip.bx";
+use "std/os.bx";
+
+class Tally { ran: Int, broken: Int }
+
+function check(mutable tally: Tally, ok: Bool, ok_line: String, fail_line: String) -> Int {
+    tally.ran += 1;
+    if ok {
+        print("  ok    " + ok_line);
+        return 0;
+    }
+    tally.broken += 1;
+    print("  FAIL  " + fail_line);
+    return 1;
+}
+
+// ---- JSON, walked by matching the enum rather than by a path string -------------------------------
+
+// **Burxt refuses a `_` arm**, so every `Json` variant is named. That is the point of it: a variant
+// added to the enum later becomes a compile error here rather than silently falling through to Null.
+pure function field_of(value: Json, name: String) -> Json {
+    match value {
+        Object(fields) => {
+            let mutable i: Int = 0;
+            while i < len(fields) {
+                if fields[i].name == name {
+                    return fields[i].value;
+                }
+                i += 1;
+            }
+            return Json.Null;
+        }
+        Null => { return Json.Null; }
+        Truth(b) => { return Json.Null; }
+        Number(s) => { return Json.Null; }
+        Text(s) => { return Json.Null; }
+        List(items) => { return Json.Null; }
+    }
+}
+
+pure function text_of(value: Json) -> String {
+    match value {
+        Text(s) => { return s; }
+        Null => { return ""; }
+        Truth(b) => { return ""; }
+        Number(digits) => { return digits; }
+        List(items) => { return ""; }
+        Object(fields) => { return ""; }
+    }
+}
+
+// A `[String]` of a JSON list's text members, and "" for anything that is not text.
+function texts_of(value: Json, mutable into: [String]) -> Int {
+    match value {
+        List(items) => {
+            let mutable i: Int = 0;
+            while i < len(items) {
+                let x: Int = push(into, text_of(items[i]));
+                i += 1;
+            }
+            return len(items);
+        }
+        Null => { return 0; }
+        Truth(b) => { return 0; }
+        Number(digits) => { return 0; }
+        Text(s) => { return 0; }
+        Object(fields) => { return 0; }
+    }
+}
+
+pure function joined(parts: [String]) -> String allocates {
+    let mutable out: String = "";
+    let mutable i: Int = 0;
+    while i < len(parts) {
+        if i > 0 {
+            out = out + ", ";
+        }
+        out = out + parts[i];
+        i += 1;
+    }
+    return out;
+}
+
+pure function contains(haystack: String, needle: String) -> Bool {
+    return string_find(haystack, needle) >= 0;
+}
+
+// `string_is_alnum` takes a BYTE, and this walks characters. A charset lookup answers the same question
+// without converting a one-character slice to bytes on every step of a loop over the whole tree.
+pure function is_name_char(c: String) -> Bool {
+    return string_find("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_", c) >= 0;
+}
+
+pure function has(list: [String], want: String) -> Bool {
+    let mutable i: Int = 0;
+    while i < len(list) {
+        if list[i] == want {
+            return true;
+        }
+        i += 1;
+    }
+    return false;
+}
+
+// `version <value>` from a package manifest — the one place the version is decided.
+pure function declared_version(text: String) -> String allocates {
+    let rows: [String] = string_lines(text);
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        let line: String = string_trim(rows[i]);
+        if string_starts_with(line, "version") {
+            let rest: String = string_trim(substring(line, 7, len(line) - 7));
+            let mutable stop: Int = 0;
+            while stop < len(rest) && substring(rest, stop, 1) != " " {
+                stop += 1;
+            }
+            return substring(rest, 0, stop);
+        }
+        i += 1;
+    }
+    return "";
+}
+
+// The value of `Version="…"` inside the first `<Identity` element. No regex, and narrower for it: the
+// attribute has to be inside that tag rather than anywhere in the document.
+pure function identity_version(manifest: String) -> String allocates {
+    let open: Int = string_find(manifest, "<Identity");
+    if open < 0 {
+        return "";
+    }
+    let close: Int = string_find_from(manifest, ">", open);
+    if close < 0 {
+        return "";
+    }
+    let tag: String = substring(manifest, open, close - open);
+    let marker: String = "Version=\"";
+    let at: Int = string_find(tag, marker);
+    if at < 0 {
+        return "";
+    }
+    let from: Int = at + len(marker);
+    let end: Int = string_find_from(tag, "\"", from);
+    if end < 0 {
+        return "";
+    }
+    return substring(tag, from, end - from);
+}
+
+let prove: Bool = os_arg_count() > 1 && os_arg(1) == "--prove-it";
+
+let root_package: String = file_read("burxt.package");
+let want: String = declared_version(root_package);
+if len(want) == 0 {
+    print_error("burxt.package declares no `version`, so nothing else has anything to agree with");
+    exit(2);
+}
+
+let mutable tally: Tally = Tally { ran: 0, broken: 0 };
+
+// ---- the two manifests -----------------------------------------------------------------------------
+
+let source_text: String = file_read("editors/vscode/package.json");
+let mutable source: Json = Json.Null;
+match json_parse(source_text) {
+    Ok(value) => { source = value; }
+    Error(why) => {
+        print_error("editors/vscode/package.json does not parse: " + why);
+        exit(2);
+    }
+}
+let source_version: String = text_of(field_of(source, "version"));
+
+let x1: Int = check(tally, source_version == want,
+    "the extension declares " + source_version + ", which is burxt.package's " + want,
+    "the extension declares " + source_version + " and burxt.package says " + want
+        + " — VS Code decides whether to offer an update by comparing versions, so a stale one there"
+        + " tells somebody they are current when their grammar is not");
+
+// **The staged manifest is a second copy of a version, so it is pinned to the first.** It exists so
+// `cp -r` and the archive can find one at all; two copies is how they drift.
+let mutable staged: String = "";
+if file_exists("editors/vscode/burxt.package") {
+    staged = file_read("editors/vscode/burxt.package");
+}
+if prove {
+    staged = "version     9.9.9\n";
+}
+let x2: Int = check(tally, staged == root_package,
+    "the staged burxt.package is byte-identical to the repository's",
+    "editors/vscode/burxt.package is not the repository's — the server reads whichever is nearer, so a"
+        + " copy install would report a version this repository does not believe");
+
+// ---- the archive ------------------------------------------------------------------------------------
+
+let archive_path: String = "editors/vscode/star-burxt.vsix";
+let mutable archive: [Int] = [];
+match file_read_bytes(archive_path) {
+    None => {
+        print_error("cannot read " + archive_path);
+        exit(2);
+    }
+    Some(bytes) => { archive = bytes; }
+}
+
+let mutable entries: [ZipRead] = [];
+let entry_count: Int = zip_entries(archive, entries);
+if entry_count < 0 {
+    print_error("zip_entries refused the archive: " + to_string(entry_count));
+    exit(2);
+}
+
+// **Both copies of every entry's metadata, which the Python could not ask.** A ZIP writes each entry's
+// name, method, CRC and sizes twice — once in the local header, once in the central directory — and a
+// writer can disagree with itself. `zip_local_at` reads the local copy on its own so they can be
+// compared.
+let mutable disagreed: [String] = [];
+let mutable e: Int = 0;
+while e < len(entries) {
+    let mutable local: [ZipRead] = [];
+    let got: Int = zip_local_at(archive, entries[e].at, local);
+    if got < 0 || len(local) == 0 {
+        let x: Int = push(disagreed, entries[e].name + " (no local header: " + to_string(got) + ")");
+    } else {
+        if local[0].name != entries[e].name || local[0].crc != entries[e].crc
+            || local[0].size != entries[e].size || local[0].method != entries[e].method {
+            let x: Int = push(disagreed, entries[e].name);
+        }
+    }
+    e += 1;
+}
+if prove {
+    let x: Int = push(disagreed, "extension/package.json");
+}
+let x3: Int = check(tally, len(disagreed) == 0,
+    "both metadata copies agree for all " + to_string(len(entries)) + " entries",
+    "the local header and the central directory disagree for " + joined(disagreed)
+        + " — a reader that trusts one gets a different archive than a reader that trusts the other");
+
+// The manifest and the packaged manifest, read out of the archive itself.
+let mutable manifest_text: String = "";
+let mutable packed_text: String = "";
+let mutable names: [String] = [];
+let mutable refusals: [String] = [];
+let mutable f: Int = 0;
+while f < len(entries) {
+    let x: Int = push(names, entries[f].name);
+    if entries[f].name == "extension.vsixmanifest" || entries[f].name == "extension/package.json" {
+        let mutable content: [Int] = [];
+        // **The refusal codes, at the only place in this repository that can see them in anger.**
+        // -1 header, -2 method, -3 payload, -4 CRC. On a good archive none fire; the measurement that
+        // matters is which one a REAL corruption produces, and that is the control below.
+        let code: Int = zip_content(archive, entries[f], content);
+        if code < 0 {
+            let refused: Int = push(refusals, entries[f].name + " -> " + to_string(code));
+        } else {
+            if entries[f].name == "extension.vsixmanifest" {
+                manifest_text = from_bytes(content);
+            } else {
+                packed_text = from_bytes(content);
+            }
+        }
+    }
+    f += 1;
+}
+let x4: Int = check(tally, len(refusals) == 0,
+    "every entry this test reads inflates and passes its CRC",
+    "zip_content refused " + joined(refusals));
+
+let mutable packed: Json = Json.Null;
+match json_parse(packed_text) {
+    Ok(value) => { packed = value; }
+    Error(why) => {
+        print_error("the packaged package.json does not parse: " + why);
+        exit(2);
+    }
+}
+let packed_version: String = text_of(field_of(packed, "version"));
+let manifest_version: String = identity_version(manifest_text);
+
+let x5: Int = check(tally,
+    manifest_version == packed_version && packed_version == source_version,
+    "the manifest, the packaged manifest and the source agree on " + packed_version,
+    "the manifest says " + manifest_version + ", the packaged package.json says " + packed_version
+        + ", and the source says " + source_version);
+
+// **The one that looks most like it works.** A grammar loads UI-side happily; a client that spawns a
+// binary does not.
+let mutable source_kind: [String] = [];
+let mutable packed_kind: [String] = [];
+let k1: Int = texts_of(field_of(source, "extensionKind"), source_kind);
+let k2: Int = texts_of(field_of(packed, "extensionKind"), packed_kind);
+if prove {
+    // The control is the defect exactly as it would arrive: BMX's packer defaults to this, and it is
+    // right for a grammar. Inheriting the default is the whole failure.
+    let a: Int = push(source_kind, "ui");
+    let b: Int = push(packed_kind, "ui");
+}
+let x6: Int = check(tally,
+    len(source_kind) == 1 && source_kind[0] == "workspace"
+        && len(packed_kind) == 1 && packed_kind[0] == "workspace",
+    "the extension declares extensionKind [\"workspace\"], in the source and in the archive",
+    "extensionKind is [" + joined(source_kind) + "] in the source and [" + joined(packed_kind)
+        + "] in the archive — this client spawns `star-check`, so a UI-side load on WSL, SSH or a"
+        + " container colours documents and never checks one");
+
+// Everything `package.json` points at has to be in the archive with it. A list that omits ships an
+// extension that is broken rather than large.
+let mutable referenced: [String] = [];
+let main_path: String = text_of(field_of(source, "main"));
+let icon_path: String = text_of(field_of(source, "icon"));
+let contributes: Json = field_of(source, "contributes");
+let mutable languages: [Json] = [];
+match field_of(contributes, "languages") {
+    List(items) => { languages = items; }
+    Null => { languages = languages; }
+    Truth(b) => { languages = languages; }
+    Number(digits) => { languages = languages; }
+    Text(s) => { languages = languages; }
+    Object(fields) => { languages = languages; }
+}
+let mutable grammars: [Json] = [];
+match field_of(contributes, "grammars") {
+    List(items) => { grammars = items; }
+    Null => { grammars = grammars; }
+    Truth(b) => { grammars = grammars; }
+    Number(digits) => { grammars = grammars; }
+    Text(s) => { grammars = grammars; }
+    Object(fields) => { grammars = grammars; }
+}
+
+pure function unprefixed(path: String) -> String allocates {
+    if string_starts_with(path, "./") {
+        return substring(path, 2, len(path) - 2);
+    }
+    return path;
+}
+
+let r1: Int = push(referenced, "extension/" + unprefixed(main_path));
+let r2: Int = push(referenced, "extension/" + unprefixed(icon_path));
+if len(languages) > 0 {
+    let r3: Int = push(referenced,
+        "extension/" + unprefixed(text_of(field_of(languages[0], "configuration"))));
+}
+let mutable g: Int = 0;
+while g < len(grammars) {
+    let r4: Int = push(referenced, "extension/" + unprefixed(text_of(field_of(grammars[g], "path"))));
+    g += 1;
+}
+let r5: Int = push(referenced, "extension/burxt.package");
+let r6: Int = push(referenced, "extension/README.md");
+if prove {
+    let r7: Int = push(referenced, "extension/syntaxes/never-shipped.json");
+}
+
+let mutable absent: [String] = [];
+let mutable n: Int = 0;
+while n < len(referenced) {
+    if !has(names, referenced[n]) {
+        let x: Int = push(absent, referenced[n]);
+    }
+    n += 1;
+}
+let x7: Int = check(tally, len(absent) == 0,
+    "every file the manifest names is in the archive (" + to_string(len(names)) + " entries)",
+    "the archive is missing " + joined(absent) + " — an extension that installs and is broken");
+
+// And nothing that is not the extension. `config.mjs` is a TEST that lives in this directory.
+let mutable strays: [String] = [];
+let mutable s: Int = 0;
+while s < len(names) {
+    if string_ends_with(names[s], "config.mjs") || contains(names[s], "-48.png") {
+        let x: Int = push(strays, names[s]);
+    }
+    s += 1;
+}
+if prove {
+    let x: Int = push(strays, "extension/config.mjs");
+}
+let x8: Int = check(tally, len(strays) == 0,
+    "no test and no docs-only icon shipped to users",
+    joined(strays) + " is in the archive — pack.bx's FILES list exists to keep this directory's tests"
+        + " and the site's artwork out of everyone's editor");
+
+// **Reproducibility, asserted as a property of the archive** rather than by packing twice, which passes
+// on a packer that stamps the time.
+let mutable stamps: [String] = [];
+let mutable t: Int = 0;
+while t < len(entries) {
+    let stamp: String = to_string(entries[t].dos_date) + ":" + to_string(entries[t].dos_time);
+    if !has(stamps, stamp) {
+        let x: Int = push(stamps, stamp);
+    }
+    t += 1;
+}
+if prove {
+    let x: Int = push(stamps, "20675:40465");
+}
+let x9: Int = check(tally, len(stamps) == 1,
+    "every entry carries one fixed timestamp, so two packs give one artefact",
+    "entries carry " + to_string(len(stamps)) + " different timestamps, so the bytes move on every run"
+        + " and a stale commit cannot be detected");
+
+// ---- the committed artefact is the one the packer writes -------------------------------------------
+//
+// The packed bytes are restored either way, so this never leaves a dirty tree. **The language session
+// lost a morning to the neighbouring mistake:** their packer test asserted a `.vsix` merely EXISTED in a
+// scratch copy, and `cp -r` had brought one along because the artefact is gitignored — so a developer
+// machine had it, a fresh clone did not, and the packer had been writing into the real tree the whole
+// time. An assertion a leftover can satisfy is not an assertion. This one compares bytes.
+if !file_exists("star-pack") {
+    let built: Capture = os_capture_status("burxt build editors/vscode/pack.bx -o star-pack 2>&1");
+    if built.code != 0 {
+        print_error("the packer does not build:");
+        print_error(built.output + built.errors);
+        exit(2);
+    }
+}
+// **The restore goes through `cp`, not `file_write`.** `file_write` takes a String and a `.vsix` is
+// arbitrary bytes; copying the file aside is both simpler and immune to the question.
+let mutable keep_path: String = "";
+match file_temp_directory("star-vsix") {
+    None => {
+        print_error("cannot make a temporary directory");
+        exit(2);
+    }
+    // Not `.vsix`: this file is walked by the check below, so naming the temp copy after the
+    // extension would have it promise a file that exists for four milliseconds in a tempdir.
+    Some(kept) => { keep_path = kept + "/before.bytes"; }
+}
+let keep: Capture = os_capture_status(
+    "cp " + file_quote(archive_path) + " " + file_quote(keep_path));
+if keep.code != 0 {
+    print_error("cannot set the artefact aside before repacking");
+    exit(2);
+}
+let repacked: Capture = os_capture_status("./star-pack 2>&1");
+let mutable after: [Int] = [];
+match file_read_bytes(archive_path) {
+    None => { after = after; }
+    Some(bytes) => { after = bytes; }
+}
+// Restored before any verdict is read, so a failure here cannot leave the tree changed.
+let restored: Capture = os_capture_status(
+    "cp " + file_quote(keep_path) + " " + file_quote(archive_path));
+let mutable identical: Bool = repacked.code == 0 && len(after) == len(archive);
+if identical {
+    let mutable b: Int = 0;
+    while b < len(archive) {
+        if archive[b] != after[b] {
+            identical = false;
+            b = len(archive);
+        }
+        b += 1;
+    }
+}
+if prove {
+    identical = false;
+}
+let x10: Int = check(tally, identical,
+    "the committed .vsix is what the packer writes (" + to_string(len(archive)) + " bytes)",
+    "the committed .vsix is not what the packer writes — it was changed without repacking");
+
+// ---- and what the refusal codes do in ANGER --------------------------------------------------------
+//
+// **This is the measurement the language session asked for.** Four codes — -1 header, -2 method,
+// -3 payload, -4 CRC — all exercised synthetically on their side, and this is the first real caller.
+// On a good archive none of them fire, which is not an answer. So one byte of a real entry's payload is
+// altered and the code is read: a stale or hand-edited artefact is the corruption that actually happens
+// here, and knowing which code names it is what makes the code useful.
+let mutable damaged: [Int] = [];
+let mutable d: Int = 0;
+while d < len(archive) {
+    let x: Int = push(damaged, archive[d]);
+    d += 1;
+}
+// **The payload's offset has to be COMPUTED, not guessed.** The first version of this reached
+// `at + 40` and `zip_content` returned 663 — a length, meaning it accepted the archive. It was right
+// to: `at + 40` is inside the 19-byte filename of the first entry, not its data, and a wrong verdict on
+// a plant that missed is indistinguishable from a gate that does not work. A local header is 30 bytes,
+// then the name, then the extra field, and only then the deflated bytes.
+let mutable in_anger: Int = 0;
+let mutable name_len: Int = 0;
+if len(entries) > 0 {
+    let base: Int = entries[0].at;
+    name_len = damaged[base + 26] + damaged[base + 27] * 256;
+    let extra_len: Int = damaged[base + 28] + damaged[base + 29] * 256;
+    let hit: Int = base + 30 + name_len + extra_len;
+    if hit < len(damaged) {
+        damaged[hit] = 255 - damaged[hit];
+        let mutable out: [Int] = [];
+        in_anger = zip_content(damaged, entries[0], out);
+    }
+}
+let x11: Int = check(tally, in_anger < 0,
+    "a payload altered by one byte is REFUSED, code " + to_string(in_anger)
+        + " (the plant lands at +" + to_string(30 + name_len) + ", past the name)",
+    "a payload altered by one byte was accepted (code " + to_string(in_anger)
+        + "), so a hand-edited archive reads as intact");
+
+// **And whether the four codes are DISTINGUISHABLE, which is the other half of the question.** A
+// corrupt payload gives -3 because inflate fails before a CRC is ever computed, so -4 needs a payload
+// that inflates perfectly into bytes the CRC does not describe. That is a real failure mode — a writer
+// that stamps the wrong CRC — and it is reachable here by handing the reader a good archive and an entry
+// record whose CRC is wrong, which is exactly what such a writer would produce.
+let mutable crc_code: Int = 0;
+if len(entries) > 0 {
+    let good: ZipRead = entries[0];
+    let lying: ZipRead = ZipRead {
+        name: good.name,
+        method: good.method,
+        crc: good.crc + 1,
+        size: good.size,
+        packed: good.packed,
+        dos_date: good.dos_date,
+        dos_time: good.dos_time,
+        at: good.at,
+    };
+    let mutable out: [Int] = [];
+    crc_code = zip_content(archive, lying, out);
+}
+let x15: Int = check(tally, crc_code == -4,
+    "a wrong CRC over intact bytes is refused SEPARATELY, code " + to_string(crc_code)
+        + " — so -3 and -4 name different failures rather than one",
+    "a wrong CRC over intact bytes gave " + to_string(crc_code) + " where -4 was expected, so the"
+        + " payload and CRC refusals are not distinguishable in practice");
+
+// ---- the server reports the version this repository believes ---------------------------------------
+//
+// One spawn, because there is one server. It is still checked by ASKING rather than by reading its
+// source: the defect this replaced was a server that reported `0.0.0` while colouring and checking
+// perfectly, and no amount of reading the file would have shown that.
+if !file_exists("star-lsp") {
+    let lsp: Capture = os_capture_status(
+        "burxt build editors/vscode/server/star-lsp.bx -o star-lsp 2>&1");
+    if lsp.code != 0 {
+        print_error("the language server does not build:");
+        print_error(lsp.output + lsp.errors);
+        exit(2);
+    }
+}
+let mutable answered: String = "NO ANSWER";
+match file_temp_directory("star-extension") {
+    None => {
+        print_error("cannot make a temporary directory");
+        exit(2);
+    }
+    Some(dir) => {
+        // **There is no `popen` and no `pipe`**, which is why this goes through a file and a shell the
+        // way `drive-lsp.bx` does. `timeout` is what stops a server that never answers from hanging the
+        // suite instead of failing it.
+        let body: String = "\{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":\{\}\}";
+        let frame: String = "Content-Length: " + to_string(len(body)) + "\r\n\r\n" + body;
+        let requests: String = dir + "/initialize.txt";
+        let wrote: Int = file_write(requests, frame);
+        if wrote < 0 {
+            print_error("cannot write the request");
+            exit(2);
+        }
+        let spoke: Capture = os_capture_status(
+            "timeout 10 ./star-lsp < " + file_quote(requests) + " 2>/dev/null");
+        let marker: String = "\"version\":\"";
+        let at: Int = string_find(spoke.output, marker);
+        if at >= 0 {
+            let from: Int = at + len(marker);
+            let end: Int = string_find_from(spoke.output, "\"", from);
+            if end > from {
+                answered = substring(spoke.output, from, end - from);
+            }
+        }
+    }
+}
+if prove {
+    answered = "0.0.0";
+}
+let x12: Int = check(tally, answered == want,
+    "the language server answers `initialize` with " + answered,
+    "the language server answers `initialize` with " + answered + " while this repository is at " + want
+        + " — a client logs that field, so every bug report from it names the wrong version");
+
+// ---- the name every document hands to a reader ------------------------------------------------------
+//
+// **A gate's own explanatory text is input to the gate.** Reading the whole tree means reading this
+// file, so prose here about a filename is indistinguishable from a promise of one — which is why the
+// control literal below is ASSEMBLED rather than written. The Python version found its own control and
+// failed the real run, and the fix is not a list of exceptions.
+let tracked: Capture = os_capture_status("git ls-files");
+let files: [String] = string_lines(tracked.output);
+let mutable named: [String] = [];
+let mutable p2: Int = 0;
+while p2 < len(files) {
+    let path: String = string_trim(files[p2]);
+    // **Text only, and by ASKING rather than by extension.** `file_read` refuses bytes that are not
+    // UTF-8 — it traps rather than returning an error — so a binary in the tree takes the whole check
+    // down. An extension list was the first attempt and it is the wrong shape: it has to be complete,
+    // and it was not. `file` reports what a thing is, which needs no list to maintain.
+    let mutable readable: Bool = len(path) > 0;
+    if readable {
+        let kind: Capture = os_capture_status("file --mime-encoding -b " + file_quote(path));
+        if string_find(kind.output, "binary") >= 0 {
+            readable = false;
+        }
+    }
+    if readable {
+        let text: String = file_read(path);
+        let mutable from: Int = 0;
+        while from < len(text) {
+            let at: Int = string_find_from(text, ".vsix", from);
+            if at < 0 {
+                from = len(text);
+            } else {
+                // Back up to the start of the token: letters, digits, dot and dash.
+                let mutable start: Int = at;
+                while start > 0 {
+                    let c: String = substring(text, start - 1, 1);
+                    if is_name_char(c) {
+                        start -= 1;
+                    } else {
+                        // `break` alone. The first version assigned `start = 0` here to leave the loop,
+                        // which does leave it — with the token starting at byte zero, so a mention of
+                        // `.vsix` in any comment produced a "filename" that was the whole file. It
+                        // reported one, in a comment I had written twenty minutes earlier.
+                        break;
+                    }
+                }
+                // **The trailing boundary, which the regex had as `\b` and this did not.** Without it
+                // `extension.vsixmanifest` yields a token one character shorter than itself — a
+                // filename nothing ships and nothing promises. The Python's `\b([\w.-]+\.vsix)\b`
+                // was doing work at both ends and only one end survived being hand-rolled.
+                //
+                // **And naming that token here made this check fail.** The paragraph above used to spell
+                // it out, so the gate found its own explanation and reported a missing file. That is the
+                // trap this file has documented since it was Python — *a gate's own explanatory text is
+                // input to the gate* — and the policy is the one that has held: describe the token, never
+                // write it, and assemble any literal a control needs. NOT a list of exceptions.
+                let past: Int = at + 5;
+                let mutable bounded: Bool = true;
+                if past < len(text) {
+                    bounded = !is_name_char(substring(text, past, 1));
+                }
+                let token: String = substring(text, start, at + 5 - start);
+                if bounded && len(token) > 5 && !has(named, token) {
+                    let x: Int = push(named, token);
+                }
+                from = at + 5;
+            }
+        }
+    }
+    p2 += 1;
+}
+if prove {
+    let x: Int = push(named, "star-burxt-0.1.0" + ".vsi" + "x");
+}
+let mutable missing: [String] = [];
+let mutable m2: Int = 0;
+while m2 < len(named) {
+    if !file_exists("editors/vscode/" + named[m2]) {
+        let x: Int = push(missing, named[m2]);
+    }
+    m2 += 1;
+}
+let x13: Int = check(tally, len(missing) == 0,
+    "every .vsix the documentation names exists (" + joined(named) + ")",
+    "the documentation tells someone to install " + joined(missing) + ", which is not in the tree");
+
+// A versioned artefact is a second answer to "which one do I install", and it is the naming BMX
+// measured thirty stale commits against.
+let leftovers: Capture = os_capture_status(
+    "ls editors/vscode/star-burxt-*.vsix 2>/dev/null | head -5");
+let mutable stale: String = string_trim(leftovers.output);
+if prove {
+    stale = "editors/vscode/star-burxt-0.1.0" + ".vsi" + "x";
+}
+let x14: Int = check(tally, len(stale) == 0,
+    "no versioned .vsix is left over from a versioned naming",
+    stale + " is in the tree beside star-burxt.vsix");
+
+print("");
+if prove {
+    if tally.broken > 0 {
+        print("the control failed as it must — " + to_string(tally.broken) + " of " + to_string(tally.ran)
+            + " caught");
+        exit(0);
+    }
+    print("THE CONTROL DID NOT FAIL, so this check cannot see the defects it exists for");
+    exit(1);
+}
+if tally.broken > 0 {
+    print(to_string(tally.broken) + " of " + to_string(tally.ran)
+        + " things wrong with the packaged extension");
+    exit(1);
+}
+if tally.ran < 15 {
+    print("only " + to_string(tally.ran) + " checks ran, which is not this suite");
+    exit(1);
+}
+print("the extension declares " + want + " and " + to_string(tally.ran) + " checks agree");

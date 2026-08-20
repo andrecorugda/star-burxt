@@ -181,6 +181,7 @@ burxt build tools/versions.bx    -o star-versions
 burxt build tools/workflows.bx   -o star-workflows
 burxt build tools/controls.bx    -o star-controls
 burxt build tools/flags.bx       -o star-flags
+burxt build tests/extension.bx   -o star-extension
 burxt build editors/lsp/drive-lsp.bx -o star-drive-lsp
 ```
 
@@ -200,7 +201,7 @@ There is no test-name filter. The granular unit is the suite, or one document:
 ./star-check examples/Todos.sbmx           # one component, all three layers
 ./star-guarantees                          # the guarantees (generator accept + refusals)
 ./star-docs                                # every .sbmx on the site, generated AND compiled
-python3 tests/extension.py                 # the packaged extension (still Python: needs a zip reader)
+./star-extension                           # the packaged extension, every install shape
 node tools/paints.mjs                      # the site's syntax colouring
 node editors/vscode/config.mjs             # folding markers and icon geometry
 STAR_CHECK=./star-check ./star-drive-lsp   # the language server's protocol

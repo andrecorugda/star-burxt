@@ -239,6 +239,49 @@ while e < len(beside) {
     e += 1;
 }
 
+// ---- and the mirror image: an artefact git DOES see ----------------------------------------------
+//
+// The two rules above catch a source git ignores. This catches the opposite, and it was live:
+// **`star-lsp` and `star-drive-lsp` — 356K of compiled binary — were COMMITTED**, named in `.gitignore`
+// on lines 56 and 57, and shipping in every clone regardless. `.gitignore` has no effect on a file that
+// is already tracked, so the rule read like protection and was decoration. They arrived in a `git add -A`
+// before those lines existed and nothing has rebuilt them since, so the bytes in the repository are a
+// stale compile of a source that has moved on.
+//
+// It surfaced sideways, from `tests/extension.bx` walking every tracked file for a `.vsix` token and
+// trapping on `read_file handed back bytes that are not valid UTF-8` — a checker for one thing finding
+// another, which is the second time that has happened this week.
+//
+// The predicate is git's own, and the negations are why it needs care: `git check-ignore --no-index`
+// reports `!examples/theme.css` too, because that file IS matched by a rule — an un-ignore rule. A file
+// whose matching rule begins with `!` is named back in ON PURPOSE and is the opposite of this defect.
+let claimed: Capture = os_capture_status(
+    "git ls-files | git check-ignore --no-index --stdin -v 2>/dev/null");
+let claims: [String] = string_lines(claimed.output);
+let mutable c2: Int = 0;
+while c2 < len(claims) {
+    let row: String = string_trim(claims[c2]);
+    if len(row) > 0 {
+        // `<.gitignore>:<line>:<rule>\t<path>`
+        let tab: Int = string_find(row, "\t");
+        if tab > 0 {
+            let path: String = string_trim(substring(row, tab + 1, len(row) - tab - 1));
+            let head: String = substring(row, 0, tab);
+            let last: Int = string_rfind(head, ":");
+            let mutable rule: String = "";
+            if last >= 0 {
+                rule = string_trim(substring(head, last + 1, len(head) - last - 1));
+            }
+            if !string_starts_with(rule, "!") {
+                let x: Int = push(failures, path + " is COMMITTED and `.gitignore` names it (`" + rule
+                    + "`), which does nothing to a tracked file. Either it belongs in the repository and"
+                    + " the rule is wrong, or it is an artefact and needs `git rm --cached`");
+            }
+        }
+    }
+    c2 += 1;
+}
+
 print(to_string(burxt_lines) + " lines of Burxt; " + to_string(other_lines) + " not");
 let mutable c: Int = 0;
 while c < len(categories()) {

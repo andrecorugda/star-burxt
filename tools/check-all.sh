@@ -110,7 +110,7 @@ run "the editor configuration"       node editors/vscode/config.mjs
 run "the language server speaks the protocol" bash -c '
   STAR_CHECK=./star-check ./star-drive-lsp'
 run "the packaged extension, every install shape" bash -c '
-  python3 tests/extension.py && python3 tests/extension.py --prove-it'
+  ./star-extension && ./star-extension --prove-it'
 run "star used as a dependency, from outside" bash -c '
   ./star-consuming && ./star-consuming --prove-it'
 run "every line that is not Burxt says why" bash -c '
