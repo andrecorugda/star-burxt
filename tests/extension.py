@@ -1,4 +1,7 @@
-# not-burxt: blocked — reads that ZIP back to check the artefact is what the packer writes; same std/zip.bx
+# not-burxt: blocked — needs INFLATE, not `std/zip.bx`. That module ships in Burxt 1.5.0 and the packer
+#            is Burxt because of it — but it WRITES. This reads: every entry in the archive is
+#            deflated and two entries' CONTENT is parsed, so a reader is a separate module and is
+#            not built yet. The reason said `same std/zip.bx` and was stale the moment 1.5.0 landed
 """The packaged extension: the version it declares, the bytes it is made of, and what it answers in
 every way it is installed.
 
