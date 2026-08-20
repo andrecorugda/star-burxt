@@ -92,8 +92,7 @@ fi
 printf 'ok\n'
 
 run "the site is Liquid-safe"        ./star-liquid
-run "the guarantees, in Burxt"       ./star-guarantees
-run "the guarantees still in Python" python3 tests/guarantees.py
+run "the guarantees"                 ./star-guarantees
 run "every documented example"       python3 verify-docs.py
 run "the highlighter"                node tools/paints.mjs
 run "the editor configuration"       node editors/vscode/config.mjs

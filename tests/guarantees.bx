@@ -12,6 +12,10 @@
 // the generator could emit an import that resolves nowhere and every test would still pass. It did
 // exactly that. **A test that repairs its input is testing the repair.**
 //
+// It lived in Burxt's `tests/runner.rs` while star-burxt lived in Burxt's `lib/`. It moves with the
+// code, because a suite that tests a package the repository no longer contains is testing something
+// it cannot see change.
+//
 // ---- and it was `test.py`, in the root ------------------------------------------------------------
 //
 // Andre's directive, and it is the reason this file exists: *"I will not accept a language that really
@@ -21,12 +25,41 @@
 // Python; a directive is what moved it.
 //
 // Nothing here needed Python: write a file, run a binary, look for a string in its output.
+//
+// **The port was finished by diffing the two suites, not by reading them.** All 148 cases ran in both
+// languages side by side, and the check was that the two printed the same 148 names in the same order
+// with the same verdicts — which caught three names the first twelve cases had quietly shortened.
+// Then eight defects were planted, one in each assertion written as a NEGATIVE (`!contains`, `== 0`),
+// because that is the shape that passes when the stream it reads is empty; exactly those eight failed.
+// The two regexes this file used to hold are gone — Burxt has none — and the hand-rolled scans that
+// replaced them answer the numbers the regexes did, 52 refusal sites and 3 of them showing a fence.
+//
+// ---- every literal brace in this file is escaped, and that is not a style choice -----------------
+//
+// Burxt interpolates `{expr}` inside a string literal, and these fixtures are almost nothing but
+// braces — `{{ to_string(x) }}` in a slot, `{ return count + 1; }` in a handler, `class Model { … }`
+// in a `===bx` section. So every one of them is written `\{` and `\}`. A forty-brace document escaped
+// by hand is exactly where this goes wrong quietly, so the fixtures below were converted
+// mechanically and then checked, character for character, against the Python they came from.
+//
+// The other consequence: a fixture lives in a `const` rather than at the call site. A top-level `let`
+// is invisible to a function body, and four copies of the same document is four chances for one of
+// them to drift — which is what the first version of this file had.
 use "std/files.bx";
 use "std/string.bx";
 use "std/os.bx";
 
 pure function contains(haystack: String, needle: String) -> Bool {
     return string_find(haystack, needle) >= 0;
+}
+
+// `a.index(x) < a.index(y)` in the Python, which raises when a needle is missing. Here a missing
+// needle answers `false`, so "the author's code comes first" cannot pass because neither half was
+// emitted at all.
+pure function before(text: String, first: String, second: String) -> Bool {
+    let a: Int = string_find(text, first);
+    let b: Int = string_find(text, second);
+    return a >= 0 && b >= 0 && a < b;
 }
 
 // **Returns its verdict rather than pushing to a shared list.** A top-level `let` is invisible to a
@@ -45,6 +78,407 @@ function check(name: String, ok: Bool, detail: String) -> Int {
         i += 1;
     }
     return 1;
+}
+
+// The accepting document, and the one five of the cases below read. It is a `const` because a
+// top-level `let` is invisible to a function body — and because four copies of a fixture is four
+// chances for one of them to drift, which is what the first version of this file had.
+const DOC_GOOD: String = ":props: count: Int\n:!props:\n\nAt \{\{ to_string(count) \}\}.\n\n:button: on:click=count + 1\nmore\n:!button:\n";
+const DOC_VOID_BODY: String = ":props: n: Int\n:!props:\n\n:input: on:input=n\noops\n:!input:\n";
+const DOC_FLOW_IN_BUTTON: String = ":props: n: Int\n:!props:\n\n:button: on:click=n + 1\n# nope\n:!button:\n";
+const DOC_HANDLER_IN_FOR: String = ":props: rows: [Row]\n:!props:\n\n:for: row in rows key row.id\n:li: on:click=row.id\n\{\{ row.label \}\}\n:!li:\n:!for:\n";
+// Component mode: a `===bx` section, an author's `Model`, `Msg` and `update`, and a handler that
+// is a MESSAGE rather than an expression.
+const DOC_COMPONENT: String = "===bx\nclass Model \{ count: Int, history: [Int] \}\nenum Msg \{ Increment, Reset \}\npure function update(msg: Msg, m: Model) -> Model \{\n    match msg \{\n        Increment => \{ return Model \{ count: m.count + 1, history: m.history \}; \}\n        Reset     => \{ return Model \{ count: 0, history: m.history \}; \}\n    \}\n\}\n===\n\n:props: model: Model\n:!props:\n\nAt \{\{ to_string(model.count) \}\}.\n\n:button: on:click=Msg.Increment\nmore\n:!button:\n";
+const DOC_IMPORTED: String = "===bx\nuse \"std/string.bx\";\nclass Model \{ n: Int \}\npure function update(msg: Int, m: Model) -> Model \{ return m; \}\n===\n\n:props: model: Model\n:!props:\n\nAt \{\{ to_string(model.n) \}\}.\n";
+const DOC_ORPHAN: String = "===bx\nclass Model \{ n: Int \}\n===\n\n:props: model: Model\n:!props:\n\n:button: on:click=Msg.Go\ngo\n:!button:\n";
+const DOC_ROUTED: String = "===bx\nuse \"std/string.bx\";\nenum Route \{ Home, Post(Int), Missing \}\nclass Model \{ route: Route, path: String \}\nenum Msg \{ Navigate(String) \}\npure function route_of(path: String) -> Route \{\n    if path == \"/\" \{ return Route.Home; \}\n    if string_starts_with(path, \"/posts/\") \{\n        return Route.Post(string_to_int(substring(path, 7, len(path) - 7), 0));\n    \}\n    return Route.Missing;\n\}\npure function update(msg: Msg, m: Model) -> Model \{\n    match msg \{\n        Navigate(to) => \{ return Model \{ route: route_of(to), path: to \}; \}\n    \}\n\}\n===\n\n:props: model: Model\n:!props:\n\n:nav:\n\n:a: href=/posts/42\na post\n:!a:\n\n:!nav:\n\n:match: model.route\n\n:case: Home\n\n# Welcome\n\n:!case:\n\n:case: Post(id)\n\n# Post \{\{ to_string(id) \}\}\n\n:!case:\n\n:case: Missing\n\n:p:\nNothing at \{\{ model.path \}\}\n:!p:\n\n:!case:\n\n:!match:\n";
+const ROUTE_ENUM: String = "enum Route \{ Home, Post(Int), Missing \}";
+const ROUTE_ENUM_GROWN: String = "enum Route \{ Home, Post(Int), Missing, Archive \}";
+const DOC_ROWS: String = "===bx\nuse \"std/string.bx\";\nclass Todo \{ id: Int, label: String \}\nclass Model \{ todos: [Todo] \}\nenum Msg \{ Toggle(Int) \}\npure function update(msg: Msg, m: Model) -> Model \{ return m; \}\n===\n\n:props: model: Model\n:!props:\n\n:for: todo in model.todos key to_string(todo.id)\n\n:li:\n\n:button: on:click=Msg.Toggle(string_to_int(key, 0))\n\{\{ todo.label \}\}\n:!button:\n\n:!li:\n\n:!for:\n";
+const ROW_KEYED_HANDLER: String = "Msg.Toggle(string_to_int(key, 0))";
+const ROW_CAPTURING_HANDLER: String = "Msg.Toggle(todo.id)";
+const ROW_KEY_CLAUSE: String = " key to_string(todo.id)";
+const DOC_PROP_FINE: String = ":props: amount: Int\n:!props:\n\nAt \{\{ to_string(amount) \}\}.\n";
+const DOC_STYLED: String = "===style.global\nbody \{ font-family: system-ui; \}\n===\n\n===style.local\n.card \{ border: 1px solid #ddd; \}\n.card p, .note \{ color: #555; \}\n@media (max-width: 600px) \{ .card \{ padding: .5rem; \} \}\n===\n\n:props: n: Int\n:!props:\n\n:div: class=card\n\n:p:\ninside\n:!p:\n\n:!div:\n";
+const DOC_PLAIN_DIV: String = ":props: n: Int\n:!props:\n\n:div:\nx\n:!div:\n";
+const BADGE_SOURCE: String = ":props: amount: Int, tone: String\n:!props:\n\n:span: class=badge\n\{\{ tone \}\}: \{\{ to_string(amount) \}\}\n:!span:\n";
+const DOC_PAGE: String = "===bx\nuse \"./Badge.sbmx\";\nclass Model \{ unread: Int \}\npure function update(msg: Int, m: Model) -> Model \{ return m; \}\n===\n\n:props: model: Model\n:!props:\n\n:Badge: amount=\{\{ model.unread \}\} tone=unread\n:!Badge:\n";
+const CALL_AS_WRITTEN: String = "amount=\{\{ model.unread \}\} tone=unread";
+const CALL_REORDERED: String = "tone=unread amount=\{\{ model.unread \}\}";
+const CALL_TONE: String = " tone=unread";
+const DOC_UNIMPORTED: String = ":props: n: Int\n:!props:\n\n:Missing: x=1\n:!Missing:\n";
+const DOC_ABSENT: String = "===bx\nuse \"./Nope.sbmx\";\nclass Model \{ n: Int \}\npure function update(m: Int, x: Model) -> Model \{ return x; \}\n===\n\n:props: model: Model\n:!props:\n\nhi\n";
+const DOC_ROUTER: String = "===bx\nenum Route \{ Home, Post(Int) \}\nclass Model \{ route: Route \}\npure function update(msg: Int, m: Model) -> Model \{ return m; \}\n===\n\n:props: model: Model\n:!props:\n\n:match: model.route\n\n:case: Home\n\n# Welcome\n\n:!case:\n\n:case: Post(id)\n\n# Post \{\{ to_string(id) \}\}\n\n:!case:\n\n:!match:\n";
+const ROUTER_POST_BRANCH: String = ":case: Post(id)\n\n# Post \{\{ to_string(id) \}\}\n\n:!case:\n\n";
+const DOC_STRAY_CASE: String = ":props: n: Int\n:!props:\n\n:case: Home\nx\n:!case:\n";
+const DOC_LOOSE_TEXT: String = ":props: n: Int\n:!props:\n\n:match: n\n\ntext, not a case\n\n:!match:\n";
+const DOC_EMPTY_MATCH: String = ":props: n: Int\n:!props:\n\n:match: n\n\n:!match:\n";
+const DOC_BRANCHED: String = ":props: n: Int\n:!props:\n\n:if: n > 0\n\n:p:\nsome\n:!p:\n\n:!if:\n\n:else:\n\n:p:\nnone\n:!p:\n\n:!else:\n";
+const DOC_ORPHANED_ELSE: String = ":props: n: Int\n:!props:\n\nA paragraph.\n\n:else:\n\nx\n\n:!else:\n";
+const DOC_CONDITIONED_ELSE: String = ":props: n: Int\n:!props:\n\n:if: n > 0\n\nx\n\n:!if:\n\n:else: n < 0\n\ny\n\n:!else:\n";
+const DOC_LOCATED: String = ":props: n: Int\n:!props:\n\n# A page\n\nSome introduction\nover two lines.\n\n:div:\n\n:button: on:click=n + 1\n# nope\n:!button:\n\n:!div:\n";
+// The fixture has a multi-byte character in it deliberately; see the case below.
+const DOC_ACCENTED: String = ":props: n: Int\n:!props:\n\nA line with an Ã¥ in it, then:\n\n:button: on:click=n + 1\n# nope\n:!button:\n";
+const DOC_ATTRS: String = ":props: post: Post\n:!props:\n\n:div: class=card\n\n:span: class=\"tag muted\"\ndraft\n:!span:\n\n:a: href=/posts/\{\{ to_string(post.id) \}\}\nread more\n:!a:\n\n:input: disabled\n:!input:\n\n:!div:\n";
+const DOC_VOID_SOURCE: String = ":props: n: Int\n:!props:\n\n:source:\nbody\n:!source:\n";
+const DOC_TEXTAREA_HEADING: String = ":props: n: Int\n:!props:\n\n:textarea:\n# nope\n:!textarea:\n";
+const DOC_UNCLOSED_QUOTE: String = ":props: n: Int\n:!props:\n\n:div: class=\"oops\nx\n:!div:\n";
+const DOC_ONE_PARAGRAPH: String = ":props: n: Int\n:!props:\n\n:button: on:click=n + 1\nonly\n:!button:\n";
+const DOC_TWO_PARAGRAPHS: String = ":props: n: Int\n:!props:\n\n:button: on:click=n + 1\nfirst\n\nsecond\n:!button:\n";
+const DOC_KEPT_PARAGRAPH: String = ":props: n: Int\n:!props:\n\n:div:\nkept\n:!div:\n";
+const DOC_NESTED_PHRASING: String = ":props: n: Int\n:!props:\n\n:button: on:click=n + 1\n:span: class=box\n:!span:\n:span: class=text\nhi\n:!span:\n:!button:\n";
+const DOC_FLOW_IN_PHRASING: String = ":props: n: Int\n:!props:\n\n:button: on:click=n + 1\n:div:\nno\n:!div:\n:!button:\n";
+const DOC_UNQUOTED_VALUE: String = ":props: n: Int\n:!props:\n\n:input: placeholder=What needs doing?\n:!input:\n";
+const DOC_CALL_LOOP: String = ":props: items: [Line]\n:!props:\n\n:for: line in shown(items)\na row\n:!for:\n";
+const DOC_MARKDOWN_SCOPE: String = "===bx\nclass Model \{ n: Int \}\nenum Msg \{ Nothing \}\npure function update(msg: Msg, m: Model) -> Model \{ return m; \}\n===\n\n===style.local\nh1 \{ color: red; \}\n===\n\n:props: model: Model\n:!props:\n\n# Title\n";
+const DOC_PSEUDO: String = "===bx\nclass Model \{ n: Int \}\nenum Msg \{ Nothing \}\npure function update(msg: Msg, m: Model) -> Model \{ return m; \}\n===\n\n===style.local\n.row::before \{ content: \"x\"; \}\n.row:hover \{ color: red; \}\n.card h1 \{ margin: 0; \}\n===\n\n:props: model: Model\n:!props:\n\n:div: class=row\nhi\n:!div:\n";
+const DOC_CHILD_TEXT: String = ":props: label: String\n:!props:\n\n:span: class=text child=hello\n:!span:\n";
+const DOC_CHILD_QUOTED: String = ":props: label: String\n:!props:\n\n:span: child=\"two words\"\n:!span:\n";
+const DOC_CHILD_BRACED: String = ":props: label: String\n:!props:\n\n:span: child=\{label\}\n:!span:\n";
+const DOC_CHILD_SPACED: String = ":props: n: Int\n:!props:\n\n:span: child=\{to_string(n + 1)\}\n:!span:\n";
+const DOC_CHILD_EMPTY: String = ":props: n: Int\n:!props:\n\n:span: class=box child=\{\}\n:!span:\n";
+const DOC_CHILD_SLOT: String = ":props: label: String\n:!props:\n\n:span: child=\{\{ label \}\}\n:!span:\n";
+const DOC_CHILD_AND_BODY: String = ":props: label: String\n:!props:\n\n:div: child=one\ntwo\n:!div:\n";
+const DOC_CHILD_ON_VOID: String = ":props: label: String\n:!props:\n\n:input: child=nope\n:!input:\n";
+const DOC_BARE_BOOLEAN: String = ":props: label: String\n:!props:\n\n:span: class=text hidden\n:!span:\n";
+const DOC_ATTR_AFTER_ON: String = ":props: n: Int\n:!props:\n\n:button: on:click=n + 1 class=danger\nhi\n:!button:\n";
+const DOC_ATTR_BEFORE_ON: String = ":props: n: Int\n:!props:\n\n:button: class=danger on:click=n + 1\nhi\n:!button:\n";
+const DOC_PLAIN_HANDLER: String = ":props: n: Int\n:!props:\n\n:button: on:click=n + 1\nhi\n:!button:\n";
+const DOC_ONE_BRACE: String = ":props: n: Int\n:!props:\n\n:span: class=\{to_string(n)\}\nx\n:!span:\n";
+const DOC_TWO_BRACE: String = ":props: n: Int\n:!props:\n\n:span: class=\{\{ to_string(n) \}\}\nx\n:!span:\n";
+const DOC_STILL_CHILD: String = ":props: n: Int\n:!props:\n\n:span: child=\{to_string(n)\}\n:!span:\n";
+const DOC_COMMA_HEAD: String = ":props: n: Int\n:!props:\n\n:div: class=card, id=main\nhi\n:!div:\n";
+const DOC_SPACE_HEAD: String = ":props: n: Int\n:!props:\n\n:div: class=card id=main\nhi\n:!div:\n";
+const DOC_HANDLER_COMMAS: String = ":props: n: Int\n:!props:\n\n:button: class=row, on:click=Msg.Toggle(string_to_int(key, 0))\nhi\n:!button:\n";
+const DOC_CHILD_AFTER_COMMA: String = ":props: n: Int\n:!props:\n\n:span: class=box, child=\{to_string(n)\}\n:!span:\n";
+const DOC_INTERP_COMMA: String = ":props: n: Int\n:!props:\n\n:div: class=\{\{ pick(n, 2) \}\}\nhi\n:!div:\n";
+const DOC_MIXED_VALUE: String = ":props: n: Int\n:!props:\n\n:a: href=/x/\{\{ to_string(n) \}\}/y\ngo\n:!a:\n";
+const DOC_IMPURE: String = "===bx\nuse \"std/files.bx\";\n\nclass Model \{ n: Int \}\nenum Msg \{ Nothing \}\npure function update(msg: Msg, m: Model) -> Model \{ return m; \}\n\nfunction peek() -> String touches files \{\n    match file_read_maybe(\"/etc/hostname\") \{ None => \{ return \"\"; \} Some(t) => \{ return t; \} \}\n\}\n===\n\n:props: model: Model\n:!props:\n\n:p: child=\{peek()\}\n:!p:\n";
+const IMPURE_SIGNATURE: String = "function peek() -> String touches files \{";
+const PURE_SIGNATURE: String = "pure function peek() -> String \{";
+const IMPURE_BODY: String = "    match file_read_maybe(\"/etc/hostname\") \{ None => \{ return \"\"; \} Some(t) => \{ return t; \} \}\n";
+const PURE_BODY: String = "    return \"ok\";\n";
+const FILES_IMPORT: String = "use \"std/files.bx\";\n\n";
+const DOC_TWO_EVENTS: String = ":props: n: Int\n:!props:\n\n:input: on:input=Msg.Draft(value) on:keydown=Msg.Add\n:!input:\n";
+const DOC_ORDERING_ADVICE: String = ":props: n: Int\n:!props:\n\n:button: on:click=n + 1 class=danger\nx\n:!button:\n";
+const SAYS_DISPATCH: String = "if handler == 0 \{ return count + 1; \}";
+const SAYS_STATE_RECORD: String = "class Model \{ count: Int, history: [Int] \}";
+const SAYS_MESSAGE: String = "return update(Msg.Increment, model);";
+const SAYS_MATCH_ROUTE: String = "match model.route \{";
+const SAYS_CASE_PATTERN: String = "Post(id) => \{";
+const SAYS_ELSE: String = "else \{";
+const SAYS_AT_RULE: String = "@media (max-width: 600px) \{";
+const SAYS_SCOPED_IN_AT_RULE: String = ".card[data-s-c] \{ padding: .5rem; \}";
+const SAYS_GLOBAL_RULE: String = "body \{ font-family: system-ui; \}";
+const SAYS_STRING_IMPORT: String = "use \"std/string.bx\";";
+const SHEET_PREFIX: String = "===bx\nclass Model \{ n: Int \}\nenum Msg \{ Nothing \}\npure function update(msg: Msg, m: Model) -> Model \{ return m; \}\n===\n\n===style.local\n";
+const SHEET_SUFFIX: String = "\n===\n\n:props: model: Model\n:!props:\n\n:div: class=x\nhi\n:!div:\n";
+
+pure function delimiter_shapes() -> [Shape] allocates {
+    let mutable out: [Shape] = [];
+    let d0: Int = push(out, Shape { label: "a `\}` inside a string in `child=\{\}`",
+        text: ":span: child=\{pick(\"\}\", n)\}",
+        want: "html_text(pick(\"\}\", n))" });
+    let d1: Int = push(out, Shape { label: "a `\}\}` inside a string in an interpolation",
+        text: ":div: class=\{\{ pick(\"\}\}\", n) \}\}",
+        want: "html_attr(\"class\", (pick(\"\}\}\", n)))" });
+    let d2: Int = push(out, Shape { label: "a comma inside a string",
+        text: ":div: class=\{\{ pick(\"a,b\", n) \}\}",
+        want: "html_attr(\"class\", (pick(\"a,b\", n)))" });
+    let d3: Int = push(out, Shape { label: "a space inside a string",
+        text: ":div: class=\{\{ pick(\"a b\", n) \}\}",
+        want: "html_attr(\"class\", (pick(\"a b\", n)))" });
+    let d4: Int = push(out, Shape { label: "a paren inside a string",
+        text: ":span: child=\{pick(\")\", n)\}",
+        want: "html_text(pick(\")\", n))" });
+    let d5: Int = push(out, Shape { label: "a comma inside a quoted value",
+        text: ":div: class=\"a,b\"",
+        want: "html_attr(\"class\", \"a,b\")" });
+    return out;
+}
+
+pure function selector_shapes() -> [Shape] allocates {
+    let mutable out: [Shape] = [];
+    let s0: Int = push(out, Shape { label: "a comma inside `:not()` is not a separator",
+        text: ".x:not(.a .b, .c) \{ color: red; \}",
+        want: ".x[data-s-c]:not(.a .b, .c)" });
+    let s1: Int = push(out, Shape { label: "and the marker stays OUTSIDE the parentheses",
+        text: ".a:not(.b, .c) \{ color: red; \}",
+        want: ".a[data-s-c]:not(.b, .c)" });
+    let s2: Int = push(out, Shape { label: "a comma inside an attribute selector is protected",
+        text: "[title=\"a,b\"] \{ color: red; \}",
+        want: "[title=\"a,b\"][data-s-c]" });
+    let s3: Int = push(out, Shape { label: "a real selector list still splits",
+        text: ".a, .b \{ color: red; \}",
+        want: ".a[data-s-c], .b[data-s-c]" });
+    let s4: Int = push(out, Shape { label: "a descendant still stamps its last part",
+        text: ".card h1 \{ margin: 0; \}",
+        want: ".card h1[data-s-c]" });
+    let s5: Int = push(out, Shape { label: "and a pseudo-element still comes after the marker",
+        text: ".row::before \{ content: \"\}\"; \}",
+        want: ".row[data-s-c]::before" });
+    return out;
+}
+
+// ---- the three shapes a case can take ------------------------------------------------------------
+//
+// Every case below asks exactly one of three questions, and they are the Python's `generate` and
+// `compile_component` under their own names: run the generator and look at the COMPONENT it produced,
+// at the SOURCE of that component, or at the REFUSAL it gave instead.
+
+function generated(dir: String, document: String) -> Capture touches files, commands, input {
+    let written: Int = file_write(dir + "/doc.sbmx", document);
+    return os_capture_status(
+        file_quote(dir + "/star-generate") + " " + file_quote(dir + "/doc.sbmx") + " c");
+}
+
+// What the generator SAID rather than what it wrote. A refusal reaches standard error, but a handful
+// arrive on standard output instead — which is why the Python read `stderr + stdout` at every one of
+// those sites and why this reads both here. A case that looked at one stream only once passed against
+// a program that had never been asked the question.
+pure function said(run: Capture) -> String {
+    return run.errors + run.output;
+}
+
+// **No rewriting of the generator's output, ever** — see the head of this file. The component is
+// written exactly as it was emitted and handed to the compiler as it stands.
+function compiled(dir: String, document: String) -> String touches files, commands, input {
+    let out: Capture = generated(dir, document);
+    let written: Int = file_write(dir + "/c.bx", out.output);
+    let checked: Capture = os_capture_status("burxt check " + file_quote(dir + "/c.bx") + " 2>&1");
+    return checked.output + checked.errors;
+}
+
+function read_beside(dir: String, name: String) -> String touches files {
+    match file_read_maybe(dir + "/" + name) {
+        None => {
+            return "";
+        }
+        Some(text) => {
+            return text;
+        }
+    }
+}
+
+// **The stylesheet is a FILE beside the document, not stdout.** Reading the wrong stream is how the
+// pseudo-element assertion first "passed" against a program that had never been asked the question.
+//
+// And it is DELETED before the generator runs. `doc.css` outlives the case that wrote it, so a case
+// asking "is there a stylesheet" could be answered by the *previous* case's — the repository's own
+// rule about a check that cannot see a stale artefact, applied to itself.
+function sheet_of(dir: String, document: String) -> String touches files, commands, input {
+    let dropped: Bool = file_delete(dir + "/doc.css");
+    let out: Capture = generated(dir, document);
+    return read_beside(dir, "doc.css");
+}
+
+// The Python read `said.split("STAR-E022")[1][:200]` — the advice that FOLLOWS a code. A missing
+// marker answers "", so every caller pairs this with a `contains` for the code itself; otherwise
+// "the message does not say X" would be satisfied by a message that does not exist.
+pure function after_marker(text: String, marker: String, span: Int) -> String {
+    let at: Int = string_find(text, marker);
+    if at < 0 {
+        return "";
+    }
+    let from: Int = at + len(marker);
+    let mutable count: Int = len(text) - from;
+    if count > span {
+        count = span;
+    }
+    return substring(text, from, count);
+}
+
+// The delimiter table below holds a HEAD, and the line that closes it depends on the element: a
+// `div` is flow content and takes a paragraph, a `span` is phrasing and cannot.
+pure function tail_for(head: String) -> String {
+    if string_starts_with(head, ":div:") {
+        return "\nhi\n:!div:\n";
+    }
+    return "\n:!span:\n";
+}
+
+// ---- the tables -----------------------------------------------------------------------------------
+//
+// A `const` may not be a list, so every table is a function that builds one — which every other
+// function can then read, unlike a top-level `let`.
+
+class Shape  { label: String, text: String, want: String }
+class Answer { asked: String, wanted: String }
+
+// Every event the driver installs a listener for must be one star accepts, and the reverse. The
+// driver's side is asserted in `drive-feed.mjs`; this is star's.
+pure function wired_events() -> [String] allocates {
+    let mutable out: [String] = [];
+    let a: Int = push(out, "click");
+    let b: Int = push(out, "dblclick");
+    let c: Int = push(out, "keydown");
+    let d: Int = push(out, "keyup");
+    let e: Int = push(out, "focus");
+    let f: Int = push(out, "blur");
+    let g: Int = push(out, "mouseenter");
+    let h: Int = push(out, "mouseleave");
+    let i: Int = push(out, "mouseover");
+    let j: Int = push(out, "mouseout");
+    let k: Int = push(out, "pointerenter");
+    let l: Int = push(out, "wheel");
+    let m: Int = push(out, "scroll");
+    let n: Int = push(out, "drop");
+    let o: Int = push(out, "touchstart");
+    let p: Int = push(out, "animationend");
+    let q: Int = push(out, "transitionend");
+    let r: Int = push(out, "submit");
+    let s: Int = push(out, "reset");
+    return out;
+}
+
+// An event that is not wired is answered with the one that is, by name.
+pure function answers() -> [Answer] allocates {
+    let mutable out: [Answer] = [];
+    let a: Int = push(out, Answer { asked: "keypress", wanted: "keydown" });
+    let b: Int = push(out, Answer { asked: "mousemove", wanted: "pointermove" });
+    return out;
+}
+
+// The vocabulary is three sets rather than one list, because the SPLIT is what refuses a heading
+// inside a button. A tag being present is not the interesting half.
+pure function known_tags() -> [String] allocates {
+    let mutable out: [String] = [];
+    let a: Int = push(out, "a");
+    let b: Int = push(out, "textarea");
+    let c: Int = push(out, "table");
+    let d: Int = push(out, "select");
+    let e: Int = push(out, "details");
+    let f: Int = push(out, "dialog");
+    let g: Int = push(out, "main");
+    let h: Int = push(out, "figure");
+    return out;
+}
+
+// A dispatch is `(handler, key, value, <props>)`, so a prop of either name produces a function with
+// two parameters of the same name.
+pure function star_names() -> [String] allocates {
+    let mutable out: [String] = [];
+    let a: Int = push(out, "key");
+    let b: Int = push(out, "value");
+    return out;
+}
+
+// ---- reading the refusal messages out of `star.bx` -----------------------------------------------
+//
+// Read out of the SOURCE rather than by triggering each refusal: there are twenty-odd and a test that
+// fires only the ones somebody remembered is the shape that let four stale messages through.
+//
+// **A scan built around the syntax it is hunting cannot be wrong about a form nobody taught it.** BMX
+// built the same guard with a regex over quoted strings and captured 1 of 3 known positives, because
+// the other two were template literals — its boolean control passed and its zero was over incomplete
+// text. A message here is a chain of concatenations with nested calls in it, which is the same hazard
+// wearing different clothes. So the message is read forward from the call to its BALANCED close.
+//
+// Burxt has no regular expressions, which costs nothing here: the Python's two patterns were a
+// literal string and a bounded scan, and both are written out below.
+const ERROR_CALL: String = "Result.Error(";
+const LETTERS: String = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const FENCE_BODY: String = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
+
+pure function one_of(set: String, c: String) -> Bool {
+    return len(c) == 1 && string_find(set, c) >= 0;
+}
+
+// The Python's `:[A-Za-z][\w-]*:`, matched by hand. ASCII only, which is what a block name is.
+pure function shows_a_fence(text: String) -> Bool {
+    let mutable i: Int = 0;
+    while i < len(text) {
+        if substring(text, i, 1) == ":" && i + 1 < len(text) && one_of(LETTERS, substring(text, i + 1, 1)) {
+            let mutable j: Int = i + 2;
+            while j < len(text) && one_of(FENCE_BODY, substring(text, j, 1)) {
+                j += 1;
+            }
+            if j < len(text) && substring(text, j, 1) == ":" {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    return false;
+}
+
+pure function error_sites(text: String) -> [Int] allocates {
+    let mutable out: [Int] = [];
+    let mutable at: Int = string_find(text, ERROR_CALL);
+    while at >= 0 {
+        let noted: Int = push(out, at);
+        at = string_find_from(text, ERROR_CALL, at + 1);
+    }
+    return out;
+}
+
+// Forward from the call's `(` to the parenthesis that closes it, counting depth.
+pure function balanced_message(text: String, start: Int) -> String {
+    let open: Int = string_find_from(text, "(", start);
+    if open < 0 {
+        return "";
+    }
+    let mutable depth: Int = 0;
+    let mutable i: Int = open;
+    while i < len(text) {
+        let c: String = substring(text, i, 1);
+        if c == "(" {
+            depth += 1;
+        }
+        if c == ")" {
+            depth -= 1;
+            if depth == 0 {
+                return substring(text, open + 1, i - open - 1);
+            }
+        }
+        i += 1;
+    }
+    return substring(text, open + 1, len(text) - open - 1);
+}
+
+pure function balanced_messages(text: String) -> [String] allocates {
+    let sites: [Int] = error_sites(text);
+    let mutable out: [String] = [];
+    let mutable i: Int = 0;
+    while i < len(sites) {
+        let noted: Int = push(out, balanced_message(text, sites[i]));
+        i += 1;
+    }
+    return out;
+}
+
+// The cheap extraction — the Python's `Result\.Error\((.*?)\);` with `re.S`. Non-overlapping, so the
+// scan resumes after the `);` it stopped at, exactly as `findall` does.
+pure function cheap_messages(text: String) -> [String] allocates {
+    let mutable out: [String] = [];
+    let mutable pos: Int = 0;
+    while pos < len(text) {
+        let at: Int = string_find_from(text, ERROR_CALL, pos);
+        if at < 0 {
+            return out;
+        }
+        let from: Int = at + len(ERROR_CALL);
+        let close: Int = string_find_from(text, ");", from);
+        if close < 0 {
+            return out;
+        }
+        let noted: Int = push(out, substring(text, from, close - from));
+        pos = close + 2;
+    }
+    return out;
+}
+
+pure function count_with_fence(messages: [String]) -> Int {
+    let mutable found: Int = 0;
+    let mutable i: Int = 0;
+    while i < len(messages) {
+        if shows_a_fence(messages[i]) {
+            found += 1;
+        }
+        i += 1;
+    }
+    return found;
 }
 
 // The generator has to build before anything else means anything.
@@ -74,59 +508,685 @@ match file_temp_directory("star-guarantees") {
 
 // Each case writes the document, runs the generator, and looks at exactly one of three things: the
 // component it produced, the source of that component, or the refusal it gave instead.
+//
+// The order is the order the suite was written in, and it is load-bearing at the top: the accepting
+// case is first because everything under it is a refusal.
 function run_all(dir: String) -> Int touches files, commands, input {
-    let doc: String = dir + "/doc.sbmx";
-    let comp: String = dir + "/c.bx";
-    let gen: String = file_quote(dir + "/star-generate");
     let mutable broken: Int = 0;
 
-    // ---- a correct component compiles
-    let w0: Int = file_write(doc, ":props: count: Int\n:!props:\n\nAt \{\{ to_string(count) \}\}.\n\n:button: on:click=count + 1\nmore\n:!button:\n");    let r0g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
-    let r0w: Int = file_write(comp, r0g.output);
-    let r0c: Capture = os_capture_status("burxt check " + file_quote(comp) + " 2>&1");
-    let r0: String = r0c.output + r0c.errors;    broken += check("a correct component compiles", contains(r0, "no errors"), r0);
-    // ---- a handler reaches the page as an INDEX
-    let w1: Int = file_write(doc, ":props: count: Int\n:!props:\n\nAt \{\{ to_string(count) \}\}.\n\n:button: on:click=count + 1\nmore\n:!button:\n");    let r1g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
-    let r1: String = r1g.output;    broken += check("a handler reaches the page as an INDEX", contains(r1, "data-star-h"), r1);
-    // ---- no inline handler is ever emitted
-    let w2: Int = file_write(doc, ":props: count: Int\n:!props:\n\nAt \{\{ to_string(count) \}\}.\n\n:button: on:click=count + 1\nmore\n:!button:\n");    let r2g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
-    let r2: String = r2g.output;    broken += check("no inline handler is ever emitted", !contains(r2, "onclick"), r2);
-    // ---- the handler expression reaches `dispatch`
-    let w3: Int = file_write(doc, ":props: count: Int\n:!props:\n\nAt \{\{ to_string(count) \}\}.\n\n:button: on:click=count + 1\nmore\n:!button:\n");    let r3g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
-    let r3: String = r3g.output;    broken += check("the handler expression reaches `dispatch`", contains(r3, "if handler == 0 \{ return count + 1; \}"), r3);
-    // ---- a slot typo is refused by name
-    let w4: Int = file_write(doc, ":props: count: Int\n:!props:\n\nAt \{\{ to_string(cuont) \}\}.\n");    let r4g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
-    let r4w: Int = file_write(comp, r4g.output);
-    let r4c: Capture = os_capture_status("burxt check " + file_quote(comp) + " 2>&1");
-    let r4: String = r4c.output + r4c.errors;    broken += check("a slot typo is refused by name", contains(r4, "unknown variable: cuont"), r4);
-    // ---- a handler type error is refused
-    let w5: Int = file_write(doc, ":props: count: Int\n:!props:\n\n:button: on:click=count + \"one\"\ngo\n:!button:\n");    let r5g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
-    let r5w: Int = file_write(comp, r5g.output);
-    let r5c: Capture = os_capture_status("burxt check " + file_quote(comp) + " 2>&1");
-    let r5: String = r5c.output + r5c.errors;    broken += check("a handler type error is refused", contains(r5, "cannot apply `+` to Int and String"), r5);
-    // ---- money narrowing INSIDE a click handler is a compile error
-    let w6: Int = file_write(doc, ":props: total: Decimal<2>\n:!props:\n\n:button: on:click=total * 1.5\nbump\n:!button:\n");    let r6g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
-    let r6w: Int = file_write(comp, r6g.output);
-    let r6c: Capture = os_capture_status("burxt check " + file_quote(comp) + " 2>&1");
-    let r6: String = r6c.output + r6c.errors;    broken += check("money narrowing INSIDE a click handler is a compile error", contains(r6, "rounding"), r6);
-    // ---- an undeclared block name is refused by name
-    let w7: Int = file_write(doc, ":props: count: Int\n:!props:\n\n:mystery:\nhi\n:!mystery:\n");    let r7g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
-    let r7: String = r7g.errors + r7g.output;    broken += check("an undeclared block name is refused by name", contains(r7, "STAR-E001") && contains(r7, "mystery"), r7);
-    // ---- an event this host cannot wire is refused
-    let w8: Int = file_write(doc, ":props: count: Int\n:!props:\n\n:button: on:hover=count + 1\nhi\n:!button:\n");    let r8g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
-    let r8: String = r8g.errors + r8g.output;    broken += check("an event this host cannot wire is refused", contains(r8, "STAR-E002") && contains(r8, "on:hover"), r8);
-    // ---- `hover` is answered with what it actually is — CSS, not an event
-    let w9: Int = file_write(doc, ":props: count: Int\n:!props:\n\n:button: on:hover=count + 1\nhi\n:!button:\n");    let r9g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
-    let r9: String = r9g.errors + r9g.output;    broken += check("`hover` is answered with what it actually is — CSS, not an event", contains(r9, "hovering is CSS") && contains(r9, "on:mouseenter"), r9);
-    // ---- a `===bx` section holding a blank line is expression mode
-    let w10: Int = file_write(doc, "===bx\n\n===\n\n:props: n: Int\n:!props:\n\n:button: on:click=n + 1\nbump\n:!button:\n");    let r10g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
-    let r10w: Int = file_write(comp, r10g.output);
-    let r10c: Capture = os_capture_status("burxt check " + file_quote(comp) + " 2>&1");
-    let r10: String = r10c.output + r10c.errors;    broken += check("a `===bx` section holding a blank line is expression mode", contains(r10, "no errors"), r10);
-    // ---- a `===bx` section holding nothing is expression mode
-    let w11: Int = file_write(doc, "===bx\n===\n\n:props: n: Int\n:!props:\n\n:button: on:click=n + 1\nbump\n:!button:\n");    let r11g: Capture = os_capture_status(gen + " " + file_quote(doc) + " c");
-    let r11w: Int = file_write(comp, r11g.output);
-    let r11c: Capture = os_capture_status("burxt check " + file_quote(comp) + " 2>&1");
-    let r11: String = r11c.output + r11c.errors;    broken += check("a `===bx` section holding nothing is expression mode", contains(r11, "no errors"), r11);
+    // ---- the accepting case, first ---------------------------------------------------------------
+    let good_says: String = compiled(dir, DOC_GOOD);
+    broken += check("a correct component compiles", contains(good_says, "no errors"), good_says);
+
+    let good: Capture = generated(dir, DOC_GOOD);
+    broken += check("a handler reaches the page as an INDEX",
+        contains(good.output, "data-star-h"), good.output);
+    broken += check("no inline handler is ever emitted",
+        !contains(good.output, "onclick"), good.output);
+    broken += check("the handler expression reaches `dispatch`",
+        contains(good.output, SAYS_DISPATCH), good.output);
+
+    // ---- what the COMPILER refuses ---------------------------------------------------------------
+    let typo: String = compiled(dir, ":props: count: Int\n:!props:\n\nAt \{\{ to_string(cuont) \}\}.\n");
+    broken += check("a slot typo is refused by name", contains(typo, "unknown variable: cuont"), typo);
+
+    let wrong: String = compiled(dir,
+        ":props: count: Int\n:!props:\n\n:button: on:click=count + \"one\"\ngo\n:!button:\n");
+    broken += check("a handler type error is refused",
+        contains(wrong, "cannot apply `+` to Int and String"), wrong);
+
+    // The one no framework whose handlers are closures can make.
+    let money: String = compiled(dir,
+        ":props: total: Decimal<2>\n:!props:\n\n:button: on:click=total * 1.5\nbump\n:!button:\n");
+    broken += check("money narrowing INSIDE a click handler is a compile error",
+        contains(money, "rounding"), money);
+
+    // ---- what star-burxt refuses -----------------------------------------------------------------
+    let unknown: Capture = generated(dir, ":props: count: Int\n:!props:\n\n:mystery:\nhi\n:!mystery:\n");
+    broken += check("an undeclared block name is refused by name",
+        contains(unknown.errors, "STAR-E001") && contains(unknown.errors, "mystery"), unknown.errors);
+
+    let unwired: Capture = generated(dir,
+        ":props: count: Int\n:!props:\n\n:button: on:hover=count + 1\nhi\n:!button:\n");
+    broken += check("an event this host cannot wire is refused (SPEC.md 4a.5)",
+        contains(unwired.errors, "STAR-E002") && contains(unwired.errors, "on:hover"), unwired.errors);
+
+    // **THE LIST INSIDE THE MESSAGE WENT STALE AND NOBODY NOTICED.** It named four events for as long
+    // as there were four, and kept naming them after thirty-five more were wired — telling an author
+    // their options were `click`, `input`, `change` and `submit` while `keydown` worked. A stale list
+    // in an error is worse than no list: a reader believes it and stops looking.
+    broken += check("the refusal does not name a four-event list that has not been true for hours",
+        !contains(unwired.errors, "Wired events are click, input, change, submit"), unwired.errors);
+    broken += check("`hover` is answered with what it actually is — CSS, not an event",
+        contains(unwired.errors, "hovering is CSS") && contains(unwired.errors, "mouseenter"),
+        unwired.errors);
+
+    let pairs: [Answer] = answers();
+    let mutable pi: Int = 0;
+    while pi < len(pairs) {
+        let pair: Answer = pairs[pi];
+        let asked: Capture = generated(dir,
+            ":props: n: Int\n:!props:\n\n:div: on:" + pair.asked + "=n + 1\nx\n:!div:\n");
+        broken += check("`" + pair.asked + "` is answered with `" + pair.wanted + "`",
+            contains(asked.errors, pair.wanted), asked.errors);
+        pi += 1;
+    }
+
+    // Every event the driver installs a listener for must be one star accepts, and the reverse. The
+    // driver's side is asserted in `drive-feed.mjs`; this is star's.
+    let events: [String] = wired_events();
+    let mutable ei: Int = 0;
+    while ei < len(events) {
+        let ev: String = events[ei];
+        let wired: Capture = generated(dir,
+            ":props: n: Int\n:!props:\n\n:div: on:" + ev + "=n + 1\nx\n:!div:\n");
+        broken += check("`on:" + ev + "` is wired", wired.code == 0, wired.errors);
+        ei += 1;
+    }
+
+    let voided: Capture = generated(dir, DOC_VOID_BODY);
+    broken += check("a void element with a body is refused before it trips a contract",
+        contains(voided.errors, "STAR-E004"), voided.errors);
+
+    let flowed: Capture = generated(dir, DOC_FLOW_IN_BUTTON);
+    broken += check("flow content inside a phrasing element is refused",
+        contains(flowed.errors, "STAR-E005"), flowed.errors);
+
+    let looped: Capture = generated(dir, DOC_HANDLER_IN_FOR);
+    broken += check("a handler inside a `for` is refused, rather than emitting a name out of scope",
+        contains(looped.errors, "STAR-E007"), looped.errors);
+
+    // ---- component mode: a `===bx` section, and handlers become MESSAGES -------------------------
+    //
+    // The accepting case first, as everywhere on this page: a suite of refusals is satisfied by a
+    // generator that refuses everything.
+    let component_says: String = compiled(dir, DOC_COMPONENT);
+    broken += check("a component with a ===bx section compiles",
+        contains(component_says, "no errors"), component_says);
+
+    // **A `===bx` section that holds only whitespace is not a `===bx` section.** It flipped the mode
+    // switch and demanded `Msg` and `update`, while the same section with nothing between the fences
+    // did not — two documents that mean the same thing, and star spoke a different language to each.
+    // The cause was `bmx_strip_end`, which strips trailing SPACES and not newlines, asked "is there
+    // anything here" by four call sites. The markup session hit the same trap in their own suite and
+    // told us: used on refusal fixtures it left the newline on, so 35 cases failed and 57 passed — a
+    // clean split down the middle, which reads like a defect in refusal handling rather than a
+    // space-stripper.
+    //
+    // Reachable by pressing return, which is why it is guarded rather than just fixed.
+    let blank_line: String = compiled(dir,
+        "===bx\n\n===\n\n:props: n: Int\n:!props:\n\n:button: on:click=n + 1\nbump\n:!button:\n");
+    broken += check("a `===bx` section holding a blank line is expression mode, not component mode",
+        contains(blank_line, "no errors"), blank_line);
+    let nothing_at_all: String = compiled(dir,
+        "===bx\n===\n\n:props: n: Int\n:!props:\n\n:button: on:click=n + 1\nbump\n:!button:\n");
+    broken += check("a `===bx` section holding nothing at all is expression mode, not component mode",
+        contains(nothing_at_all, "no errors"), nothing_at_all);
+
+    let component: Capture = generated(dir, DOC_COMPONENT);
+    broken += check("STATE IS A RECORD HOLDING A LIST — the thing the region rule refused until today",
+        contains(component.output, SAYS_STATE_RECORD), component.output);
+    broken += check("a handler is a MESSAGE, routed through the author's `update`",
+        contains(component.output, SAYS_MESSAGE), component.output);
+    broken += check("the author's code is emitted BEFORE the view that names it",
+        before(component.output, "pure function update", "pure function c("), component.output);
+
+    // `use` lines cannot sit where they were written: Burxt scans only a file's LEADING lines for
+    // imports, so a `use` after a declaration is a syntax error. They are hoisted.
+    let imported: Capture = generated(dir, DOC_IMPORTED);
+    broken += check("an author's `use` is hoisted above the generated header",
+        before(imported.output, SAYS_STRING_IMPORT, "class Model"), imported.output);
+
+    // A `===bx` section with no `update` is refused BY NAME rather than left to fail as a compiler
+    // error about a function nobody wrote.
+    let orphan: Capture = generated(dir, DOC_ORPHAN);
+    broken += check("a ===bx section with no `update` is refused by name",
+        contains(orphan.errors, "STAR-E008") && contains(orphan.errors, "update"), orphan.errors);
+
+    // Expression mode is untouched — the guide teaches it and it keeps working.
+    let still_expression: Capture = generated(dir, DOC_GOOD);
+    broken += check("without a ===bx section a handler is still an EXPRESSION",
+        contains(still_expression.output, SAYS_DISPATCH), still_expression.output);
+
+    // ---- routing: the path IS the state, so it needs nothing the language lacks ------------------
+    //
+    // A route is derived from `location.pathname`, which is a String, and a String crosses the wasm
+    // boundary. That is the whole reason routing works today while the rest of an SPA does not: a
+    // model that is a RECORD cannot cross, because nothing in Burxt holds state between two calls.
+    let routed_says: String = compiled(dir, DOC_ROUTED);
+    broken += check("a routed app compiles", contains(routed_says, "no errors"), routed_says);
+    let routed: Capture = generated(dir, DOC_ROUTED);
+    broken += check("a link is real markup, so it works before any JavaScript runs",
+        contains(routed.output, "html_element(\"a\", [html_attr(\"href\", \"/posts/42\")]"), routed.output);
+    broken += check("the route is decided by an exhaustive match",
+        contains(routed.output, SAYS_MATCH_ROUTE), routed.output);
+
+    // Adding a screen to the enum and forgetting its branch fails the BUILD. Checked here on a
+    // router rather than in the abstract, because this is where it earns its keep.
+    let grew: String = compiled(dir, string_replace(DOC_ROUTED, ROUTE_ENUM, ROUTE_ENUM_GROWN));
+    broken += check("ADDING A ROUTE AND FORGETTING ITS SCREEN IS A BUILD FAILURE",
+        contains(grew, "does not handle `Archive`"), grew);
+
+    // ---- per-row handlers: identity crosses the page as the key ----------------------------------
+    //
+    // This was refused outright until now — STAR-E007 said a handler inside a `for` was "designed
+    // and unbuilt". What it was waiting for is structured state, which the language allowed this
+    // morning: a row's identity crosses as its `key`, and `update` re-derives the row from the
+    // state it is given rather than from a value captured while drawing the page.
+    let rows_says: String = compiled(dir, DOC_ROWS);
+    broken += check("a handler inside a `for` compiles", contains(rows_says, "no errors"), rows_says);
+    let rows: Capture = generated(dir, DOC_ROWS);
+    broken += check("`dispatch` takes the row's KEY and the event's VALUE, in that order",
+        contains(rows.output, "_dispatch(handler: Int, key: String, value: String, model: Model)"),
+        rows.output);
+    broken += check("the row carries its key on the page, which is what the driver sends",
+        contains(rows.output, "html_attr(\"data-star-key\", to_string(todo.id))"), rows.output);
+
+    // The loop variable is gone by the time a handler runs. Refused HERE naming it, rather than
+    // left to the compiler — which would say `unknown variable: todo` inside a `dispatch` the
+    // author never wrote, about a binding they did.
+    let captured: Capture = generated(dir,
+        string_replace(DOC_ROWS, ROW_KEYED_HANDLER, ROW_CAPTURING_HANDLER));
+    broken += check("A HANDLER NAMING THE LOOP VARIABLE IS REFUSED, naming it and pointing at `key`",
+        contains(captured.errors, "STAR-E007") && contains(captured.errors, "todo")
+            && contains(captured.errors, "key"), captured.errors);
+
+    // Without a key the page cannot say which row was clicked, and every row would dispatch
+    // identically — which looks like it works, so it is refused.
+    let unkeyed: Capture = generated(dir, string_replace(DOC_ROWS, ROW_KEY_CLAUSE, ""));
+    broken += check("an unkeyed `for` containing a handler is refused",
+        contains(unkeyed.errors, "STAR-E018"), unkeyed.errors);
+
+    // ---- `key` and `value` belong to star --------------------------------------------------------
+    //
+    // A dispatch is `(handler, key, value, <props>)`, so a prop of either name produces a function
+    // with two parameters of the same name. **Found by running the linter over this repository's own
+    // examples** — `Badge.sbmx` had a prop called `value` and had shipped.
+    let taken: [String] = star_names();
+    let mutable ti: Int = 0;
+    while ti < len(taken) {
+        let name: String = taken[ti];
+        let clash: Capture = generated(dir,
+            ":props: " + name + ": Int\n:!props:\n\nAt \{\{ to_string(" + name + ") \}\}.\n");
+        broken += check("a prop named `" + name + "` is refused by name, not by the compiler",
+            contains(clash.errors, "STAR-E019") && contains(clash.errors, name), clash.errors);
+        ti += 1;
+    }
+    let fine: Capture = generated(dir, DOC_PROP_FINE);
+    broken += check("a prop named anything else is fine", fine.code == 0, fine.errors);
+
+    // ---- styles: `local` scopes, `global` does not, and neither is the default -------------------
+    let dropped_sheet: Bool = file_delete(dir + "/doc.css");
+    let styled: Capture = generated(dir, DOC_STYLED);
+    let sheet: String = read_beside(dir, "doc.css");
+    broken += check("a `local` selector is scoped to the component",
+        contains(sheet, ".card[data-s-c]"), sheet);
+    broken += check("a `global` rule is left exactly as written",
+        contains(sheet, SAYS_GLOBAL_RULE), sheet);
+    broken += check("the marker lands on the elements, so the scope is real",
+        contains(styled.output, "html_attr(\"data-s-c\", \"\")"), styled.output);
+
+    // `@media` is not a selector. Stamping it produces `@media (…)[data-s-c]`, which is not CSS —
+    // its BODY holds the rules that need scoping.
+    broken += check("AN AT-RULE IS NOT STAMPED; the rules inside it are",
+        contains(sheet, SAYS_AT_RULE) && contains(sheet, SAYS_SCOPED_IN_AT_RULE), sheet);
+
+    // The reason `local` is exact matching rather than a descendant selector: a child component's
+    // elements sit inside the parent's subtree, and `[data-s-parent] .card` would reach them.
+    let unstyled: Capture = generated(dir, DOC_PLAIN_DIV);
+    broken += check("a component with no local sheet gets no marker and no attribute",
+        !contains(unstyled.output, "data-s-"), unstyled.output);
+
+    // ---- components: another `.sbmx`, imported with `use`, called as a block ---------------------
+    let wrote_badge: Int = file_write(dir + "/Badge.sbmx", BADGE_SOURCE);
+    // The child's generated `.bx` is removed first: "the child is generated too" cannot be answered
+    // by a file the previous run of this suite left behind.
+    let dropped_badge: Bool = file_delete(dir + "/Badge.bx");
+    let page: Capture = generated(dir, DOC_PAGE);
+    broken += check("a component is CALLED, as an ordinary function",
+        contains(page.output, "badge((model.unread), \"unread\")"), said(page));
+    broken += check("the child is generated too, beside its own source",
+        file_exists(dir + "/Badge.bx"), dir);
+    broken += check("the generated page imports the child as `.bx`, not `.sbmx`",
+        contains(page.output, "use \"./Badge.bx\";"), page.output);
+
+    // ARGUMENTS GO IN THE CALLEE'S ORDER, not the order they were written — two props of the same
+    // type would swap in silence otherwise, and the compiler cannot see that mistake.
+    let reordered: Capture = generated(dir,
+        string_replace(DOC_PAGE, CALL_AS_WRITTEN, CALL_REORDERED));
+    broken += check("ARGUMENT ORDER FOLLOWS THE CALLEE, not the call site",
+        contains(reordered.output, "badge((model.unread), \"unread\")"), reordered.output);
+
+    let missing_prop: Capture = generated(dir, string_replace(DOC_PAGE, CALL_TONE, ""));
+    broken += check("a call missing a prop is refused, naming it and listing what is wanted",
+        contains(missing_prop.errors, "STAR-E017") && contains(missing_prop.errors, "tone"),
+        missing_prop.errors);
+
+    let unimported: Capture = generated(dir, DOC_UNIMPORTED);
+    broken += check("a component block with no import is refused, and says what to write",
+        contains(unimported.errors, "STAR-E001") && contains(unimported.errors, ".sbmx"),
+        unimported.errors);
+
+    let absent: Capture = generated(dir, DOC_ABSENT);
+    broken += check("an import that does not resolve names the file and the importer",
+        contains(absent.errors, "Nope.sbmx") && contains(absent.errors, "imported by"), absent.errors);
+
+    // ---- `match`: adding a screen and forgetting its view is a BUILD FAILURE ---------------------
+    //
+    // This is the claim no JavaScript framework can make. React, Vue and Svelte give you a blank
+    // page and a bug report; here the compiler names the variant nobody rendered.
+    let router_says: String = compiled(dir, DOC_ROUTER);
+    broken += check("a match over a route compiles", contains(router_says, "no errors"), router_says);
+    let router: Capture = generated(dir, DOC_ROUTER);
+    broken += check("a case PATTERN destructures, so `id` is in scope in its branch",
+        contains(router.output, SAYS_CASE_PATTERN), router.output);
+
+    // The whole point, and it is checked by REMOVING a branch rather than by adding a variant —
+    // same defect, and this way the fixture cannot pass because the compiler was lenient.
+    let missing_branch: String = compiled(dir, string_replace(DOC_ROUTER, ROUTER_POST_BRANCH, ""));
+    broken += check("A VARIANT WITH NO BRANCH IS A COMPILE ERROR, naming it",
+        contains(missing_branch, "does not handle `Post`"), missing_branch);
+
+    let stray: Capture = generated(dir, DOC_STRAY_CASE);
+    broken += check("a `case` outside a `match` is refused",
+        contains(stray.errors, "STAR-E014"), stray.errors);
+    let loose: Capture = generated(dir, DOC_LOOSE_TEXT);
+    broken += check("text between branches is refused — it has no branch to belong to",
+        contains(loose.errors, "STAR-E011"), loose.errors);
+    let empty_match: Capture = generated(dir, DOC_EMPTY_MATCH);
+    broken += check("a match with no cases decides nothing, and is refused",
+        contains(empty_match.errors, "STAR-E013"), empty_match.errors);
+
+    // ---- `else` ----------------------------------------------------------------------------------
+    let branched: Capture = generated(dir, DOC_BRANCHED);
+    broken += check("an `else` becomes the other branch of the `if` above it",
+        contains(branched.output, SAYS_ELSE), branched.output);
+    let orphaned: Capture = generated(dir, DOC_ORPHANED_ELSE);
+    broken += check("an `else` with no `if` directly above it is refused",
+        contains(orphaned.errors, "STAR-E016"), orphaned.errors);
+    let conditioned: Capture = generated(dir, DOC_CONDITIONED_ELSE);
+    broken += check("an `else` carrying a condition is refused rather than silently ignored",
+        contains(conditioned.errors, "STAR-E015"), conditioned.errors);
+
+    // ---- positions: a refusal points AT the thing, in line:column --------------------------------
+    //
+    // These were byte offsets into the container until BMX 0.3 gave every node its own position.
+    // `STAR-E005` said "at 112" — the button — when the heading was at 127, so a reader with a long
+    // document was sent to the block and left to find the line themselves.
+    let located: Capture = generated(dir, DOC_LOCATED);
+    broken += check("a refusal points at the OFFENDING construct, in line:column",
+        contains(located.errors, "STAR-E005 at 12:1"), located.errors);
+
+    // `column` counts CHARACTERS, not bytes. A hand-rolled conversion is right on every ASCII line
+    // and one place wrong on the first line with an accent in it — which is why this uses BMX's
+    // `bmx_where` rather than star's own arithmetic, and why this fixture has an `å` in it.
+    let accented: Capture = generated(dir, DOC_ACCENTED);
+    broken += check("a line with a multi-byte character does not move the caret",
+        contains(accented.errors, "STAR-E005 at 7:1"), accented.errors);
+
+    // ---- attributes, and the element vocabulary as a content model -------------------------------
+    let attrs: Capture = generated(dir, DOC_ATTRS);
+    broken += check("an attribute reaches the element",
+        contains(attrs.output, "html_attr(\"class\", \"card\")"), attrs.output);
+    broken += check("a quoted value keeps its spaces",
+        contains(attrs.output, "html_attr(\"class\", \"tag muted\")"), attrs.output);
+    broken += check("A VALUE INTERPOLATES, so a link can be computed from state",
+        contains(attrs.output, "html_attr(\"href\", \"/posts/\" + (to_string(post.id)))"), attrs.output);
+    broken += check("a bare name is a boolean attribute",
+        contains(attrs.output, "html_attr(\"disabled\", \"\")"), attrs.output);
+
+    // The vocabulary is three sets rather than one list, because the SPLIT is what refuses a
+    // heading inside a button. A tag being present is not the interesting half.
+    let tags: [String] = known_tags();
+    let mutable gi: Int = 0;
+    while gi < len(tags) {
+        let tag: String = tags[gi];
+        let known: Capture = generated(dir,
+            ":props: n: Int\n:!props:\n\n:" + tag + ":\nx\n:!" + tag + ":\n");
+        broken += check("`" + tag + "` is an element star knows", known.code == 0, known.errors);
+        gi += 1;
+    }
+    let void_source: Capture = generated(dir, DOC_VOID_SOURCE);
+    broken += check("a NEWLY added void element is still refused a body",
+        contains(void_source.errors, "STAR-E004"), void_source.errors);
+    let textarea: Capture = generated(dir, DOC_TEXTAREA_HEADING);
+    broken += check("a NEWLY added phrasing element still refuses a heading",
+        contains(textarea.errors, "STAR-E005"), textarea.errors);
+
+    let unclosed: Capture = generated(dir, DOC_UNCLOSED_QUOTE);
+    broken += check("a quote that never closes is refused rather than guessed at",
+        contains(unclosed.errors, "STAR-E009"), unclosed.errors);
+
+    // ---- the content model has no seam -----------------------------------------------------------
+    let one_paragraph: Capture = generated(dir, DOC_ONE_PARAGRAPH);
+    let two_paragraphs: Capture = generated(dir, DOC_TWO_PARAGRAPHS);
+    let kept: Capture = generated(dir, DOC_KEPT_PARAGRAPH);
+    broken += check("one paragraph in a phrasing element unwraps",
+        !contains(one_paragraph.output, "html_element(\"p\", [], [html_text(\"only\")])"),
+        one_paragraph.output);
+    broken += check("TWO paragraphs unwrap the same way — no discontinuity",
+        contains(two_paragraphs.output, "html_text(\"first\"), html_text(\"second\")"),
+        two_paragraphs.output);
+    broken += check("a flow element KEEPS its paragraph — a content model, not 'strip paragraphs'",
+        contains(kept.output, "html_element(\"p\", [], [html_text(\"kept\")])"), kept.output);
+
+    // ---- a phrasing element may hold a phrasing element ------------------------------------------
+    //
+    // `<button><span class=box></span></button>` is correct HTML and how a styled control is built.
+    // The first content model refused EVERY nested block inside a phrasing element, so a button could
+    // not contain a `span` — found by the site's own showcase, where a checkbox is exactly that.
+    let nested: Capture = generated(dir, DOC_NESTED_PHRASING);
+    broken += check("a phrasing element may contain another phrasing element",
+        nested.code == 0 && contains(nested.output, "html_element(\"span\""), said(nested));
+    let flow_in_phrasing: Capture = generated(dir, DOC_FLOW_IN_PHRASING);
+    broken += check("but FLOW content inside one is still refused",
+        contains(said(flow_in_phrasing), "STAR-E005"), said(flow_in_phrasing));
+
+    // ---- an attribute NAME is checked here, not in the browser -----------------------------------
+    //
+    // `html_element` has a precondition on its attribute names, so a name that is not one exits 70 —
+    // a bare "burxt exit 70" in a console, from a function the author never called. An unquoted value
+    // with spaces in it is read as several attributes, and the last of them is not a name.
+    // **Which code fires moved, and the property did not.** STAR-E026 now catches the SECOND token —
+    // `needs`, a valid attribute name with no value — before STAR-E020 reaches `doing?`, which is not
+    // a name at all. Both messages carry the quoting fix, because a bare token cannot tell a spilled
+    // value from text meant as a body: `class=card Order` and `placeholder=What needs doing?` look
+    // the same from here. What matters is that it is refused and the fix is in the message.
+    let unquoted: Capture = generated(dir, DOC_UNQUOTED_VALUE);
+    let unquoted_said: String = said(unquoted);
+    broken += check("an unquoted value with spaces is refused by NAME, with the fix in the message",
+        (contains(unquoted_said, "STAR-E020") || contains(unquoted_said, "STAR-E026"))
+            && contains(unquoted_said, "quotes"), unquoted_said);
+
+    // ---- a `for` over a CALL binds it first -------------------------------------------------------
+    //
+    // Burxt refuses `for x in f(y)` — the call would be remade on every pass — and it is right to.
+    // But the author wrote `::: for task in shown(model)`, which is reasonable, so the binding is
+    // emitted here rather than showing a reader a complaint about generated code.
+    let call_loop: Capture = generated(dir, DOC_CALL_LOOP);
+    broken += check("a `for` over a call binds the call before the loop",
+        call_loop.code == 0 && contains(call_loop.output, "let rows_")
+            && !contains(call_loop.output, "in shown(items)"), said(call_loop));
+
+    // ---- `===style.local` can reach a MARKDOWN element --------------------------------------------
+    //
+    // A heading, a paragraph, a list and a code block all come out of BMX with no attributes, so the
+    // scope marker was missing from exactly the elements a document writes most. A local rule for
+    // `.card h1` matched nothing, and the site's own hero was the thing that showed it.
+    let markdown: Capture = generated(dir, DOC_MARKDOWN_SCOPE);
+    broken += check("a markdown heading carries the component's scope marker",
+        markdown.code == 0 && contains(markdown.output, "html_element(\"h1\", [html_attr(\"data-s-"),
+        said(markdown));
+
+    // ---- a scoped selector keeps its pseudo LAST -------------------------------------------------
+    //
+    // `.row::before[data-s-hero]` is invalid CSS and a browser drops the whole rule **silently** — a
+    // dropped rule looks exactly like a rule that decided not to change anything. Appending the
+    // marker at the end of a selector is correct for `.row` and wrong for every `:hover`, `:focus`,
+    // `::before` and `::after`, so every hover state in this repository was dead from the day styles
+    // landed. Found by moving a checkbox into a pseudo-element to shorten a document: the squares
+    // left the picture, and that was the only symptom there has ever been.
+    let pseudo_sheet: String = sheet_of(dir, DOC_PSEUDO);
+    broken += check("a style section writes a stylesheet", len(pseudo_sheet) > 0, dir + "/doc.css");
+    broken += check("the marker goes BEFORE a pseudo, not after it",
+        !contains(pseudo_sheet, "::before[data-s-") && !contains(pseudo_sheet, ":hover[data-s-"),
+        pseudo_sheet);
+    broken += check("and it is still attached, so the rule is still scoped",
+        contains(pseudo_sheet, "[data-s-c]::before") && contains(pseudo_sheet, "[data-s-c]:hover"),
+        pseudo_sheet);
+    // A descendant selector stamps its LAST part, or a parent's rule would reach into a child.
+    broken += check("a descendant selector stamps its last part",
+        contains(pseudo_sheet, "h1[data-s-c]"), pseudo_sheet);
+
+    // ---- `child=` — a body written in the head ----------------------------------------------------
+    //
+    // BMX's heads are opaque bytes, so a one-line block has no delimiter between head and body and
+    // BMX reads it as ALL head. Andre's answer is to name the body: `child=hello` is an ordinary
+    // `name=value` pair, so the format changes not at all and there is nothing to guess.
+    //
+    // **It also closes a defect that predates one-liners.** `::: span class=text hello` read `hello`
+    // as a boolean attribute and emitted `<span class="text" hidden></span>` — the text silently gone.
+    let kid: Capture = generated(dir, DOC_CHILD_TEXT);
+    broken += check("`child=` becomes the element's text, not an attribute",
+        contains(kid.output, "html_attr(\"class\", \"text\")], [html_text(\"hello\")]"), kid.output);
+    let quoted_kid: Capture = generated(dir, DOC_CHILD_QUOTED);
+    broken += check("a quoted `child=` keeps its spaces and loses its quotes",
+        contains(quoted_kid.output, "html_text(\"two words\")"), quoted_kid.output);
+    // **Braces mean an EXPRESSION, and `child={}` is an empty body said out loud.** Andre's form: the
+    // braces say where the value ends, so a body with spaces needs no quotes, and there is a spelling
+    // for "deliberately empty" that is different from "content went missing".
+    let braced: Capture = generated(dir, DOC_CHILD_BRACED);
+    broken += check("`child=\{expr\}` is Burxt the compiler judges",
+        contains(braced.output, "html_text(label)"), braced.output);
+    let spaced_kid: Capture = generated(dir, DOC_CHILD_SPACED);
+    broken += check("a braced body may hold spaces without quotes",
+        contains(spaced_kid.output, "html_text(to_string(n + 1))"), spaced_kid.output);
+    let empty_kid: Capture = generated(dir, DOC_CHILD_EMPTY);
+    broken += check("`child=\{\}` is an element with NO children, not one holding \"\"",
+        contains(empty_kid.output, "html_attr(\"class\", \"box\")], []"), empty_kid.output);
+    // `{{ … }}` is the interpolation everywhere else in a head, so it has to mean the same here.
+    let slot_kid: Capture = generated(dir, DOC_CHILD_SLOT);
+    broken += check("`child=\{\{ x \}\}` means the same as `child=\{x\}`",
+        contains(slot_kid.output, "html_text(label)"), slot_kid.output);
+    let both: Capture = generated(dir, DOC_CHILD_AND_BODY);
+    broken += check("a `child=` AND a body is refused rather than one being picked",
+        contains(said(both), "STAR-E021"), said(both));
+    let void_child: Capture = generated(dir, DOC_CHILD_ON_VOID);
+    broken += check("`child=` on a void element is refused",
+        contains(said(void_child), "STAR-E004"), said(void_child));
+    let bare: Capture = generated(dir, DOC_BARE_BOOLEAN);
+    broken += check("and a bare word is STILL a boolean attribute, as in HTML",
+        contains(bare.output, "html_attr(\"hidden\", \"\")"), bare.output);
+
+    // ---- an attribute after `on:` is refused ------------------------------------------------------
+    //
+    // `on:` runs to the end of the head by design, so anything after it is eaten. Measured before the
+    // refusal existed: `::: button on:click=n + 1 class=danger` emitted a button with NO class and
+    // folded `class=danger` into the dispatch expression, which then failed to compile in generated
+    // code with a message about a name the author never wrote there.
+    let trailing: Capture = generated(dir, DOC_ATTR_AFTER_ON);
+    let trailing_said: String = said(trailing);
+    broken += check("an attribute written after `on:` is refused, naming it",
+        contains(trailing_said, "STAR-E022") && contains(trailing_said, "class="), trailing_said);
+    let ok_order: Capture = generated(dir, DOC_ATTR_BEFORE_ON);
+    broken += check("and the same head with the attribute BEFORE it is accepted",
+        ok_order.code == 0 && contains(ok_order.output, "html_attr(\"class\", \"danger\")"),
+        said(ok_order));
+    // A handler with `==` or a quoted `=` inside it is not a trailing attribute.
+    let compare: Capture = generated(dir, DOC_PLAIN_HANDLER);
+    broken += check("a plain handler is not mistaken for one", compare.code == 0, said(compare));
+
+    // ---- a single-brace ATTRIBUTE value is refused ------------------------------------------------
+    //
+    // `class={mark(x)}` reaches Burxt as the string literal `"{mark(x)}"` and produces the right class
+    // only because Burxt interpolates braces inside its own string literals. A value holding a literal
+    // brace would ship `{mark(x)}` to a browser and nothing would say so.
+    //
+    // **This is the check the day's last lesson asked for.** I shipped that spelling and two
+    // screenshots agreed — an equality test says nothing about whether either side is right, and the
+    // thing that caught it was reading the emitted attribute. So the emitted attribute is what is
+    // asserted here, and the accident is a refusal rather than a documented footgun.
+    let one_brace: Capture = generated(dir, DOC_ONE_BRACE);
+    let one_brace_said: String = said(one_brace);
+    broken += check("a single-brace attribute value is refused, with the fix in the message",
+        contains(one_brace_said, "STAR-E023") && contains(one_brace_said, "\{\{"), one_brace_said);
+    let two_brace: Capture = generated(dir, DOC_TWO_BRACE);
+    broken += check("and `\{\{ … \}\}` compiles to an EXPRESSION, not a string holding braces",
+        contains(two_brace.output, "html_attr(\"class\", (to_string(n)))"), two_brace.output);
+    // `child=` is the one place single braces are star's, and it must not be caught by this.
+    let still_child: Capture = generated(dir, DOC_STILL_CHILD);
+    broken += check("`child=\{…\}` is untouched — the one place single braces are star's",
+        contains(still_child.output, "html_text(to_string(n))"), still_child.output);
+
+    // ---- no refusal message teaches the old fence -------------------------------------------------
+    //
+    // **Four of them did, and a message is the compiler talking.** ``Add `::: props name: Type` ``
+    // told a reader to write syntax BMX now refuses — an error that instructs you to write something
+    // illegal is worse than an error that says nothing. They survived the 0.7 sweep because a message
+    // is a string inside `star.bx`, and I had scoped the sweep to documents and fixtures.
+    let source: String = read_beside(".", "star.bx");
+    let sites: [Int] = error_sites(source);
+    let messages: [String] = balanced_messages(source);
+    let cheap: [String] = cheap_messages(source);
+
+    let mutable stale: Int = 0;
+    let mutable si: Int = 0;
+    let mutable first_stale: String = "";
+    while si < len(messages) {
+        if contains(messages[si], ":::") {
+            stale += 1;
+            if len(first_stale) == 0 {
+                first_stale = messages[si];
+            }
+        }
+        si += 1;
+    }
+    broken += check("no refusal message teaches the 0.6 fence", stale == 0, first_stale);
+
+    // **A QUANTITATIVE control, not a floor.** The floor here was `> 15` while the real number is 48 —
+    // loose enough that a scan silently capturing a third of the messages would still pass, which is
+    // precisely the failure BMX hit. So the two extractions are required to AGREE: a cheap scan and
+    // the balanced read must see the same number of sites, and any drift means one of them is blind.
+    broken += check("every refusal site is captured — two extractions, same count",
+        len(cheap) == len(messages) && len(messages) == len(sites),
+        "cheap " + to_string(len(cheap)) + ", balanced " + to_string(len(messages))
+            + ", call sites " + to_string(len(sites)));
+    broken += check("and there are enough of them that a zero means something",
+        len(messages) >= 40, to_string(len(messages)) + " refusal messages found");
+    // The positive control is a COUNT, not an existence: some messages must show the 0.7 fence, and
+    // both methods must agree about how many.
+    broken += check("the scan sees the messages that DO show a fence, and both methods agree",
+        count_with_fence(messages) == count_with_fence(cheap) && count_with_fence(messages) > 0,
+        "balanced " + to_string(count_with_fence(messages))
+            + ", cheap " + to_string(count_with_fence(cheap)));
+
+    // ---- a comma separates head tokens ------------------------------------------------------------
+    //
+    // BMX 0.9 delimits a head — `:button: -> [on:click=save(id), .featured] Save :!button:` — and a
+    // comma is the natural separator inside brackets, which is how Andre writes them. Until this
+    // existed `class=card, id=main` produced **`class="card,"`**: the comma swallowed into the value,
+    // silently, with no refusal.
+    //
+    // BMX found the identical shape in `BMX-E033`, where asking whether a `#` followed *whitespace*
+    // let `#one,#two` evade the one-id rule in both implementations at once — 70 of 70 fixtures
+    // agreeing while both were wrong.
+    let commas: Capture = generated(dir, DOC_COMMA_HEAD);
+    broken += check("a comma separates head tokens, and is not part of the value",
+        contains(commas.output, "html_attr(\"class\", \"card\"), html_attr(\"id\", \"main\")"),
+        commas.output);
+    let spaces: Capture = generated(dir, DOC_SPACE_HEAD);
+    broken += check("and a space still does, unchanged",
+        contains(spaces.output, "html_attr(\"class\", \"card\"), html_attr(\"id\", \"main\")"),
+        spaces.output);
+
+    // **The qualifier is the whole of it: a comma ends a value only at DEPTH ZERO.** A handler is
+    // full of commas that separate ARGUMENTS, and a comma rule that could not see parentheses would
+    // cut every keyed handler in this repository in half at the first one.
+    let handler: Capture = generated(dir, DOC_HANDLER_COMMAS);
+    broken += check("a handler's own commas are arguments, not separators",
+        contains(handler.output, ROW_KEYED_HANDLER)
+            && contains(handler.output, "html_attr(\"class\", \"row\")"), handler.output);
+    // `child=` is found after a comma too — it used to test whether the PREVIOUS BYTE was a space.
+    let kid_after_comma: Capture = generated(dir, DOC_CHILD_AFTER_COMMA);
+    broken += check("`child=` is still found when a comma precedes it",
+        contains(kid_after_comma.output, "html_text(to_string(n))"), kid_after_comma.output);
+    // And an interpolation may still hold a comma without being cut.
+    let interp: Capture = generated(dir, DOC_INTERP_COMMA);
+    broken += check("an interpolated value may hold a comma",
+        contains(interp.output, "pick(n, 2)"), interp.output);
+
+    // ---- a delimiter rule must know what PROTECTS a delimiter -------------------------------------
+    //
+    // BMX shipped `-> [title="a]b"]` splitting at the `]` inside the quoted value — an hour after
+    // documenting why first-delimiter-wins was safe. I asked whether a `]` in a string was still the
+    // first `]`, and then found the same class three times in star, in three different scanners:
+    //
+    //     child={pick("}", n)}          the `}` in the literal ended the braced value
+    //     class={{ pick("}}", n) }}     the `}}` in the literal ended the interpolation — twice, once
+    //                                   in the scan and again in the expression builder
+    //
+    // **The danger is not that a truncated value breaks, it is that it keeps working**: a cut
+    // expression is still valid syntax, so it compiles and renders something plausible.
+    let delimiters: [Shape] = delimiter_shapes();
+    let mutable di: Int = 0;
+    while di < len(delimiters) {
+        let shape: Shape = delimiters[di];
+        let body: String = ":props: n: Int\n:!props:\n\n" + shape.text
+            + tail_for(shape.text);
+        let got: Capture = generated(dir, body);
+        broken += check(shape.label, contains(got.output, shape.want), said(got));
+        di += 1;
+    }
+
+    // And the ordinary shapes still work, so the guards did not buy correctness with breakage.
+    let mixed: Capture = generated(dir, DOC_MIXED_VALUE);
+    broken += check("a value mixing literal and interpolation is unaffected",
+        contains(mixed.output, "html_attr(\"href\", \"/x/\" + (to_string(n)) + \"/y\")"), mixed.output);
+
+    // ---- the SEVENTH costume: a comma inside a selector's parentheses ------------------------------
+    //
+    // BMX found the class in a head, then in a slot, then in a link target — six instances across two
+    // repositories in a day. This is the seventh, and it was a wrong ANSWER rather than a refusal:
+    //
+    //     .x:not(.a .b, .c)   ->   .x:not(.a .b[data-s-c], .c)[data-s-c]
+    //
+    // The splitter cut mid-parenthesis, so the marker landed INSIDE the `:not()` and the rule
+    // excluded `.a .b[data-s-c]` instead of `.a .b`. Valid CSS, silent, wrong meaning — which is the
+    // shape all seven shared.
+    let selectors: [Shape] = selector_shapes();
+    let mutable ci: Int = 0;
+    while ci < len(selectors) {
+        let rule: Shape = selectors[ci];
+        let got_sheet: String = sheet_of(dir, SHEET_PREFIX + rule.text + SHEET_SUFFIX);
+        broken += check(rule.label, contains(got_sheet, rule.want), got_sheet);
+        ci += 1;
+    }
+
+    // ---- the claim the documentation SELLS, which nothing tested -----------------------------------
+    //
+    // `how-do-i.md` and chapter 7 both say **"a view cannot fetch, and that is checked rather than
+    // promised."** It is true — the generator emits `pure function <name>`, so the compiler refuses a
+    // view that calls anything impure. **Nothing asserted it.** If the generator ever stopped emitting
+    // that marker the claim would become false silently, and the page would go on making it.
+    //
+    // BMX found the identical shape today: `ESCAPING.md` said *"the conformance suite tests this"* of
+    // their scheme refusal and pointed at a file that no longer existed. The security-critical half of
+    // a contract held by a sentence. This is star's version of that sentence.
+    let impure_says: String = compiled(dir, DOC_IMPURE);
+    broken += check("A VIEW THAT REACHES OUTSIDE IS REFUSED BY THE COMPILER, not by a promise",
+        contains(impure_says, "may not call") && contains(impure_says, "peek"), impure_says);
+
+    // **The control**: the same shape with a `pure` helper must COMPILE, or this passes because
+    // everything fails and asserts nothing about `pure` at all.
+    let pure_says: String = compiled(dir, string_replace(
+        string_replace(
+            string_replace(DOC_IMPURE, IMPURE_SIGNATURE, PURE_SIGNATURE),
+            IMPURE_BODY, PURE_BODY),
+        FILES_IMPORT, ""));
+    broken += check("and the control: the same view with a `pure` helper compiles",
+        contains(pure_says, "no errors"), pure_says);
+
+    // ---- a refusal whose advice CANNOT be followed -------------------------------------------------
+    //
+    // `on:input=… on:keydown=…` was told to "put every attribute BEFORE the `on:` binding" — advice
+    // that cannot work, because a second `on:` is not an attribute out of order and no ordering helps:
+    // whichever comes first takes the rest of the line. Same shape as telling `xml:lang` to add quotes.
+    //
+    // **A refusal whose remedy does not work is worse than one that only says no**, because the reader
+    // does the work and lands somewhere else.
+    let two_events: Capture = generated(dir, DOC_TWO_EVENTS);
+    let two_events_said: String = said(two_events);
+    broken += check("two `on:` bindings are refused as TWO EVENTS, not as bad ordering",
+        contains(two_events_said, "STAR-E022") && contains(two_events_said, "ONE `on:` binding")
+            && contains(two_events_said, "wrapper"), two_events_said);
+    broken += check("and it does not tell the author to reorder, which would not help",
+        contains(two_events_said, "STAR-E022")
+            && !contains(after_marker(two_events_said, "STAR-E022", 200), "attribute"),
+        two_events_said);
+    let order: Capture = generated(dir, DOC_ORDERING_ADVICE);
+    let ordered: String = said(order);
+    broken += check("an attribute after `on:` still gets the ordering advice, which does work",
+        contains(ordered, "STAR-E022") && contains(ordered, "BEFORE the `on:` binding"), ordered);
+
     return broken;
 }

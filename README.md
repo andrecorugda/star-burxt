@@ -55,7 +55,6 @@ Then `burxt fetch`. Full instructions: [star.burxt-lang.org/install](https://sta
 | `tests/consumer/` | what an outside package compiles — the whole job on the published names |
 | `tools/showcase.py`, `shoot.mjs` | the landing page's screenshot and its source panel |
 | `tests/guarantees.bx` | the guarantees, in Burxt |
-| `tests/guarantees.py` | the cases not ported yet — this file is going away |
 | `verify-docs.py` | every example on the site — generated **and compiled** |
 | `docs/` | the site |
 
@@ -125,7 +124,7 @@ and left a path unquoted by accident.
 **Nothing in this repository should depend on another language to check itself**, and
 `./star-languages` prints how far that is from true — every non-Burxt file declares why it is not, in
 its own first twenty lines, and a file that declares none fails the build. `gap` is the only column
-that should move. `tests/guarantees.py` and `verify-docs.py` are what remains of the biggest one.
+that should move. `verify-docs.py` is what remains of the biggest one.
 
 `docs/assets/site.css` and `site.js` are byte copies of burxt-lang.org's — re-copy rather than edit.
 `docs/assets/star.css` is this site's own.
