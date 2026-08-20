@@ -1,0 +1,23 @@
+// CLAIM: The editor does not show BMX's four lint warnings, and that is a boundary rather than a gap
+// HOLDS: absent
+// TERMS: W001 W002 W003 W005 bmx_lint
+// WHY: **the probe is an absence because the decision is an absence.** star does not implement BMX's
+//      lint rules, and the way that claim goes stale is not by the warnings reappearing — it is by
+//      somebody reimplementing the four rules here, one afternoon, to close a gap that is not a gap.
+//      This fires the moment one of those codes is declared in this repository.
+//
+//      An `absent` probe rather than a `refused` one for the same reason
+//      `nothing-runs-outside-the-document.absent` is: "there is no X at all" cannot be probed by
+//      writing one X. And prose mentioning a code is fine, which is the distinction that keeps this
+//      gate from firing on its own explanation — `docs/not-done.md` names the family and must be
+//      allowed to.
+//
+//      The other half is checked where it can be: the server announces on startup that BMX's lint is
+//      unavailable, and `editors/lsp/drive-lsp.bx` asserts that it says so. **A capability lost
+//      silently is the failure; announced and asserted is the holding position.** So this claim has
+//      two guards and neither is prose: nothing may declare the rules, and the server must keep
+//      saying they are missing.
+//
+//      When BMX adds `bmx_lint` to its own public surface — its call, not ours, because it touches a
+//      compatibility promise and the format's conformance boundary — the warnings return with no
+//      change here, and this probe and its claim go away together.

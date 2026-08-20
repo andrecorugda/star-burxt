@@ -29,6 +29,24 @@ HTML, so `:path:` and `:circle:` need a second vocabulary with its own content m
 in HTML that holds phrasing or flow content is there, including `time`, `abbr`, `kbd`, `iframe` and
 `audio`, which were missing until they were looked for.
 
+**The editor does not show BMX's four lint warnings, and that is a boundary rather than a gap.** star's
+language server is Burxt — which is what removed `node` from the extension's requirements entirely — and
+BMX's lint rules live only in its JavaScript reference implementation. The Burxt implementation of the
+format has `bmx_parse`, `bmx_check` and `bmx_where`, and no lint.
+
+Every way of keeping the warnings is worse than losing them. Spawning `node` undoes the dependency
+removal. Reimplementing four rules here puts a second opinion in the one file whose own header says the
+second opinion is the one that would be wrong — and BMX's history records two of those four having been
+too broad once, so a copy would inherit a judgement it cannot maintain. **And `BMX-W` codes are
+deliberately not conformance**: BMX tells a third-party implementer that lints are optional and no
+fixture requires them, so two implementations obliged to agree would quietly promote them toward
+conformance — a change to what the format asks of everyone who implements it, in exchange for four
+warnings in one editor.
+
+So the server **says on startup that they are unavailable, and the protocol test asserts that it says
+so**. Nothing degrades silently, and the day BMX chooses to add `bmx_lint` to its own public surface the
+warnings come back with no change here.
+
 **Publishing a component library needs a compiler newer than any release.** star's side is built:
 `use "mylib/Card.sbmx"` resolves through the package, the component is generated into `.star/` in your
 tree, and its props are checked at the call site exactly as a local component's are. It works by asking
