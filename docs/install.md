@@ -26,6 +26,13 @@ function returning a record that holds a list, and a `pure` function calling the
 component will not compile against 1.2.0 or below. A released version is all you need; there is
 nothing to build from source.
 
+**That floor is verified rather than remembered**, which it had not been: the 1.3.0 tarball is
+downloaded, the three commands below are built with its binary and its library, a component is
+generated and compiled, and the two things the sentence names are compiled directly. **A floor nothing
+builds against is a capability claim, and this one had gone two minor versions unchecked** — the
+suggestion to test it by downloading the old release rather than by raising the number is the language
+session's, and it took ten minutes.
+
 **Then check the standard library, because the version alone does not.** Every component star
 generates opens with `use "std/html.bx"`, and a compiler that cannot resolve that checks *nothing* —
 every document you write reports an error and none of the errors are about your document.
