@@ -25,3 +25,5 @@ examples/*.css
 examples/*.o
 examples/*.wasm
 star-languages
+star-refs
+star-showcase

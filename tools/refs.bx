@@ -1,0 +1,128 @@
+// Every git ref the documentation tells a reader to depend on must exist.
+//
+//     burxt build tools/refs.bx -o star-refs
+//     ./star-refs
+//
+// **The README told readers to depend on `v0.2.0`, a tag that did not exist**, while the install page
+// said `v0.1.0` — so one instruction fails to fetch and the other fetches a framework 55 commits behind
+// that cannot read a single example on the site. Two pages, two answers, neither true.
+//
+// BMX found the same family by grepping their own claims of absence: a README saying the format was 0.4
+// when it was 0.11, and a page listing *"what exists as of 0.2"* frozen before four features shipped.
+// **A version claim is a claim like any other, and nothing was checking these.**
+//
+// It greps for the SHAPE of a dependency line rather than keeping a list of files, because a registry
+// cannot see an instruction added somewhere new.
+//
+// ---- and it was Python until Andre's directive ---------------------------------------------------
+//
+// This was seventy-five lines of Python doing nothing Python was needed for: walk files, match a
+// pattern, run `git rev-parse`. `lib/files.bx`, `lib/string.bx` and `lib/os.bx` do all three. Andre's
+// instruction was the whole reason it moved — *"I will not accept a language that really depends on
+// another language"* — and the port is the argument: if a language cannot check its own repository, a
+// reader is right to doubt it can check theirs.
+//
+// **The pattern is matched by hand rather than by a regular expression, because Burxt has none.** That
+// is a genuine difference from the Python and worth stating: three words after `dependency`, split on
+// whitespace. It is *less* clever and it refuses a malformed line instead of silently not matching one,
+// which is the better failure for a check whose whole job is noticing a line nobody verified.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+
+pure function contains(haystack: String, needle: String) -> Bool {
+    return string_find(haystack, needle) >= 0;
+}
+
+pure function skipped(path: String) -> Bool {
+    return contains(path, "/.git/") || contains(path, "/.burxt/")
+        || contains(path, "/node_modules/") || contains(path, "/__pycache__/");
+}
+
+// `file_walk` answers `./docs/x.md`; a path a reader pastes into an editor should not carry the `./`.
+pure function shown(path: String) -> String {
+    if string_starts_with(path, "./") { return substring(path, 2, len(path) - 2); }
+    return path;
+}
+
+pure function watched(path: String) -> Bool {
+    return string_ends_with(path, ".md") || string_ends_with(path, ".package");
+}
+
+// Does this ref exist in the repository it names?
+//
+// Local refs only, and `origin/` for a branch. A remote lookup would make this depend on the network,
+// and **a check that cannot run offline is a check that gets skipped.**
+function resolves(ref: String) -> Bool touches commands, files, input {
+    let mutable tries: [String] = [];
+    let a: Int = push(tries, ref);
+    let b: Int = push(tries, "refs/tags/" + ref);
+    let c: Int = push(tries, "origin/" + ref);
+    let mutable i: Int = 0;
+    while i < len(tries) {
+        let asked: Capture = os_capture_status(
+            "git rev-parse --verify --quiet " + file_quote(tries[i]));
+        if asked.code == 0 { return true; }
+        i += 1;
+    }
+    return false;
+}
+
+let mutable wrong: [String] = [];
+let mutable checked: Int = 0;
+
+match file_walk(".") {
+    None => {
+        print_error("cannot walk this directory");
+        exit(2);
+    }
+    Some(paths) => {
+        let mutable p: Int = 0;
+        while p < len(paths) {
+            let path: String = paths[p];
+            if !skipped(path) && watched(path) {
+                let rows: [String] = string_lines(file_read(path));
+                let mutable r: Int = 0;
+                while r < len(rows) {
+                    let line: String = string_trim(rows[r]);
+                    if string_starts_with(line, "dependency") {
+                        let words: [String] = string_split_space(line);
+                        if len(words) == 4 {
+                            let url: String = words[2];
+                            let ref: String = words[3];
+                            // Only this project's own refs can be checked without a network.
+                            if contains(url, "star-burxt") {
+                                checked += 1;
+                                if !resolves(ref) {
+                                    let x: Int = push(wrong, shown(path) + ":" + to_string(r + 1)
+                                        + " tells a reader to depend on `" + ref
+                                        + "`, which does not exist");
+                                }
+                            }
+                        }
+                    }
+                    r += 1;
+                }
+            }
+            p += 1;
+        }
+    }
+}
+
+// **A suite that found nothing is not a suite that passed.** If the pattern stops matching — a
+// dependency line respelled, a walk that lost its root — this reports zero problems out of zero
+// claims, which reads exactly like success.
+if checked == 0 {
+    print("no `dependency star …` line found anywhere — the pattern has stopped matching");
+    exit(1);
+}
+if len(wrong) > 0 {
+    print(to_string(len(wrong)) + " problem(s):");
+    let mutable w: Int = 0;
+    while w < len(wrong) {
+        print("  " + wrong[w]);
+        w += 1;
+    }
+    exit(1);
+}
+print(to_string(checked) + " dependency ref(s) named by the documentation, all of which exist");

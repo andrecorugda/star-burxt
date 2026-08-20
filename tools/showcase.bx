@@ -1,0 +1,186 @@
+// The landing page's showcase: a real screenshot in a browser window, beside the markup that made it.
+//
+//     burxt build tools/showcase.bx -o star-showcase
+//     ./star-showcase        # -> docs/_includes/showcase.html
+//
+// **Generated rather than written, because the panel must not be able to lie.** A hand-written snippet
+// beside a screenshot drifts the first time the component changes, and the page would then show code
+// that does not produce the picture. So the markup is read out of `examples/Hero.sbmx` verbatim, and
+// the screenshot is taken from that same file by `tools/shoot.mjs`.
+//
+// **The panel shows the markup half, and says so.** The other half is Burxt — a `Model`, a `Msg`, an
+// `update`, and two functions that turn the state into text — and a hero opening with sixty lines of
+// JSON plumbing would be advertising the plumbing. The caption names what is not shown and links to
+// the whole file, which is the honest version of an excerpt.
+//
+// ---- and it was Python until Andre's directive ---------------------------------------------------
+//
+// Nothing here needed Python: read a file, find a section, strip a block, escape five characters, read
+// four bytes of a PNG header, write a file. `lib/files.bx` and `lib/string.bx` do all of it, and
+// `file_read_bytes` answers `Option<[Int]>` which is exactly what an IHDR chunk wants.
+//
+// **The one real friction is that this template is nothing but braces.** Burxt interpolates `{expr}`,
+// so every literal `{` in `\{\{ site.baseurl \}\}` is escaped — and the escaping was done
+// mechanically from the Python rather than by hand, because a template of forty braces is exactly
+// where a hand-escaped one goes wrong silently.
+use "std/files.bx";
+use "std/string.bx";
+
+const SOURCE: String = "examples/Hero.sbmx";
+const OUT: String = "docs/_includes/showcase.html";
+const SHOT: String = "docs/assets/showcase.png";
+
+// Everything after the last `===` that closes a section — the document part of the file.
+pure function markup_half(text: String) -> String allocates {
+    let rows: [String] = string_lines(text);
+    let mutable last: Int = -1;
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        if string_trim_end(rows[i]) == "===" { last = i; }
+        i += 1;
+    }
+    if last < 0 { return ""; }
+    let mutable out: String = "";
+    let mutable j: Int = last + 1;
+    while j < len(rows) {
+        if len(out) > 0 { out = out + "\n"; }
+        out = out + rows[j];
+        j += 1;
+    }
+    return string_trim(out);
+}
+
+// **The props line is the component's signature rather than its markup**, and the hero has no room to
+// explain it. Chapter 1 does.
+//
+// The count is checked because the last version's regular expression was written for the 0.6 fence and
+// silently stopped matching after the 0.7 respelling — which put the component's signature at the top
+// of the landing page's code panel. **A pattern that no longer matches removes nothing and says
+// nothing.** Matched by hand here, which cannot silently half-match.
+pure function without_props(body: String) -> (String, Int) allocates {
+    let rows: [String] = string_lines(body);
+    let mutable out: String = "";
+    let mutable found: Int = 0;
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        let opens: Bool = string_starts_with(string_trim(rows[i]), ":props:");
+        let closes: Bool = i + 1 < len(rows) && string_trim(rows[i + 1]) == ":!props:";
+        if opens && closes {
+            found += 1;
+            i += 2;
+            // and the blank lines that followed it
+            while i < len(rows) && len(string_trim(rows[i])) == 0 { i += 1; }
+        } else {
+            if len(out) > 0 { out = out + "\n"; }
+            out = out + rows[i];
+            i += 1;
+        }
+    }
+    return (out, found);
+}
+
+// HTML-escape, **and escape the braces as entities.**
+//
+// The first version wrapped this panel in a raw block and the literal tag rendered as the code's first
+// line on the live site — Andre saw it there, and no local check could have, because Jekyll runs only
+// after a push. Entities remove the dependency instead of arguing with it: Liquid scans for a literal
+// `\{\{`, and `&#123;&#123;` is not one, while a browser draws it as `\{\{`.
+pure function escaped(s: String) -> String allocates {
+    let mutable out: String = "";
+    let mutable i: Int = 0;
+    while i < len(s) {
+        let c: String = substring(s, i, 1);
+        if c == "&" { out = out + "&amp;"; }
+        else { if c == "<" { out = out + "&lt;"; }
+        else { if c == ">" { out = out + "&gt;"; }
+        else { if c == "\{" { out = out + "&#123;"; }
+        else { if c == "\}" { out = out + "&#125;"; }
+        else { out = out + c; } } } } }
+        i += 1;
+    }
+    return out;
+}
+
+// The PNG's own dimensions, so the page reserves the right box.
+//
+// Read out of the file rather than written here: a hard-coded `height` that no longer matches the image
+// is a layout shift on the landing page, and it happens the first time the component grows a row. The
+// IHDR chunk is at a fixed offset, so this needs no library — four big-endian bytes at 16 and at 20.
+function png_box(path: String) -> (Int, Int) touches files {
+    match file_read_bytes(path) {
+        None => { return (0, 0); }
+        Some(bytes) => {
+            if len(bytes) < 24 { return (0, 0); }
+            if bytes[0] != 137 || bytes[1] != 80 || bytes[2] != 78 || bytes[3] != 71 {
+                return (0, 0);
+            }
+            let wide: Int = bytes[16] * 16777216 + bytes[17] * 65536 + bytes[18] * 256 + bytes[19];
+            let high: Int = bytes[20] * 16777216 + bytes[21] * 65536 + bytes[22] * 256 + bytes[23];
+            // Shot at 2x, so the CSS box is half the pixels.
+            return (divide_floor(wide, 2), divide_floor(high, 2));
+        }
+    }
+}
+
+pure function template() -> String allocates {
+    let mutable out: String = "";
+    out = out + "<!-- GENERATED by tools/showcase.py from examples/Hero.sbmx. Do not edit: regenerate. -->\n";
+    out = out + "<div class=\"showcase\">\n";
+    out = out + "  <figure class=\"win\">\n";
+    out = out + "    <div class=\"chrome\">\n";
+    out = out + "      <span class=\"dot r\"></span><span class=\"dot y\"></span><span class=\"dot g\"></span>\n";
+    out = out + "      <span class=\"url\">today.example</span>\n";
+    out = out + "    </div>\n";
+    out = out + "    <div class=\"glass\">\n";
+    out = out + "      <img src=\"\{\{ site.baseurl \}\}/assets/showcase.png?v=\{\{ site.time | date: '%s' \}\}\" alt=\"A task list rendered by star-burxt: a\n";
+    out = out + "           heading, a count, and five rows with checkboxes, two of them completed.\" width=\"__WIDTH__\"\n";
+    out = out + "           height=\"__HEIGHT__\" loading=\"eager\" decoding=\"async\">\n";
+    out = out + "    </div>\n";
+    out = out + "  </figure>\n";
+    out = out + "\n";
+    out = out + "  <figure class=\"src\">\n";
+    out = out + "    <figcaption>Hero.sbmx <span>the markup half</span></figcaption>\n";
+    out = out + "    <!-- The slots are brace ENTITIES rather than a raw block — see `escape` above for why. An HTML\n";
+    out = out + "         comment is no shelter: Liquid reads one, so naming the tag here would OPEN a raw block that\n";
+    out = out + "         nothing closes, and everything after it on the page would render as source. -->\n";
+    out = out + "    <pre><code class=\"language-sbmx\">__MARKUP__</code></pre>\n";
+    out = out + "  </figure>\n";
+    out = out + "</div>\n";
+    out = out + "\n";
+    out = out + "<p class=\"showcase-note\">That screenshot is the real component, running as WebAssembly — clicking a\n";
+    out = out + "row runs your <code>update</code>. The other half of the file is Burxt: a <code>Model</code>, a\n";
+    out = out + "<code>Msg</code>, and one <code>update</code> function, which\n";
+    out = out + "<a href=\"\{\{ site.baseurl \}\}/guide/07-a-real-application.html\">chapter 7</a> walks through.</p>\n";
+    return out;
+}
+
+let source: String = file_read(SOURCE);
+let half: String = markup_half(source);
+if len(half) == 0 {
+    print_error("no `===` section in " + SOURCE + " — is it still a component?");
+    exit(1);
+}
+
+let stripped: (String, Int) = without_props(half);
+if stripped.1 != 1 {
+    print_error("expected exactly one `:props:` block to strip from " + SOURCE + " and found "
+        + to_string(stripped.1) + ". This is the check the first version did not have: its pattern was"
+        + " written for the 0.6 fence, stopped matching after the respelling, and put the component's"
+        + " signature at the top of the landing page's code panel.");
+    exit(1);
+}
+
+let box: (Int, Int) = png_box(SHOT);
+if box.0 == 0 {
+    print_error(SHOT + " is not a readable PNG — regenerate it with tools/shoot.mjs");
+    exit(1);
+}
+
+let page: String = string_replace(
+    string_replace(
+        string_replace(template(), "__MARKUP__", escaped(stripped.0)),
+        "__WIDTH__", to_string(box.0)),
+    "__HEIGHT__", to_string(box.1));
+
+let wrote: Int = file_write(OUT, page);
+print("wrote " + OUT + " (" + to_string(box.0) + "x" + to_string(box.1) + ")");

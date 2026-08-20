@@ -166,7 +166,10 @@ jobs:
       # a tag that does not exist, while the install page said `v0.1.0` — 55 commits behind and unable
       # to read a single example on the site. Two pages, two answers, neither true, nothing checking.
       - name: Every ref the documentation advertises exists
-        run: python3 tools/refs.py
+        run: |
+          set -eux
+          burxt build tools/refs.bx -o star-refs
+          ./star-refs
 
       # **A stale NOT-DONE is found by nobody, where a stale DONE is found by the first person who
       # tries it.** Chapter 4 said "you cannot put a button inside a `for` yet" and quoted an error
@@ -246,7 +249,8 @@ jobs:
       - name: The showcase matches the component it claims to show
         run: |
           set -eux
-          python3 tools/showcase.py
+          burxt build tools/showcase.bx -o star-showcase
+          ./star-showcase
           git diff --exit-code -- docs/_includes/showcase.html
 
       # **Every example on the site is generated.** A tutorial that teaches something the tool
