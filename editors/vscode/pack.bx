@@ -1,21 +1,15 @@
-// **DO NOT RUN THIS YET. `pack.py` is the packer of record.**
+// **This is the packer of record, and it took a Burxt release to become one.**
 //
-// Two things in this directory can write `star-burxt.vsix`, and that is a temporary state with a stated
-// end: `pack.py` goes the day a Burxt release carries `std/zip.bx`. Until then, running `./star-pack`
-// produces a *deflated-by-Burxt* archive where the committed one is *deflated-by-zlib* — every entry's
-// content identical, the central directory and compressed sizes not — and `tests/extension.py` then
-// fails with *"the committed .vsix is not what the packer writes"*, which is a **misleading** message
-// for somebody who has just run a packer.
+// It was written, verified and then deliberately NOT adopted for a day: it imports `std/zip.bx`, which
+// existed on one machine and in no release, so switching turned `main` red on a clean runner while
+// every local suite stayed green. `pack.py` held the role until **1.5.0** shipped carrying `zip.bx` and
+// `deflate.bx`. **Adding to `lib/` is not shipping to `lib/`** — the language session's sentence, and
+// the reason this waited rather than being forced.
 //
-// **One thing should produce the artefact under test.** The markup session reached that rule the hard
-// way today: they had a step that packed in place beside the check that judged the artefact, wrapped it
-// in park-and-restore plumbing, and the plumbing's own unexported variable is what made their fix
-// verify itself for the wrong reason. They then deleted the step instead — *"a guard is code, and code
-// is where the next defect lives"*, so deleting it deleted the guard and the guard's bug together.
-//
-// This file is not deleted because it is finished, reviewed work with hours to wait, and a
-// delete-then-restore invites drift. So the collision is named at the top rather than guarded against
-// in code, and it ends when the release lands.
+// Before adopting it the release was downloaded — not the locally built tarball — its SHA256 checked
+// against the published `SHA256SUMS`, and every `.bx` in this repository built with that binary and
+// that library. The distinction matters because two compilers on this machine reported the same version
+// number for most of a day.
 //
 // Package the extension as a .vsix, with no toolchain and in no other language.
 //

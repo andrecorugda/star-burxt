@@ -59,7 +59,7 @@ Every check in this repository shells out to `burxt`, and a wrong one fails in a
 star's bug rather than the toolchain's.
 
 ```sh
-burxt --version                 # star-burxt needs 1.3.0 or newer
+burxt --version                 # a component needs 1.3.0 or newer; this SUITE needs 1.5.0
 printf 'use "std/html.bx";\n' > /tmp/probe.bx && burxt check /tmp/probe.bx
 ```
 
@@ -77,6 +77,13 @@ A compiler old enough to predate that lookup ignores `BURXT_LIB` too, and report
 set the variable. `tools/check-all.sh` distinguishes the two causes and says which.
 
 `burxt fetch` writes `burxt.lock` from `burxt.package`'s pinned BMX commit; `.burxt/` is not committed.
+
+**Two numbers, two jobs, and `./star-versions` holds them together.** The **floor** is
+`docs/_config.yml`'s `star_requires` — what a reader is promised for compiling a component, currently
+1.3.0, and CI builds against that release on every push rather than asserting it. The **current** is
+`BURXT_VERSION`, the same in both workflows, currently 1.5.0. **Running this suite needs the current**,
+because the packer imports `std/zip.bx`; compiling a component still only needs the floor. Those are two
+claims on two pages and `star-versions` fails if either drifts.
 
 **CI installs the PUBLISHED compiler, so a tool importing a new `std/` module is red on `main` until
 that module ships in a release.** It is not enough that the module exists on your machine. This cost a

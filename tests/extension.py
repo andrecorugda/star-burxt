@@ -165,7 +165,7 @@ def main():
           "editors/vscode/burxt.package is not the repository's — the server reads whichever is nearer, "
           "so a copy install would report a version this repository does not believe")
 
-    # The version a tool actually reads is the one in the manifest, built by `pack.py` from `package.json`.
+    # The version a tool actually reads is the one in the manifest, built by `pack.bx` from `package.json`.
     with zipfile.ZipFile(VSIX) as z:
         manifest = z.read("extension.vsixmanifest").decode()
         packed = json.loads(z.read("extension/package.json"))
@@ -211,7 +211,7 @@ def main():
         strays.append("extension/config.mjs")
     check(not strays,
           "no test and no docs-only icon shipped to users",
-          f"{', '.join(strays)} is in the archive — pack.py's FILES list exists to keep this directory's "
+          f"{', '.join(strays)} is in the archive — pack.bx's FILES list exists to keep this directory's "
           f"tests and the site's artwork out of everyone's editor")
 
     # **Reproducibility first, because it is what makes the next check mean anything.** Asserted as a
@@ -229,13 +229,15 @@ def main():
     # **And the committed artefact is the one the packer writes.** The packed bytes are restored either
     # way, so this never leaves a dirty tree.
     before = VSIX.read_bytes()
-    # **The packer of record is still `pack.py`, and that is a release problem rather than a code one.**
-    # `editors/vscode/pack.bx` is written and verified — same ten entries, every content byte-identical,
-    # every CRC matching, one fixed stamp, +11.1% on the download — but it imports `std/zip.bx`, and CI
-    # installs the PUBLISHED compiler, whose 1.4.0 lib has no zip module. Switching over turned `main`
-    # red on a clean runner while every local suite stayed green: **a green suite is not a green
-    # branch.** It switches back the day a release carries the module.
-    subprocess.run([sys.executable, str(EXT / "pack.py")], capture_output=True, check=True, cwd=ROOT)
+    # **The packer of record is Burxt, as of Burxt 1.5.0 carrying `std/zip.bx`.**
+    # It waited a day rather than being forced: the module existed on one machine and in no release, so
+    # switching turned `main` red on a clean runner while every local suite stayed green. **Adding to
+    # `lib/` is not shipping to `lib/`.**
+    packer = ROOT / "star-pack"
+    if not packer.exists():
+        subprocess.run(["burxt", "build", "editors/vscode/pack.bx", "-o", "star-pack"],
+                       cwd=ROOT, capture_output=True, check=True)
+    subprocess.run([str(packer)], capture_output=True, check=True, cwd=ROOT)
     after = VSIX.read_bytes()
     VSIX.write_bytes(before)
     if prove:
