@@ -56,7 +56,6 @@ ROOT = HERE.parent.parent
 FILES = [
     "package.json",
     "client.js",
-    "server/star-lsp.mjs",
     # Staged from the repository root a moment before packing. The server walks up for this, and
     # without it in the archive there is nothing above `extension/` to find.
     "burxt.package",

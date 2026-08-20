@@ -64,7 +64,7 @@ There is no test-name filter. The granular unit is the suite, or one document:
 python3 tests/extension.py                 # the packaged extension (still Python: needs a zip reader)
 node tools/paints.mjs                      # the site's syntax colouring
 node editors/vscode/config.mjs             # folding markers and icon geometry
-STAR_CHECK=./star-check node editors/lsp/drive-lsp.mjs    # the language server's protocol
+STAR_CHECK=./star-check ./star-drive-lsp   # the language server's protocol
 ```
 
 Suites carrying a negative control run it as a second invocation — `python3 tests/extension.py
@@ -103,8 +103,9 @@ server by shape. `editors/vscode/burxt.package` is a staged copy that `pack.py` 
 `tests/extension.py` asserts it is byte-identical to the root one.
 
 **The editor extension is in `editors/vscode/`**, with the language server *inside* it at
-`server/star-lsp.mjs` rather than beside it — a `..` path resolves outside the extension folder on a
-copy install and on a symlink one alike, because `path.join` normalises `..` lexically. `pack.py`
+`server/star-lsp.bx`, compiled to a `star-lsp` binary the extension finds on `PATH` exactly as it
+finds `star-check`. The archive ships no server: it could only carry the packer's platform. **The
+extension needs no `node` at all now** — `burxt`, `star-check`, `star-lsp`. `pack.py`
 writes `star-burxt.vsix` with nothing but the Python standard library. `config.mjs` in that directory
 is a **test**, not extension code, and must never ship.
 

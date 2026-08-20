@@ -198,7 +198,11 @@ jobs:
         run: node editors/vscode/config.mjs
 
       - name: The language server speaks the protocol
-        run: STAR_CHECK=./star-check node editors/lsp/drive-lsp.mjs
+        run: |
+          set -eux
+          burxt build editors/vscode/server/star-lsp.bx -o star-lsp
+          burxt build editors/lsp/drive-lsp.bx -o star-drive-lsp
+          STAR_CHECK=./star-check ./star-drive-lsp
 
       # **Runs the test, not the packer.** The obvious shape here is `pack.py && inspect`, and it is
       # the shape that cannot work: it regenerates the artefact it is verifying, so it overwrites the

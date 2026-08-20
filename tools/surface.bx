@@ -346,9 +346,9 @@ if len(declared) == 0 {
     }
 
     // **A version hardcoded where one could be read is the defect, so it is refused by shape.**
-    let lsp: String = file_read("editors/vscode/server/star-lsp.mjs");
+    let lsp: String = file_read("editors/vscode/server/star-lsp.bx");
     if mentions(lsp, "version: '0.") || mentions(lsp, "version: \"0.") {
-        let x: Int = push(failures, "editors/vscode/server/star-lsp.mjs writes a version literal into `serverInfo`."
+        let x: Int = push(failures, "editors/vscode/server/star-lsp.bx writes a version literal into `serverInfo`."
             + " A client LOGS that field, so a bug report about a diagnostic would name the wrong version —"
             + " read it from burxt.package instead");
     }

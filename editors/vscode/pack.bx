@@ -139,7 +139,6 @@ pure function packaged() -> [String] allocates {
     let mutable out: [String] = [];
     let a: Int = push(out, "package.json");
     let b: Int = push(out, "client.js");
-    let c: Int = push(out, "server/star-lsp.mjs");
     // Staged from the repository root a moment before packing. The server walks up for this, and
     // without it in the archive there is nothing above `extension/` to find.
     let d: Int = push(out, "burxt.package");

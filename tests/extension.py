@@ -52,7 +52,17 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 EXT = ROOT / "editors" / "vscode"
 PKG = EXT / "package.json"
 VSIX = EXT / "star-burxt.vsix"
-SERVER = "server/star-lsp.mjs"
+# **The archive no longer carries a server, and that collapses four assertions into one honestly.**
+# The language server is a compiled Burxt binary now, found on `PATH` exactly as `star-check` already
+# is. It could not be shipped inside the `.vsix` truthfully: the archive would carry whichever platform
+# the packer ran on, and a reader who has already built `star-check` can build this too.
+#
+# The four install shapes below existed because the server USED to live inside the extension, where a
+# `..` path resolved outside it on a copy and a symlink alike, and where `cp -r` put it somewhere no
+# parent held a `burxt.package` — so it answered `initialize` with `0.0.0`. **That bug class is gone
+# with the file: a binary on `PATH` cannot be misplaced relative to an extension folder.** So this
+# spawns the one server there is and asks it once, which is the whole of what remains to check.
+SERVER = "star-lsp"
 
 # Where somebody is told to install it. A promise to install a file is a promise the file is there.
 #
@@ -92,7 +102,7 @@ def pages():
 
 PROBE = r"""
 import { spawn } from 'child_process';
-const p = spawn('node', [process.argv[2]], { stdio: ['pipe', 'pipe', 'pipe'] });
+const p = spawn(process.argv[2], [], { stdio: ['pipe', 'pipe', 'pipe'] });
 const msg = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
 p.stdin.write(`Content-Length: ${Buffer.byteLength(msg, 'utf8')}\r\n\r\n${msg}`);
 let out = '';
@@ -114,9 +124,9 @@ def declared_version():
 
 
 def ask(server_path, probe):
-    """Spawn the real server at this path and return the version it answers `initialize` with."""
+    """Spawn the real server and return the version it answers `initialize` with."""
     try:
-        out = subprocess.run([sys.executable and "node", str(probe), str(server_path)],
+        out = subprocess.run(["node", str(probe), str(server_path)],
                              capture_output=True, text=True, timeout=30)
     except subprocess.TimeoutExpired:
         return "TIMED OUT"
@@ -187,7 +197,7 @@ def main():
         source["contributes"]["languages"][0]["configuration"].lstrip("./"),
         *[g["path"].lstrip("./") for g in source["contributes"]["grammars"]],
     ]}
-    referenced |= {"extension/" + SERVER, "extension/burxt.package", "extension/README.md"}
+    referenced |= {"extension/burxt.package", "extension/README.md"}
     if prove:
         referenced.add("extension/syntaxes/never-shipped.json")
     absent = sorted(n for n in referenced if n not in names)
@@ -228,42 +238,27 @@ def main():
           f"the committed .vsix is what the packer writes ({len(before)} bytes)",
           "the committed .vsix is not what the packer writes — it was changed without repacking")
 
-    # ---- the claim that was false, checked the only way it can be -------------------------------
+    # ---- the server reports the version this repository believes -------------------------------
     #
-    # Each documented install, really built, with the real server spawned inside it and asked.
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = pathlib.Path(tmp)
-        probe = tmp / "probe.mjs"
-        probe.write_text(PROBE)
-
-        shapes = []
-
-        shapes.append(("the checkout", EXT / SERVER))
-
-        copied = tmp / "copy" / "star-burxt"
-        copied.parent.mkdir()
-        shutil.copytree(EXT, copied)
-        shapes.append(("a copy install (`cp -r`)", copied / SERVER))
-
-        linked = tmp / "link"
-        linked.mkdir()
-        (linked / "star-burxt").symlink_to(EXT)
-        shapes.append(("a symlink install (`ln -s`)", linked / "star-burxt" / SERVER))
-
-        unpacked = tmp / "vsix"
-        with zipfile.ZipFile(VSIX) as z:
-            z.extractall(unpacked)
-        shapes.append(("the packaged .vsix", unpacked / "extension" / SERVER))
-
-        for label, path in shapes:
-            answered = ask(path, probe)
-            if prove and label.startswith("a copy"):
-                answered = "0.0.0"
-            check(answered == want,
-                  f"{label} answers `initialize` with {answered}",
-                  f"{label} answers `initialize` with {answered}, and this repository is at {want} — "
-                  f"a client logs that field, so every bug report from this install names the wrong "
-                  f"version, and nothing about the editor looks wrong")
+    # One spawn, because there is one server. It is still checked by ASKING rather than by reading its
+    # source: the defect this replaced was a server that reported `0.0.0` while colouring and checking
+    # perfectly, and no amount of reading the file would have shown that.
+    built = ROOT / "star-lsp"
+    if not built.exists():
+        subprocess.run(["burxt", "build", "editors/vscode/server/star-lsp.bx", "-o", "star-lsp"],
+                       cwd=ROOT, capture_output=True)
+    answered = "not built"
+    if built.exists():
+        with tempfile.TemporaryDirectory() as tmp:
+            probe = pathlib.Path(tmp) / "probe.mjs"
+            probe.write_text(PROBE)
+            answered = ask(built, probe)
+    if prove:
+        answered = "0.0.0"
+    check(answered == want,
+          f"the language server answers `initialize` with {answered}",
+          f"the language server answers `initialize` with {answered} while this repository is at {want}"
+          f" — a client logs that field, so every bug report from it names the wrong version")
 
     # The name every document hands to a reader.
     named = set()
