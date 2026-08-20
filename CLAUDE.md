@@ -72,6 +72,17 @@ set the variable. `tools/check-all.sh` distinguishes the two causes and says whi
 
 `burxt fetch` writes `burxt.lock` from `burxt.package`'s pinned BMX commit; `.burxt/` is not committed.
 
+**CI installs the PUBLISHED compiler, so a tool importing a new `std/` module is red on `main` until
+that module ships in a release.** It is not enough that the module exists on your machine. This cost a
+red `main` once: the packer was switched to `std/zip.bx`, every local suite stayed green, and a clean
+runner could not build it. Before adopting a new standard-library module, build every tool against the
+release `docs/install.md` tells a reader to install:
+
+```sh
+tar xzf burxt-<version>-linux-x86_64.tar.gz -C /tmp/rel --strip-components=1
+for f in tools/*.bx tests/*.bx examples/*.bx; do BURXT_LIB=/tmp/rel/lib burxt build "$f" -o /tmp/x || echo "FAILS: $f"; done
+```
+
 ## Build and test
 
 The tools are Burxt programs compiled from source, and they are `.gitignore`d. **`check-all.sh` does
