@@ -163,4 +163,13 @@ if len(failures) > 0 {
     exit(1);
 }
 
+// **Zero is not a pass.** This gate reports what it found, and finding nothing prints a smaller number
+// with the same success sentence — the collection is parsed out of a page, so a heading change or a moved list empties it while the page
+// still looks right. So it says so instead. The floor is 1 rather than a
+// remembered constant: the question is whether the gate still has inputs, not whether anyone updated a
+// literal.
+if len(listed) == 0 {
+    print("no example(s) found at all, so this gate checked nothing and would have passed either way");
+    exit(1);
+}
 print(to_string(len(listed)) + " example(s) in the collection, each present and each with a reason");

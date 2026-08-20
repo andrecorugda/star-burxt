@@ -62,10 +62,34 @@ pure function before(text: String, first: String, second: String) -> Bool {
     return a >= 0 && b >= 0 && a < b;
 }
 
+// **How many guarantees RAN, not just how many broke.** The verdict line used to read `every guarantee
+// holds` with no number, which is exactly what it would print over zero cases — a suite that stopped
+// registering its checks would announce success. The markup session found the same shape in its own
+// runner from the other side, where three groups skipped and the total silently ignored them: *a summary
+// true about what ran and silent about what did not.*
+//
+// A static count is not the count, and the gap runs the other way from what the source suggests. There
+// are **111** accumulating call sites and **148** guarantees run: six of them sit inside conditionals and
+// loops, so grepping the source reports 111 and understates by 37 — in the direction that reads as a
+// smaller suite passing. I wrote "overstates by up to six" here first, reasoning from indentation alone,
+// and the runtime number corrected it. **A number that is not the number is worse than no number**, which
+// is the whole finding, so it is counted where it happens.
+//
+// One more thing this comment learned about itself: the `sed` that added `tally` to 111 call sites also
+// rewrote the example *inside this paragraph*, because the paragraph quotes the code it describes. Using
+// versus mentioning, for the third time in one day — the workflow audit read a comment as a use, a marker
+// check can be opted out of by describing the marker, and here a mechanical edit walked into prose. Prose
+// that quotes code is code as far as `sed` is concerned.
+//
+// `mutable` goes BEFORE the name — `mutable tally: Tally`, not `tally: mutable Tally` — and the compiler
+// says so in the error, which is how this was settled in a 12-line probe rather than by guessing.
+class Tally { ran: Int }
+
 // **Returns its verdict rather than pushing to a shared list.** A top-level `let` is invisible to a
 // function body and a `const` may not be a list, so the count is accumulated by the caller — which the
 // compiler insisted on and which is the better shape anyway: there is one place the total is known.
-function check(name: String, ok: Bool, detail: String) -> Int {
+function check(mutable tally: Tally, name: String, ok: Bool, detail: String) -> Int {
+    tally.ran += 1;
     if ok {
         print("  ok    " + name);
         return 0;
@@ -495,14 +519,24 @@ match file_temp_directory("star-guarantees") {
             print_error(built.output + built.errors);
             exit(1);
         }
-        let broken: Int = run_all(dir);
+        let mutable tally: Tally = Tally { ran: 0 };
+        let broken: Int = run_all(dir, tally);
         if broken > 0 {
             print("");
-            print(to_string(broken) + " guarantee(s) broken");
+            print(to_string(broken) + " of " + to_string(tally.ran) + " guarantee(s) broken");
+            exit(1);
+        }
+        // **Zero cases is not every case.** A refactor that stopped calling `check` would otherwise
+        // print the same success line as a full run, and the number is the only thing that tells them
+        // apart. The floor is deliberately far below the current count: it asks whether the suite still
+        // has a body, not whether anyone remembered to update a constant.
+        if tally.ran < 50 {
+            print("");
+            print("only " + to_string(tally.ran) + " guarantee(s) ran, which is not a suite");
             exit(1);
         }
         print("");
-        print("every guarantee holds");
+        print("every guarantee holds, all " + to_string(tally.ran) + " of them");
     }
 }
 
@@ -511,53 +545,53 @@ match file_temp_directory("star-guarantees") {
 //
 // The order is the order the suite was written in, and it is load-bearing at the top: the accepting
 // case is first because everything under it is a refusal.
-function run_all(dir: String) -> Int touches files, commands, input {
+function run_all(dir: String, mutable tally: Tally) -> Int touches files, commands, input {
     let mutable broken: Int = 0;
 
     // ---- the accepting case, first ---------------------------------------------------------------
     let good_says: String = compiled(dir, DOC_GOOD);
-    broken += check("a correct component compiles", contains(good_says, "no errors"), good_says);
+    broken += check(tally, "a correct component compiles", contains(good_says, "no errors"), good_says);
 
     let good: Capture = generated(dir, DOC_GOOD);
-    broken += check("a handler reaches the page as an INDEX",
+    broken += check(tally, "a handler reaches the page as an INDEX",
         contains(good.output, "data-star-h"), good.output);
-    broken += check("no inline handler is ever emitted",
+    broken += check(tally, "no inline handler is ever emitted",
         !contains(good.output, "onclick"), good.output);
-    broken += check("the handler expression reaches `dispatch`",
+    broken += check(tally, "the handler expression reaches `dispatch`",
         contains(good.output, SAYS_DISPATCH), good.output);
 
     // ---- what the COMPILER refuses ---------------------------------------------------------------
     let typo: String = compiled(dir, ":props: count: Int\n:!props:\n\nAt \{\{ to_string(cuont) \}\}.\n");
-    broken += check("a slot typo is refused by name", contains(typo, "unknown variable: cuont"), typo);
+    broken += check(tally, "a slot typo is refused by name", contains(typo, "unknown variable: cuont"), typo);
 
     let wrong: String = compiled(dir,
         ":props: count: Int\n:!props:\n\n:button: on:click=count + \"one\"\ngo\n:!button:\n");
-    broken += check("a handler type error is refused",
+    broken += check(tally, "a handler type error is refused",
         contains(wrong, "cannot apply `+` to Int and String"), wrong);
 
     // The one no framework whose handlers are closures can make.
     let money: String = compiled(dir,
         ":props: total: Decimal<2>\n:!props:\n\n:button: on:click=total * 1.5\nbump\n:!button:\n");
-    broken += check("money narrowing INSIDE a click handler is a compile error",
+    broken += check(tally, "money narrowing INSIDE a click handler is a compile error",
         contains(money, "rounding"), money);
 
     // ---- what star-burxt refuses -----------------------------------------------------------------
     let unknown: Capture = generated(dir, ":props: count: Int\n:!props:\n\n:mystery:\nhi\n:!mystery:\n");
-    broken += check("an undeclared block name is refused by name",
+    broken += check(tally, "an undeclared block name is refused by name",
         contains(unknown.errors, "STAR-E001") && contains(unknown.errors, "mystery"), unknown.errors);
 
     let unwired: Capture = generated(dir,
         ":props: count: Int\n:!props:\n\n:button: on:hover=count + 1\nhi\n:!button:\n");
-    broken += check("an event this host cannot wire is refused (SPEC.md 4a.5)",
+    broken += check(tally, "an event this host cannot wire is refused (SPEC.md 4a.5)",
         contains(unwired.errors, "STAR-E002") && contains(unwired.errors, "on:hover"), unwired.errors);
 
     // **THE LIST INSIDE THE MESSAGE WENT STALE AND NOBODY NOTICED.** It named four events for as long
     // as there were four, and kept naming them after thirty-five more were wired — telling an author
     // their options were `click`, `input`, `change` and `submit` while `keydown` worked. A stale list
     // in an error is worse than no list: a reader believes it and stops looking.
-    broken += check("the refusal does not name a four-event list that has not been true for hours",
+    broken += check(tally, "the refusal does not name a four-event list that has not been true for hours",
         !contains(unwired.errors, "Wired events are click, input, change, submit"), unwired.errors);
-    broken += check("`hover` is answered with what it actually is — CSS, not an event",
+    broken += check(tally, "`hover` is answered with what it actually is — CSS, not an event",
         contains(unwired.errors, "hovering is CSS") && contains(unwired.errors, "mouseenter"),
         unwired.errors);
 
@@ -567,7 +601,7 @@ function run_all(dir: String) -> Int touches files, commands, input {
         let pair: Answer = pairs[pi];
         let asked: Capture = generated(dir,
             ":props: n: Int\n:!props:\n\n:div: on:" + pair.asked + "=n + 1\nx\n:!div:\n");
-        broken += check("`" + pair.asked + "` is answered with `" + pair.wanted + "`",
+        broken += check(tally, "`" + pair.asked + "` is answered with `" + pair.wanted + "`",
             contains(asked.errors, pair.wanted), asked.errors);
         pi += 1;
     }
@@ -580,20 +614,20 @@ function run_all(dir: String) -> Int touches files, commands, input {
         let ev: String = events[ei];
         let wired: Capture = generated(dir,
             ":props: n: Int\n:!props:\n\n:div: on:" + ev + "=n + 1\nx\n:!div:\n");
-        broken += check("`on:" + ev + "` is wired", wired.code == 0, wired.errors);
+        broken += check(tally, "`on:" + ev + "` is wired", wired.code == 0, wired.errors);
         ei += 1;
     }
 
     let voided: Capture = generated(dir, DOC_VOID_BODY);
-    broken += check("a void element with a body is refused before it trips a contract",
+    broken += check(tally, "a void element with a body is refused before it trips a contract",
         contains(voided.errors, "STAR-E004"), voided.errors);
 
     let flowed: Capture = generated(dir, DOC_FLOW_IN_BUTTON);
-    broken += check("flow content inside a phrasing element is refused",
+    broken += check(tally, "flow content inside a phrasing element is refused",
         contains(flowed.errors, "STAR-E005"), flowed.errors);
 
     let looped: Capture = generated(dir, DOC_HANDLER_IN_FOR);
-    broken += check("a handler inside a `for` is refused, rather than emitting a name out of scope",
+    broken += check(tally, "a handler inside a `for` is refused, rather than emitting a name out of scope",
         contains(looped.errors, "STAR-E007"), looped.errors);
 
     // ---- component mode: a `===bx` section, and handlers become MESSAGES -------------------------
@@ -601,7 +635,7 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // The accepting case first, as everywhere on this page: a suite of refusals is satisfied by a
     // generator that refuses everything.
     let component_says: String = compiled(dir, DOC_COMPONENT);
-    broken += check("a component with a ===bx section compiles",
+    broken += check(tally, "a component with a ===bx section compiles",
         contains(component_says, "no errors"), component_says);
 
     // **A `===bx` section that holds only whitespace is not a `===bx` section.** It flipped the mode
@@ -616,36 +650,36 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // Reachable by pressing return, which is why it is guarded rather than just fixed.
     let blank_line: String = compiled(dir,
         "===bx\n\n===\n\n:props: n: Int\n:!props:\n\n:button: on:click=n + 1\nbump\n:!button:\n");
-    broken += check("a `===bx` section holding a blank line is expression mode, not component mode",
+    broken += check(tally, "a `===bx` section holding a blank line is expression mode, not component mode",
         contains(blank_line, "no errors"), blank_line);
     let nothing_at_all: String = compiled(dir,
         "===bx\n===\n\n:props: n: Int\n:!props:\n\n:button: on:click=n + 1\nbump\n:!button:\n");
-    broken += check("a `===bx` section holding nothing at all is expression mode, not component mode",
+    broken += check(tally, "a `===bx` section holding nothing at all is expression mode, not component mode",
         contains(nothing_at_all, "no errors"), nothing_at_all);
 
     let component: Capture = generated(dir, DOC_COMPONENT);
-    broken += check("STATE IS A RECORD HOLDING A LIST — the thing the region rule refused until today",
+    broken += check(tally, "STATE IS A RECORD HOLDING A LIST — the thing the region rule refused until today",
         contains(component.output, SAYS_STATE_RECORD), component.output);
-    broken += check("a handler is a MESSAGE, routed through the author's `update`",
+    broken += check(tally, "a handler is a MESSAGE, routed through the author's `update`",
         contains(component.output, SAYS_MESSAGE), component.output);
-    broken += check("the author's code is emitted BEFORE the view that names it",
+    broken += check(tally, "the author's code is emitted BEFORE the view that names it",
         before(component.output, "pure function update", "pure function c("), component.output);
 
     // `use` lines cannot sit where they were written: Burxt scans only a file's LEADING lines for
     // imports, so a `use` after a declaration is a syntax error. They are hoisted.
     let imported: Capture = generated(dir, DOC_IMPORTED);
-    broken += check("an author's `use` is hoisted above the generated header",
+    broken += check(tally, "an author's `use` is hoisted above the generated header",
         before(imported.output, SAYS_STRING_IMPORT, "class Model"), imported.output);
 
     // A `===bx` section with no `update` is refused BY NAME rather than left to fail as a compiler
     // error about a function nobody wrote.
     let orphan: Capture = generated(dir, DOC_ORPHAN);
-    broken += check("a ===bx section with no `update` is refused by name",
+    broken += check(tally, "a ===bx section with no `update` is refused by name",
         contains(orphan.errors, "STAR-E008") && contains(orphan.errors, "update"), orphan.errors);
 
     // Expression mode is untouched — the guide teaches it and it keeps working.
     let still_expression: Capture = generated(dir, DOC_GOOD);
-    broken += check("without a ===bx section a handler is still an EXPRESSION",
+    broken += check(tally, "without a ===bx section a handler is still an EXPRESSION",
         contains(still_expression.output, SAYS_DISPATCH), still_expression.output);
 
     // ---- routing: the path IS the state, so it needs nothing the language lacks ------------------
@@ -654,17 +688,17 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // boundary. That is the whole reason routing works today while the rest of an SPA does not: a
     // model that is a RECORD cannot cross, because nothing in Burxt holds state between two calls.
     let routed_says: String = compiled(dir, DOC_ROUTED);
-    broken += check("a routed app compiles", contains(routed_says, "no errors"), routed_says);
+    broken += check(tally, "a routed app compiles", contains(routed_says, "no errors"), routed_says);
     let routed: Capture = generated(dir, DOC_ROUTED);
-    broken += check("a link is real markup, so it works before any JavaScript runs",
+    broken += check(tally, "a link is real markup, so it works before any JavaScript runs",
         contains(routed.output, "html_element(\"a\", [html_attr(\"href\", \"/posts/42\")]"), routed.output);
-    broken += check("the route is decided by an exhaustive match",
+    broken += check(tally, "the route is decided by an exhaustive match",
         contains(routed.output, SAYS_MATCH_ROUTE), routed.output);
 
     // Adding a screen to the enum and forgetting its branch fails the BUILD. Checked here on a
     // router rather than in the abstract, because this is where it earns its keep.
     let grew: String = compiled(dir, string_replace(DOC_ROUTED, ROUTE_ENUM, ROUTE_ENUM_GROWN));
-    broken += check("ADDING A ROUTE AND FORGETTING ITS SCREEN IS A BUILD FAILURE",
+    broken += check(tally, "ADDING A ROUTE AND FORGETTING ITS SCREEN IS A BUILD FAILURE",
         contains(grew, "does not handle `Archive`"), grew);
 
     // ---- per-row handlers: identity crosses the page as the key ----------------------------------
@@ -674,12 +708,12 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // morning: a row's identity crosses as its `key`, and `update` re-derives the row from the
     // state it is given rather than from a value captured while drawing the page.
     let rows_says: String = compiled(dir, DOC_ROWS);
-    broken += check("a handler inside a `for` compiles", contains(rows_says, "no errors"), rows_says);
+    broken += check(tally, "a handler inside a `for` compiles", contains(rows_says, "no errors"), rows_says);
     let rows: Capture = generated(dir, DOC_ROWS);
-    broken += check("`dispatch` takes the row's KEY and the event's VALUE, in that order",
+    broken += check(tally, "`dispatch` takes the row's KEY and the event's VALUE, in that order",
         contains(rows.output, "_dispatch(handler: Int, key: String, value: String, model: Model)"),
         rows.output);
-    broken += check("the row carries its key on the page, which is what the driver sends",
+    broken += check(tally, "the row carries its key on the page, which is what the driver sends",
         contains(rows.output, "html_attr(\"data-star-key\", to_string(todo.id))"), rows.output);
 
     // The loop variable is gone by the time a handler runs. Refused HERE naming it, rather than
@@ -687,14 +721,14 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // author never wrote, about a binding they did.
     let captured: Capture = generated(dir,
         string_replace(DOC_ROWS, ROW_KEYED_HANDLER, ROW_CAPTURING_HANDLER));
-    broken += check("A HANDLER NAMING THE LOOP VARIABLE IS REFUSED, naming it and pointing at `key`",
+    broken += check(tally, "A HANDLER NAMING THE LOOP VARIABLE IS REFUSED, naming it and pointing at `key`",
         contains(captured.errors, "STAR-E007") && contains(captured.errors, "todo")
             && contains(captured.errors, "key"), captured.errors);
 
     // Without a key the page cannot say which row was clicked, and every row would dispatch
     // identically — which looks like it works, so it is refused.
     let unkeyed: Capture = generated(dir, string_replace(DOC_ROWS, ROW_KEY_CLAUSE, ""));
-    broken += check("an unkeyed `for` containing a handler is refused",
+    broken += check(tally, "an unkeyed `for` containing a handler is refused",
         contains(unkeyed.errors, "STAR-E018"), unkeyed.errors);
 
     // ---- `key` and `value` belong to star --------------------------------------------------------
@@ -708,33 +742,33 @@ function run_all(dir: String) -> Int touches files, commands, input {
         let name: String = taken[ti];
         let clash: Capture = generated(dir,
             ":props: " + name + ": Int\n:!props:\n\nAt \{\{ to_string(" + name + ") \}\}.\n");
-        broken += check("a prop named `" + name + "` is refused by name, not by the compiler",
+        broken += check(tally, "a prop named `" + name + "` is refused by name, not by the compiler",
             contains(clash.errors, "STAR-E019") && contains(clash.errors, name), clash.errors);
         ti += 1;
     }
     let fine: Capture = generated(dir, DOC_PROP_FINE);
-    broken += check("a prop named anything else is fine", fine.code == 0, fine.errors);
+    broken += check(tally, "a prop named anything else is fine", fine.code == 0, fine.errors);
 
     // ---- styles: `local` scopes, `global` does not, and neither is the default -------------------
     let dropped_sheet: Bool = file_delete(dir + "/doc.css");
     let styled: Capture = generated(dir, DOC_STYLED);
     let sheet: String = read_beside(dir, "doc.css");
-    broken += check("a `local` selector is scoped to the component",
+    broken += check(tally, "a `local` selector is scoped to the component",
         contains(sheet, ".card[data-s-c]"), sheet);
-    broken += check("a `global` rule is left exactly as written",
+    broken += check(tally, "a `global` rule is left exactly as written",
         contains(sheet, SAYS_GLOBAL_RULE), sheet);
-    broken += check("the marker lands on the elements, so the scope is real",
+    broken += check(tally, "the marker lands on the elements, so the scope is real",
         contains(styled.output, "html_attr(\"data-s-c\", \"\")"), styled.output);
 
     // `@media` is not a selector. Stamping it produces `@media (…)[data-s-c]`, which is not CSS —
     // its BODY holds the rules that need scoping.
-    broken += check("AN AT-RULE IS NOT STAMPED; the rules inside it are",
+    broken += check(tally, "AN AT-RULE IS NOT STAMPED; the rules inside it are",
         contains(sheet, SAYS_AT_RULE) && contains(sheet, SAYS_SCOPED_IN_AT_RULE), sheet);
 
     // The reason `local` is exact matching rather than a descendant selector: a child component's
     // elements sit inside the parent's subtree, and `[data-s-parent] .card` would reach them.
     let unstyled: Capture = generated(dir, DOC_PLAIN_DIV);
-    broken += check("a component with no local sheet gets no marker and no attribute",
+    broken += check(tally, "a component with no local sheet gets no marker and no attribute",
         !contains(unstyled.output, "data-s-"), unstyled.output);
 
     // ---- components: another `.sbmx`, imported with `use`, called as a block ---------------------
@@ -743,32 +777,32 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // by a file the previous run of this suite left behind.
     let dropped_badge: Bool = file_delete(dir + "/Badge.bx");
     let page: Capture = generated(dir, DOC_PAGE);
-    broken += check("a component is CALLED, as an ordinary function",
+    broken += check(tally, "a component is CALLED, as an ordinary function",
         contains(page.output, "badge((model.unread), \"unread\")"), said(page));
-    broken += check("the child is generated too, beside its own source",
+    broken += check(tally, "the child is generated too, beside its own source",
         file_exists(dir + "/Badge.bx"), dir);
-    broken += check("the generated page imports the child as `.bx`, not `.sbmx`",
+    broken += check(tally, "the generated page imports the child as `.bx`, not `.sbmx`",
         contains(page.output, "use \"./Badge.bx\";"), page.output);
 
     // ARGUMENTS GO IN THE CALLEE'S ORDER, not the order they were written — two props of the same
     // type would swap in silence otherwise, and the compiler cannot see that mistake.
     let reordered: Capture = generated(dir,
         string_replace(DOC_PAGE, CALL_AS_WRITTEN, CALL_REORDERED));
-    broken += check("ARGUMENT ORDER FOLLOWS THE CALLEE, not the call site",
+    broken += check(tally, "ARGUMENT ORDER FOLLOWS THE CALLEE, not the call site",
         contains(reordered.output, "badge((model.unread), \"unread\")"), reordered.output);
 
     let missing_prop: Capture = generated(dir, string_replace(DOC_PAGE, CALL_TONE, ""));
-    broken += check("a call missing a prop is refused, naming it and listing what is wanted",
+    broken += check(tally, "a call missing a prop is refused, naming it and listing what is wanted",
         contains(missing_prop.errors, "STAR-E017") && contains(missing_prop.errors, "tone"),
         missing_prop.errors);
 
     let unimported: Capture = generated(dir, DOC_UNIMPORTED);
-    broken += check("a component block with no import is refused, and says what to write",
+    broken += check(tally, "a component block with no import is refused, and says what to write",
         contains(unimported.errors, "STAR-E001") && contains(unimported.errors, ".sbmx"),
         unimported.errors);
 
     let absent: Capture = generated(dir, DOC_ABSENT);
-    broken += check("an import that does not resolve names the file and the importer",
+    broken += check(tally, "an import that does not resolve names the file and the importer",
         contains(absent.errors, "Nope.sbmx") && contains(absent.errors, "imported by"), absent.errors);
 
     // ---- `match`: adding a screen and forgetting its view is a BUILD FAILURE ---------------------
@@ -776,36 +810,36 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // This is the claim no JavaScript framework can make. React, Vue and Svelte give you a blank
     // page and a bug report; here the compiler names the variant nobody rendered.
     let router_says: String = compiled(dir, DOC_ROUTER);
-    broken += check("a match over a route compiles", contains(router_says, "no errors"), router_says);
+    broken += check(tally, "a match over a route compiles", contains(router_says, "no errors"), router_says);
     let router: Capture = generated(dir, DOC_ROUTER);
-    broken += check("a case PATTERN destructures, so `id` is in scope in its branch",
+    broken += check(tally, "a case PATTERN destructures, so `id` is in scope in its branch",
         contains(router.output, SAYS_CASE_PATTERN), router.output);
 
     // The whole point, and it is checked by REMOVING a branch rather than by adding a variant —
     // same defect, and this way the fixture cannot pass because the compiler was lenient.
     let missing_branch: String = compiled(dir, string_replace(DOC_ROUTER, ROUTER_POST_BRANCH, ""));
-    broken += check("A VARIANT WITH NO BRANCH IS A COMPILE ERROR, naming it",
+    broken += check(tally, "A VARIANT WITH NO BRANCH IS A COMPILE ERROR, naming it",
         contains(missing_branch, "does not handle `Post`"), missing_branch);
 
     let stray: Capture = generated(dir, DOC_STRAY_CASE);
-    broken += check("a `case` outside a `match` is refused",
+    broken += check(tally, "a `case` outside a `match` is refused",
         contains(stray.errors, "STAR-E014"), stray.errors);
     let loose: Capture = generated(dir, DOC_LOOSE_TEXT);
-    broken += check("text between branches is refused — it has no branch to belong to",
+    broken += check(tally, "text between branches is refused — it has no branch to belong to",
         contains(loose.errors, "STAR-E011"), loose.errors);
     let empty_match: Capture = generated(dir, DOC_EMPTY_MATCH);
-    broken += check("a match with no cases decides nothing, and is refused",
+    broken += check(tally, "a match with no cases decides nothing, and is refused",
         contains(empty_match.errors, "STAR-E013"), empty_match.errors);
 
     // ---- `else` ----------------------------------------------------------------------------------
     let branched: Capture = generated(dir, DOC_BRANCHED);
-    broken += check("an `else` becomes the other branch of the `if` above it",
+    broken += check(tally, "an `else` becomes the other branch of the `if` above it",
         contains(branched.output, SAYS_ELSE), branched.output);
     let orphaned: Capture = generated(dir, DOC_ORPHANED_ELSE);
-    broken += check("an `else` with no `if` directly above it is refused",
+    broken += check(tally, "an `else` with no `if` directly above it is refused",
         contains(orphaned.errors, "STAR-E016"), orphaned.errors);
     let conditioned: Capture = generated(dir, DOC_CONDITIONED_ELSE);
-    broken += check("an `else` carrying a condition is refused rather than silently ignored",
+    broken += check(tally, "an `else` carrying a condition is refused rather than silently ignored",
         contains(conditioned.errors, "STAR-E015"), conditioned.errors);
 
     // ---- positions: a refusal points AT the thing, in line:column --------------------------------
@@ -814,25 +848,25 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // `STAR-E005` said "at 112" — the button — when the heading was at 127, so a reader with a long
     // document was sent to the block and left to find the line themselves.
     let located: Capture = generated(dir, DOC_LOCATED);
-    broken += check("a refusal points at the OFFENDING construct, in line:column",
+    broken += check(tally, "a refusal points at the OFFENDING construct, in line:column",
         contains(located.errors, "STAR-E005 at 12:1"), located.errors);
 
     // `column` counts CHARACTERS, not bytes. A hand-rolled conversion is right on every ASCII line
     // and one place wrong on the first line with an accent in it — which is why this uses BMX's
     // `bmx_where` rather than star's own arithmetic, and why this fixture has an `å` in it.
     let accented: Capture = generated(dir, DOC_ACCENTED);
-    broken += check("a line with a multi-byte character does not move the caret",
+    broken += check(tally, "a line with a multi-byte character does not move the caret",
         contains(accented.errors, "STAR-E005 at 7:1"), accented.errors);
 
     // ---- attributes, and the element vocabulary as a content model -------------------------------
     let attrs: Capture = generated(dir, DOC_ATTRS);
-    broken += check("an attribute reaches the element",
+    broken += check(tally, "an attribute reaches the element",
         contains(attrs.output, "html_attr(\"class\", \"card\")"), attrs.output);
-    broken += check("a quoted value keeps its spaces",
+    broken += check(tally, "a quoted value keeps its spaces",
         contains(attrs.output, "html_attr(\"class\", \"tag muted\")"), attrs.output);
-    broken += check("A VALUE INTERPOLATES, so a link can be computed from state",
+    broken += check(tally, "A VALUE INTERPOLATES, so a link can be computed from state",
         contains(attrs.output, "html_attr(\"href\", \"/posts/\" + (to_string(post.id)))"), attrs.output);
-    broken += check("a bare name is a boolean attribute",
+    broken += check(tally, "a bare name is a boolean attribute",
         contains(attrs.output, "html_attr(\"disabled\", \"\")"), attrs.output);
 
     // The vocabulary is three sets rather than one list, because the SPLIT is what refuses a
@@ -843,31 +877,31 @@ function run_all(dir: String) -> Int touches files, commands, input {
         let tag: String = tags[gi];
         let known: Capture = generated(dir,
             ":props: n: Int\n:!props:\n\n:" + tag + ":\nx\n:!" + tag + ":\n");
-        broken += check("`" + tag + "` is an element star knows", known.code == 0, known.errors);
+        broken += check(tally, "`" + tag + "` is an element star knows", known.code == 0, known.errors);
         gi += 1;
     }
     let void_source: Capture = generated(dir, DOC_VOID_SOURCE);
-    broken += check("a NEWLY added void element is still refused a body",
+    broken += check(tally, "a NEWLY added void element is still refused a body",
         contains(void_source.errors, "STAR-E004"), void_source.errors);
     let textarea: Capture = generated(dir, DOC_TEXTAREA_HEADING);
-    broken += check("a NEWLY added phrasing element still refuses a heading",
+    broken += check(tally, "a NEWLY added phrasing element still refuses a heading",
         contains(textarea.errors, "STAR-E005"), textarea.errors);
 
     let unclosed: Capture = generated(dir, DOC_UNCLOSED_QUOTE);
-    broken += check("a quote that never closes is refused rather than guessed at",
+    broken += check(tally, "a quote that never closes is refused rather than guessed at",
         contains(unclosed.errors, "STAR-E009"), unclosed.errors);
 
     // ---- the content model has no seam -----------------------------------------------------------
     let one_paragraph: Capture = generated(dir, DOC_ONE_PARAGRAPH);
     let two_paragraphs: Capture = generated(dir, DOC_TWO_PARAGRAPHS);
     let kept: Capture = generated(dir, DOC_KEPT_PARAGRAPH);
-    broken += check("one paragraph in a phrasing element unwraps",
+    broken += check(tally, "one paragraph in a phrasing element unwraps",
         !contains(one_paragraph.output, "html_element(\"p\", [], [html_text(\"only\")])"),
         one_paragraph.output);
-    broken += check("TWO paragraphs unwrap the same way — no discontinuity",
+    broken += check(tally, "TWO paragraphs unwrap the same way — no discontinuity",
         contains(two_paragraphs.output, "html_text(\"first\"), html_text(\"second\")"),
         two_paragraphs.output);
-    broken += check("a flow element KEEPS its paragraph — a content model, not 'strip paragraphs'",
+    broken += check(tally, "a flow element KEEPS its paragraph — a content model, not 'strip paragraphs'",
         contains(kept.output, "html_element(\"p\", [], [html_text(\"kept\")])"), kept.output);
 
     // ---- a phrasing element may hold a phrasing element ------------------------------------------
@@ -876,10 +910,10 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // The first content model refused EVERY nested block inside a phrasing element, so a button could
     // not contain a `span` — found by the site's own showcase, where a checkbox is exactly that.
     let nested: Capture = generated(dir, DOC_NESTED_PHRASING);
-    broken += check("a phrasing element may contain another phrasing element",
+    broken += check(tally, "a phrasing element may contain another phrasing element",
         nested.code == 0 && contains(nested.output, "html_element(\"span\""), said(nested));
     let flow_in_phrasing: Capture = generated(dir, DOC_FLOW_IN_PHRASING);
-    broken += check("but FLOW content inside one is still refused",
+    broken += check(tally, "but FLOW content inside one is still refused",
         contains(said(flow_in_phrasing), "STAR-E005"), said(flow_in_phrasing));
 
     // ---- an attribute NAME is checked here, not in the browser -----------------------------------
@@ -894,7 +928,7 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // the same from here. What matters is that it is refused and the fix is in the message.
     let unquoted: Capture = generated(dir, DOC_UNQUOTED_VALUE);
     let unquoted_said: String = said(unquoted);
-    broken += check("an unquoted value with spaces is refused by NAME, with the fix in the message",
+    broken += check(tally, "an unquoted value with spaces is refused by NAME, with the fix in the message",
         (contains(unquoted_said, "STAR-E020") || contains(unquoted_said, "STAR-E026"))
             && contains(unquoted_said, "quotes"), unquoted_said);
 
@@ -904,7 +938,7 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // But the author wrote `::: for task in shown(model)`, which is reasonable, so the binding is
     // emitted here rather than showing a reader a complaint about generated code.
     let call_loop: Capture = generated(dir, DOC_CALL_LOOP);
-    broken += check("a `for` over a call binds the call before the loop",
+    broken += check(tally, "a `for` over a call binds the call before the loop",
         call_loop.code == 0 && contains(call_loop.output, "let rows_")
             && !contains(call_loop.output, "in shown(items)"), said(call_loop));
 
@@ -914,7 +948,7 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // scope marker was missing from exactly the elements a document writes most. A local rule for
     // `.card h1` matched nothing, and the site's own hero was the thing that showed it.
     let markdown: Capture = generated(dir, DOC_MARKDOWN_SCOPE);
-    broken += check("a markdown heading carries the component's scope marker",
+    broken += check(tally, "a markdown heading carries the component's scope marker",
         markdown.code == 0 && contains(markdown.output, "html_element(\"h1\", [html_attr(\"data-s-"),
         said(markdown));
 
@@ -927,15 +961,15 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // landed. Found by moving a checkbox into a pseudo-element to shorten a document: the squares
     // left the picture, and that was the only symptom there has ever been.
     let pseudo_sheet: String = sheet_of(dir, DOC_PSEUDO);
-    broken += check("a style section writes a stylesheet", len(pseudo_sheet) > 0, dir + "/doc.css");
-    broken += check("the marker goes BEFORE a pseudo, not after it",
+    broken += check(tally, "a style section writes a stylesheet", len(pseudo_sheet) > 0, dir + "/doc.css");
+    broken += check(tally, "the marker goes BEFORE a pseudo, not after it",
         !contains(pseudo_sheet, "::before[data-s-") && !contains(pseudo_sheet, ":hover[data-s-"),
         pseudo_sheet);
-    broken += check("and it is still attached, so the rule is still scoped",
+    broken += check(tally, "and it is still attached, so the rule is still scoped",
         contains(pseudo_sheet, "[data-s-c]::before") && contains(pseudo_sheet, "[data-s-c]:hover"),
         pseudo_sheet);
     // A descendant selector stamps its LAST part, or a parent's rule would reach into a child.
-    broken += check("a descendant selector stamps its last part",
+    broken += check(tally, "a descendant selector stamps its last part",
         contains(pseudo_sheet, "h1[data-s-c]"), pseudo_sheet);
 
     // ---- `child=` — a body written in the head ----------------------------------------------------
@@ -947,35 +981,35 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // **It also closes a defect that predates one-liners.** `::: span class=text hello` read `hello`
     // as a boolean attribute and emitted `<span class="text" hidden></span>` — the text silently gone.
     let kid: Capture = generated(dir, DOC_CHILD_TEXT);
-    broken += check("`child=` becomes the element's text, not an attribute",
+    broken += check(tally, "`child=` becomes the element's text, not an attribute",
         contains(kid.output, "html_attr(\"class\", \"text\")], [html_text(\"hello\")]"), kid.output);
     let quoted_kid: Capture = generated(dir, DOC_CHILD_QUOTED);
-    broken += check("a quoted `child=` keeps its spaces and loses its quotes",
+    broken += check(tally, "a quoted `child=` keeps its spaces and loses its quotes",
         contains(quoted_kid.output, "html_text(\"two words\")"), quoted_kid.output);
     // **Braces mean an EXPRESSION, and `child={}` is an empty body said out loud.** Andre's form: the
     // braces say where the value ends, so a body with spaces needs no quotes, and there is a spelling
     // for "deliberately empty" that is different from "content went missing".
     let braced: Capture = generated(dir, DOC_CHILD_BRACED);
-    broken += check("`child=\{expr\}` is Burxt the compiler judges",
+    broken += check(tally, "`child=\{expr\}` is Burxt the compiler judges",
         contains(braced.output, "html_text(label)"), braced.output);
     let spaced_kid: Capture = generated(dir, DOC_CHILD_SPACED);
-    broken += check("a braced body may hold spaces without quotes",
+    broken += check(tally, "a braced body may hold spaces without quotes",
         contains(spaced_kid.output, "html_text(to_string(n + 1))"), spaced_kid.output);
     let empty_kid: Capture = generated(dir, DOC_CHILD_EMPTY);
-    broken += check("`child=\{\}` is an element with NO children, not one holding \"\"",
+    broken += check(tally, "`child=\{\}` is an element with NO children, not one holding \"\"",
         contains(empty_kid.output, "html_attr(\"class\", \"box\")], []"), empty_kid.output);
     // `{{ … }}` is the interpolation everywhere else in a head, so it has to mean the same here.
     let slot_kid: Capture = generated(dir, DOC_CHILD_SLOT);
-    broken += check("`child=\{\{ x \}\}` means the same as `child=\{x\}`",
+    broken += check(tally, "`child=\{\{ x \}\}` means the same as `child=\{x\}`",
         contains(slot_kid.output, "html_text(label)"), slot_kid.output);
     let both: Capture = generated(dir, DOC_CHILD_AND_BODY);
-    broken += check("a `child=` AND a body is refused rather than one being picked",
+    broken += check(tally, "a `child=` AND a body is refused rather than one being picked",
         contains(said(both), "STAR-E021"), said(both));
     let void_child: Capture = generated(dir, DOC_CHILD_ON_VOID);
-    broken += check("`child=` on a void element is refused",
+    broken += check(tally, "`child=` on a void element is refused",
         contains(said(void_child), "STAR-E004"), said(void_child));
     let bare: Capture = generated(dir, DOC_BARE_BOOLEAN);
-    broken += check("and a bare word is STILL a boolean attribute, as in HTML",
+    broken += check(tally, "and a bare word is STILL a boolean attribute, as in HTML",
         contains(bare.output, "html_attr(\"hidden\", \"\")"), bare.output);
 
     // ---- an attribute after `on:` is refused ------------------------------------------------------
@@ -986,15 +1020,15 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // code with a message about a name the author never wrote there.
     let trailing: Capture = generated(dir, DOC_ATTR_AFTER_ON);
     let trailing_said: String = said(trailing);
-    broken += check("an attribute written after `on:` is refused, naming it",
+    broken += check(tally, "an attribute written after `on:` is refused, naming it",
         contains(trailing_said, "STAR-E022") && contains(trailing_said, "class="), trailing_said);
     let ok_order: Capture = generated(dir, DOC_ATTR_BEFORE_ON);
-    broken += check("and the same head with the attribute BEFORE it is accepted",
+    broken += check(tally, "and the same head with the attribute BEFORE it is accepted",
         ok_order.code == 0 && contains(ok_order.output, "html_attr(\"class\", \"danger\")"),
         said(ok_order));
     // A handler with `==` or a quoted `=` inside it is not a trailing attribute.
     let compare: Capture = generated(dir, DOC_PLAIN_HANDLER);
-    broken += check("a plain handler is not mistaken for one", compare.code == 0, said(compare));
+    broken += check(tally, "a plain handler is not mistaken for one", compare.code == 0, said(compare));
 
     // ---- a single-brace ATTRIBUTE value is refused ------------------------------------------------
     //
@@ -1008,14 +1042,14 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // asserted here, and the accident is a refusal rather than a documented footgun.
     let one_brace: Capture = generated(dir, DOC_ONE_BRACE);
     let one_brace_said: String = said(one_brace);
-    broken += check("a single-brace attribute value is refused, with the fix in the message",
+    broken += check(tally, "a single-brace attribute value is refused, with the fix in the message",
         contains(one_brace_said, "STAR-E023") && contains(one_brace_said, "\{\{"), one_brace_said);
     let two_brace: Capture = generated(dir, DOC_TWO_BRACE);
-    broken += check("and `\{\{ … \}\}` compiles to an EXPRESSION, not a string holding braces",
+    broken += check(tally, "and `\{\{ … \}\}` compiles to an EXPRESSION, not a string holding braces",
         contains(two_brace.output, "html_attr(\"class\", (to_string(n)))"), two_brace.output);
     // `child=` is the one place single braces are star's, and it must not be caught by this.
     let still_child: Capture = generated(dir, DOC_STILL_CHILD);
-    broken += check("`child=\{…\}` is untouched — the one place single braces are star's",
+    broken += check(tally, "`child=\{…\}` is untouched — the one place single braces are star's",
         contains(still_child.output, "html_text(to_string(n))"), still_child.output);
 
     // ---- no refusal message teaches the old fence -------------------------------------------------
@@ -1041,21 +1075,21 @@ function run_all(dir: String) -> Int touches files, commands, input {
         }
         si += 1;
     }
-    broken += check("no refusal message teaches the 0.6 fence", stale == 0, first_stale);
+    broken += check(tally, "no refusal message teaches the 0.6 fence", stale == 0, first_stale);
 
     // **A QUANTITATIVE control, not a floor.** The floor here was `> 15` while the real number is 48 —
     // loose enough that a scan silently capturing a third of the messages would still pass, which is
     // precisely the failure BMX hit. So the two extractions are required to AGREE: a cheap scan and
     // the balanced read must see the same number of sites, and any drift means one of them is blind.
-    broken += check("every refusal site is captured — two extractions, same count",
+    broken += check(tally, "every refusal site is captured — two extractions, same count",
         len(cheap) == len(messages) && len(messages) == len(sites),
         "cheap " + to_string(len(cheap)) + ", balanced " + to_string(len(messages))
             + ", call sites " + to_string(len(sites)));
-    broken += check("and there are enough of them that a zero means something",
+    broken += check(tally, "and there are enough of them that a zero means something",
         len(messages) >= 40, to_string(len(messages)) + " refusal messages found");
     // The positive control is a COUNT, not an existence: some messages must show the 0.7 fence, and
     // both methods must agree about how many.
-    broken += check("the scan sees the messages that DO show a fence, and both methods agree",
+    broken += check(tally, "the scan sees the messages that DO show a fence, and both methods agree",
         count_with_fence(messages) == count_with_fence(cheap) && count_with_fence(messages) > 0,
         "balanced " + to_string(count_with_fence(messages))
             + ", cheap " + to_string(count_with_fence(cheap)));
@@ -1071,11 +1105,11 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // let `#one,#two` evade the one-id rule in both implementations at once — 70 of 70 fixtures
     // agreeing while both were wrong.
     let commas: Capture = generated(dir, DOC_COMMA_HEAD);
-    broken += check("a comma separates head tokens, and is not part of the value",
+    broken += check(tally, "a comma separates head tokens, and is not part of the value",
         contains(commas.output, "html_attr(\"class\", \"card\"), html_attr(\"id\", \"main\")"),
         commas.output);
     let spaces: Capture = generated(dir, DOC_SPACE_HEAD);
-    broken += check("and a space still does, unchanged",
+    broken += check(tally, "and a space still does, unchanged",
         contains(spaces.output, "html_attr(\"class\", \"card\"), html_attr(\"id\", \"main\")"),
         spaces.output);
 
@@ -1083,16 +1117,16 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // full of commas that separate ARGUMENTS, and a comma rule that could not see parentheses would
     // cut every keyed handler in this repository in half at the first one.
     let handler: Capture = generated(dir, DOC_HANDLER_COMMAS);
-    broken += check("a handler's own commas are arguments, not separators",
+    broken += check(tally, "a handler's own commas are arguments, not separators",
         contains(handler.output, ROW_KEYED_HANDLER)
             && contains(handler.output, "html_attr(\"class\", \"row\")"), handler.output);
     // `child=` is found after a comma too — it used to test whether the PREVIOUS BYTE was a space.
     let kid_after_comma: Capture = generated(dir, DOC_CHILD_AFTER_COMMA);
-    broken += check("`child=` is still found when a comma precedes it",
+    broken += check(tally, "`child=` is still found when a comma precedes it",
         contains(kid_after_comma.output, "html_text(to_string(n))"), kid_after_comma.output);
     // And an interpolation may still hold a comma without being cut.
     let interp: Capture = generated(dir, DOC_INTERP_COMMA);
-    broken += check("an interpolated value may hold a comma",
+    broken += check(tally, "an interpolated value may hold a comma",
         contains(interp.output, "pick(n, 2)"), interp.output);
 
     // ---- a delimiter rule must know what PROTECTS a delimiter -------------------------------------
@@ -1114,13 +1148,13 @@ function run_all(dir: String) -> Int touches files, commands, input {
         let body: String = ":props: n: Int\n:!props:\n\n" + shape.text
             + tail_for(shape.text);
         let got: Capture = generated(dir, body);
-        broken += check(shape.label, contains(got.output, shape.want), said(got));
+        broken += check(tally, shape.label, contains(got.output, shape.want), said(got));
         di += 1;
     }
 
     // And the ordinary shapes still work, so the guards did not buy correctness with breakage.
     let mixed: Capture = generated(dir, DOC_MIXED_VALUE);
-    broken += check("a value mixing literal and interpolation is unaffected",
+    broken += check(tally, "a value mixing literal and interpolation is unaffected",
         contains(mixed.output, "html_attr(\"href\", \"/x/\" + (to_string(n)) + \"/y\")"), mixed.output);
 
     // ---- the SEVENTH costume: a comma inside a selector's parentheses ------------------------------
@@ -1138,7 +1172,7 @@ function run_all(dir: String) -> Int touches files, commands, input {
     while ci < len(selectors) {
         let rule: Shape = selectors[ci];
         let got_sheet: String = sheet_of(dir, SHEET_PREFIX + rule.text + SHEET_SUFFIX);
-        broken += check(rule.label, contains(got_sheet, rule.want), got_sheet);
+        broken += check(tally, rule.label, contains(got_sheet, rule.want), got_sheet);
         ci += 1;
     }
 
@@ -1153,7 +1187,7 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // their scheme refusal and pointed at a file that no longer existed. The security-critical half of
     // a contract held by a sentence. This is star's version of that sentence.
     let impure_says: String = compiled(dir, DOC_IMPURE);
-    broken += check("A VIEW THAT REACHES OUTSIDE IS REFUSED BY THE COMPILER, not by a promise",
+    broken += check(tally, "A VIEW THAT REACHES OUTSIDE IS REFUSED BY THE COMPILER, not by a promise",
         contains(impure_says, "may not call") && contains(impure_says, "peek"), impure_says);
 
     // **The control**: the same shape with a `pure` helper must COMPILE, or this passes because
@@ -1163,7 +1197,7 @@ function run_all(dir: String) -> Int touches files, commands, input {
             string_replace(DOC_IMPURE, IMPURE_SIGNATURE, PURE_SIGNATURE),
             IMPURE_BODY, PURE_BODY),
         FILES_IMPORT, ""));
-    broken += check("and the control: the same view with a `pure` helper compiles",
+    broken += check(tally, "and the control: the same view with a `pure` helper compiles",
         contains(pure_says, "no errors"), pure_says);
 
     // ---- a refusal whose advice CANNOT be followed -------------------------------------------------
@@ -1176,16 +1210,16 @@ function run_all(dir: String) -> Int touches files, commands, input {
     // does the work and lands somewhere else.
     let two_events: Capture = generated(dir, DOC_TWO_EVENTS);
     let two_events_said: String = said(two_events);
-    broken += check("two `on:` bindings are refused as TWO EVENTS, not as bad ordering",
+    broken += check(tally, "two `on:` bindings are refused as TWO EVENTS, not as bad ordering",
         contains(two_events_said, "STAR-E022") && contains(two_events_said, "ONE `on:` binding")
             && contains(two_events_said, "wrapper"), two_events_said);
-    broken += check("and it does not tell the author to reorder, which would not help",
+    broken += check(tally, "and it does not tell the author to reorder, which would not help",
         contains(two_events_said, "STAR-E022")
             && !contains(after_marker(two_events_said, "STAR-E022", 200), "attribute"),
         two_events_said);
     let order: Capture = generated(dir, DOC_ORDERING_ADVICE);
     let ordered: String = said(order);
-    broken += check("an attribute after `on:` still gets the ordering advice, which does work",
+    broken += check(tally, "an attribute after `on:` still gets the ordering advice, which does work",
         contains(ordered, "STAR-E022") && contains(ordered, "BEFORE the `on:` binding"), ordered);
 
     return broken;
