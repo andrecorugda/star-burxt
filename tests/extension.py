@@ -3,7 +3,23 @@
 #            CONTENT is parsed. Two things would unblock it and NEITHER is in a release: inflate
 #            (unauthorised, and `config.mjs` needs it anyway), or a stored-entry option in `zip.bx` —
 #            fifteen lines, designed, costing 1,858 bytes to store the two entries a verifier must
-#            read. A module in somebody's tree that CI cannot download is inventory, not delivery
+#            read. A module in somebody's tree that CI cannot download is inventory, not delivery.
+#
+#            **1.6.0 CARRIES BOTH, and the language session has verified them: `inflate_into` and
+#            `zlib_into` in `lib/inflate.bx`, `adler32` in `lib/hash.bx`, and `zip_entries`,
+#            `zip_local_at` and `zip_content` in `lib/zip.bx` — inflate checked against zlib at levels
+#            0, 1, 6 and 9 over every `lib/` module, 120 streams byte-exact, and the reader proven
+#            against a fully deflated `.vsix`.** So all of this is reachable the moment there is a tag,
+#            and the tag is not cut yet. Do not start against a local build: that is the mistake that
+#            reddened `main` when the packer took `std/zip.bx` before 1.5.0 shipped. Download the asset,
+#            check it against the published `SHA256SUMS`, rebuild every `.bx` with THAT binary and THAT
+#            library, and only then port.
+#
+#            **And the language session asked for one measurement back, which is a debt this file owes:
+#            which of `zip_content`'s four refusal codes actually fire here.** -1 header, -2 method,
+#            -3 payload, -4 CRC. They are all exercised synthetically on their side and this is the
+#            first real caller, so a code that never fires in practice is a code designed for the wrong
+#            failure. Report it when the port lands
 """The packaged extension: the version it declares, the bytes it is made of, and what it answers in
 every way it is installed.
 

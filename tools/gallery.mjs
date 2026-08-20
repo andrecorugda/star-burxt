@@ -1,4 +1,23 @@
-// not-burxt: platform — drives a real browser mounting real wasm, and captures it
+// not-burxt: blocked — on the SAME release as tests/extension.py, and it took the language session's
+//            sorting question to find out. The old reason here was `platform — drives a real browser
+//            mounting real wasm, and captures it`, which is true about what this does and false about
+//            what it needs. Ask *which job runs this, and is that job allowed to need Burxt?* — the job
+//            is a CI step, and every other check in this repository is a Burxt binary. So each import
+//            was checked against the standard library rather than assumed: `node:fs` is `files.bx`,
+//            `node:child_process` is `os.bx` (Chrome is already driven as a BINARY, not a module),
+//            `node:http` is `http_serve` + `net_listen_any_port` + `net_port_of`, `node:path` and
+//            `node:os` are `path.bx` and `files.bx`. Four of five answered.
+//
+//            The fifth is `inflateSync`, and it is not decoration: `bottomIsClear` inflates the PNG's
+//            own IDAT stream to prove the last rows of a capture are background, because a cropped
+//            picture has ink running to its final row and heights can agree while the image is wrong.
+//            That is inflate, which no release carries — the same dependency, on the same tag, as
+//            `tests/extension.py`. **Two callers, one release.** Verified by the compiler's own library:
+//            `zip.bx` and `deflate.bx` are in published 1.5.0 and `inflate.bx` is not.
+//
+//            Worth passing on when it lands: this feeds inflate zlib streams written by Chrome's PNG
+//            encoder, which is a producer independent of Burxt's own deflate — so it is a different
+//            test than round-tripping their own output
 // Every example, captured running, beside the markup that made it.
 //
 //     node tools/gallery.mjs            # -> docs/assets/gallery/*.png and docs/_includes/gallery.html
