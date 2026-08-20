@@ -20,7 +20,10 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # **v5 and not v7, because v5.0.0 is the change the deprecation is about** — it moves the
+      # action to Node 24, and Node 20 being forced out is the warning GitHub prints today. v6
+      # and v7 carry further changes nobody here has read or needs.
+      - uses: actions/checkout@v5
 
       - name: Install Burxt
         env:
