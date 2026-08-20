@@ -1,0 +1,458 @@
+// star used the way a consumer uses it: from somewhere else, with the commands only on `PATH`.
+//
+//     burxt build tests/consuming.bx -o star-consuming
+//     ./star-consuming
+//     ./star-consuming --prove-it     # the negative control
+//
+// **Every other check in this repository runs from this repository's root, and that is why none of them
+// could see the bug this file exists for.** `star-build` defaulted its generator to `./star-generate` — a
+// path into whichever directory you are standing in. From the root, where the binary sits, a sibling
+// lookup and a `PATH` lookup resolve to the same file, so no test could tell them apart. A person who
+// declared star as a dependency, built the commands the way `docs/install.md` says to, and put them on
+// `PATH` got:
+//
+//     sh: 1: ./star-generate: not found
+//
+// **and a zero-byte `.bx` left behind**, because the shell's redirect creates the file before the command
+// is found. An empty artefact is worse than none: the next reader cannot tell it from real output.
+//
+// It was found by building `comet-code-playground` — a real consumer repository that installs star with
+// `burxt fetch` — rather than by anything in here. That is the finding behind the finding: **a check that
+// runs where the code lives cannot see what depends on where the code lives.** The same shape as
+// `tests/extension.py`, which had to spawn the real server inside each documented install because "both
+// are tested" was true of where the server file is and false of what it reports.
+//
+// So this runs star from a temporary directory with nothing but the built commands on `PATH`, which is the
+// one configuration the rest of the suite never exercises.
+//
+// ---- and it was Python, in `tests/consuming.py` --------------------------------------------------
+//
+// Andre's directive is the reason it moved: *"I will not accept a language that really depends on
+// another language."* `./star-languages` counted this file at 183 lines in the `gap` column — the column
+// for what could be Burxt today and is not — and a test whose whole subject is *how somebody else
+// consumes this language* was the worst possible line to leave sitting there. A reader who sees the
+// consumer story told in Python has already been told the answer.
+//
+// Nothing here needed Python. Write two documents, run one command three times with a doctored
+// environment, look at a directory listing and at what the command said.
+//
+// **The one thing that did need thought is the export assertion, and it is Burxt now too.** The Python
+// shelled out to `node -e` for `WebAssembly.Module.exports` — a whole JavaScript runtime borrowed to read
+// a length-prefixed list out of a byte string. `wasm_exports` below parses the module's export section
+// directly with `file_read_bytes`: eight bytes of header, then sections, and section 7 holds a count and
+// then (name length, name, kind, index) repeated. **57 lines of Burxt, checked against
+// `WebAssembly.Module.exports` on six real modules — the three this file builds, `examples/showcase.wasm`,
+// `examples/hero.wasm` and the playground's — and agreeing on every name and their order.** That
+// comparison is how a hand-rolled binary parser earns the right to replace a library one, and it was run
+// rather than assumed.
+//
+// What is left running outside Burxt is `sh`, `env`, `cd`, `test -e`, `ls -1` and `rm -rf`: POSIX
+// utilities the standard library already calls, not a second language. **No interpreter is started that
+// is not star's own**, and nowhere does that matter more than here, because a test whose subject is
+// whether star works for somebody else cannot borrow Node to read its own answer without arguing against
+// itself.
+use "std/files.bx";
+use "std/string.bx";
+use "std/os.bx";
+
+// How many assertions `run_all` makes. **A number the control checks against, not a comment**: see the
+// `--prove-it` summary — a control that breaks two of three is not a control, and only a count can tell.
+const ASSERTIONS: Int = 3;
+
+pure function contains(haystack: String, needle: String) -> Bool {
+    return string_find(haystack, needle) >= 0;
+}
+
+// **Stateful on purpose, and the first version of this file was not.** A document without `to_text` and
+// `from_text` defines none of the four exports `star-build` roots, so `--gc-sections` empties the module
+// and the assertion below passed on 1,615 bytes of nothing. No imports, so this exercises the consumer
+// path rather than resolution.
+//
+// A `const` may name a literal and this is one, but it is a function anyway: a top-level `let` is
+// invisible to every function body, and the whole document is needed inside `run_all`.
+pure function document() -> String allocates {
+    return "===bx\n"
+        + "use \"std/json.bx\";\n"
+        + "\n"
+        + "class Model \{ n: Int \}\n"
+        + "enum Msg \{ Bumped \}\n"
+        + "\n"
+        + "pure function update(msg: Msg, m: Model) -> Model \{\n"
+        + "    match msg \{ Bumped => \{ return Model \{ n: m.n + 1 \}; \} \}\n"
+        + "\}\n"
+        + "\n"
+        + "pure function to_text(m: Model) -> String allocates \{\n"
+        + "    let mutable f: [Field] = [];\n"
+        + "    let a: Int = push(f, json_field(\"n\", json_int(m.n)));\n"
+        + "    return json_render(json_object(f));\n"
+        + "\}\n"
+        + "\n"
+        + "function from_text(text: String) -> Model \{\n"
+        + "    return Model \{ n: 0 \};\n"
+        + "\}\n"
+        + "===\n"
+        + "\n"
+        + ":props: model: Model\n"
+        + ":!props:\n"
+        + "\n"
+        + ":button: on:click=Msg.Bumped\n"
+        + "Count is \{\{ to_string(model.n) \}\}\n"
+        + ":!button:\n";
+}
+
+// The document the build tool used to accept and turn into an exportless module.
+pure function stateless() -> String allocates {
+    return ":props: n: Int\n"
+        + ":!props:\n"
+        + "\n"
+        + "# Count is \{\{ to_string(n) \}\}\n";
+}
+
+// One assertion, reported the way the Python reported it: the passing sentence and the failing sentence
+// are written out separately, because the interesting half of a check is what it says when it breaks and
+// a message assembled from the same pieces as the success cannot say anything the success did not.
+//
+// Returns its verdict rather than adding to a shared counter — a top-level `let` is invisible in here,
+// so the total is the caller's to keep, which is the better shape anyway.
+function check(ok: Bool, ok_line: String, fail_line: String) -> Int {
+    if ok {
+        print("  ok    " + ok_line);
+        return 0;
+    }
+    print("  FAIL  " + fail_line);
+    return 1;
+}
+
+// ---- the wasm module's export list, read out of the module -----------------------------------------
+//
+// A LEB128 unsigned integer: the value, and the offset just past it. Every length and count in a wasm
+// binary is one of these, and none of them fits in a byte for a 20 KB module — the code section's size
+// alone is three bytes — so this cannot be shortcut to `bytes[at]`.
+pure function leb(bytes: [Int], at: Int) -> (Int, Int) {
+    let mutable value: Int = 0;
+    let mutable shift: Int = 0;
+    let mutable i: Int = at;
+    while i < len(bytes) {
+        let b: Int = bytes[i];
+        value = value + shift_left(bit_and(b, 127), shift);
+        shift += 7;
+        i += 1;
+        // The top bit clear ends the number. Checked AFTER the byte is consumed, so the offset
+        // answered is the one past it.
+        if b < 128 { return (value, i); }
+    }
+    // Ran off the end mid-number: a truncated module. The caller sees an offset it cannot advance past
+    // and stops, rather than reading a name out of whatever follows.
+    return (value, i);
+}
+
+pure function slice_text(bytes: [Int], at: Int, count: Int) -> String allocates {
+    let mutable piece: [Int] = [];
+    let mutable i: Int = 0;
+    while i < count && at + i < len(bytes) {
+        let a: Int = push(piece, bytes[at + i]);
+        i += 1;
+    }
+    return from_bytes(piece);
+}
+
+// Every name the module exports.
+//
+// **A file that exists is not a module that works**, which is the whole reason this function is here
+// rather than a `file_size` comparison: the language session shipped a 122-byte wasm that instantiated
+// cleanly and exported nothing, because an export name was misspelled and `--gc-sections` then dropped
+// every root. Size cannot see that. Names can.
+//
+// The format, in the order it is laid out: `\0asm`, a four-byte version, then sections. A section is an
+// id byte, a LEB length, and that many bytes of payload — so an unknown section is SKIPPED by its own
+// length and this needs to understand exactly one of them. Section 7 is the export section: a count,
+// then that many of (name length, name bytes, kind byte, index).
+//
+// An empty answer means "no exports readable", and that is deliberately the same answer as a missing
+// file: the caller's assertion is that a particular name is present, and both worlds fail it.
+function wasm_exports(path: String) -> [String] touches files {
+    let mutable found: [String] = [];
+    match file_read_bytes(path) {
+        None => {
+            return found;
+        }
+        Some(bytes) => {
+            if len(bytes) < 8 { return found; }
+            if bytes[0] != 0 || bytes[1] != 97 || bytes[2] != 115 || bytes[3] != 109 { return found; }
+            let mutable at: Int = 8;
+            while at < len(bytes) {
+                let id: Int = bytes[at];
+                let size: (Int, Int) = leb(bytes, at + 1);
+                let payload: Int = size.1;
+                let after: Int = payload + size.0;
+                // A zero-length or backwards section would loop here forever. A malformed module is
+                // not a reason to hang; it is a reason to answer what was read so far.
+                if size.0 <= 0 || after <= at { return found; }
+                if id == 7 {
+                    let count: (Int, Int) = leb(bytes, payload);
+                    let mutable seen: Int = 0;
+                    let mutable p: Int = count.1;
+                    while seen < count.0 && p < after {
+                        let name: (Int, Int) = leb(bytes, p);
+                        let a: Int = push(found, slice_text(bytes, name.1, name.0));
+                        // past the name, past the one-byte kind, past the LEB index
+                        let index: (Int, Int) = leb(bytes, name.1 + name.0 + 1);
+                        p = index.1;
+                        seen += 1;
+                    }
+                    return found;
+                }
+                at = after;
+            }
+            return found;
+        }
+    }
+}
+
+// ---- small answers the assertions need ------------------------------------------------------------
+
+function size_of(path: String) -> Int touches files {
+    match file_size(path) {
+        None => { return 0; }
+        Some(n) => { return n; }
+    }
+}
+
+// What a command complained about: the FIRST line it wrote, not the last.
+//
+// The Python took `stderr.splitlines()[-1]`, and for this failure that is the wrong end. The real
+// capture is two lines:
+//
+//     sh: 1: ./star-generate: not found
+//     `./star-generate` did not run. star's commands are built from its own checkout — see …
+//
+// The shell diagnoses; `star-build` then reacts to the diagnosis. Only the first line names what could
+// not be found, which is the sentence a consumer pasted into an issue and the sentence this file's
+// header quotes. Blank lines are skipped, because a message ending in a newline would otherwise report
+// nothing at all.
+pure function first_complaint(text: String) -> String {
+    let rows: [String] = string_lines(text);
+    let mutable i: Int = 0;
+    while i < len(rows) {
+        let line: String = string_trim(rows[i]);
+        if len(line) > 0 { return line; }
+        i += 1;
+    }
+    return "no output";
+}
+
+// A quotation short enough to sit on the end of one `FAIL` line, **and on ONE line.** The Python's
+// `said[:90]` kept the newlines in it, so a build that printed three lines before it was clipped turned
+// one failure into four rows of output and the next assertion looked like part of the message. A report
+// that cannot be read line-by-line is a report a reader skims.
+pure function clipped(text: String, width: Int) -> String {
+    let flat: String = string_trim(string_replace(string_replace(text, "\r", " "), "\n", " "));
+    if len(flat) <= width { return flat; }
+    return substring(flat, 0, width);
+}
+
+// The names in a directory, or nothing if there is no such directory — `ls -1` skips dotfiles and sorts,
+// and `file_split_lines` can answer one empty piece for an empty listing, which is not a file.
+function contents_of(directory: String) -> [String] touches commands, files, input {
+    let mutable names: [String] = [];
+    match file_list_directory(directory) {
+        None => {
+            return names;
+        }
+        Some(entries) => {
+            let mutable i: Int = 0;
+            while i < len(entries) {
+                if len(string_trim(entries[i])) > 0 { let a: Int = push(names, entries[i]); }
+                i += 1;
+            }
+            return names;
+        }
+    }
+}
+
+// ---- the three assertions -------------------------------------------------------------------------
+//
+// `root` is where the commands were built and is on `PATH` and nowhere else; `tmp` is where the program
+// stands while it runs them, and it holds no `star-generate` — which is the entire configuration under
+// test.
+//
+// **The control makes the WORLD defective rather than overwriting the verdict.** The Python assigned
+// `built = False`, `left = ["broken.bx"]` and `refused = False` — which proves the printing works and
+// not that the assertion can see anything. Each of the three here is injected where it actually
+// happened, and the assertion then does its own looking:
+//
+//   1. `STAR_GENERATE=./star-generate`, which IS the defect, verbatim, from a directory that has no
+//      such sibling. The build really fails and the message really is the one the consumer got.
+//   2. the zero-byte `broken.bx` is planted in the output directory, because the version of
+//      `star-build` that left it there is not available to run and `examples/build.bx` is not this
+//      file's to edit. The listing is real; only the file is put there by hand.
+//   3. the STATEFUL document is handed to the assertion that expects a refusal. That is the world in
+//      which `star-build` has no state check: a build that should have been refused and was not.
+//
+// **And each injection was switched on ALONE to see which assertion it breaks**, because a control that
+// reports three failures proves nothing about which three. Four builds of this file, one per injection
+// plus one with none: each broke exactly its own assertion and left the other two green, and the
+// injection-free build broke none. The instrument agreeing is not the evidence; the instrument being
+// installed one lever at a time is. That is also why the summary counts to `ASSERTIONS` instead of
+// asking `failures > 0` — a control that reaches only the first assertion satisfies `> 0` while leaving
+// the other two unfalsifiable, which is the failure this paragraph exists to have ruled out.
+function run_all(root: String, tmp: String, prove: Bool) -> Int touches commands, files, input {
+    let mutable failures: Int = 0;
+    let wrote: Int = file_write(tmp + "/Widget.sbmx", document());
+
+    // `PATH` carries the commands and nothing else points at this repository. The cwd is the temporary
+    // directory, so `./star-generate` cannot resolve — which is the whole point. `env -u STAR_GENERATE`
+    // rather than trusting the caller's environment: the escape hatch being set outside would make this
+    // test pass for the wrong reason, which is the one failure it cannot afford.
+    let searched: String = root + ":" + os_env_or("PATH", "");
+    let base: String = "cd " + file_quote(tmp) + " && env -u STAR_GENERATE PATH=" + file_quote(searched);
+
+    // ---- the accepting case, first and fatally ----------------------------------------------------
+    //
+    // A suite of failure assertions is satisfied by a `star-build` that never works, so this runs
+    // first: if a consumer cannot build at all, nothing below it means anything.
+    let mutable doctored: String = base;
+    if prove { doctored = base + " STAR_GENERATE=./star-generate"; }
+    let done: Capture = os_capture_status(doctored + " star-build Widget.sbmx widget out");
+
+    let wasm: String = tmp + "/out/widget.wasm";
+    let names: [String] = wasm_exports(wasm);
+    let mutable entry: Bool = false;
+    let mutable ours: [String] = [];
+    let mutable n: Int = 0;
+    while n < len(names) {
+        if string_starts_with(names[n], "bx.") { let a: Int = push(ours, names[n]); }
+        // The component's OWN entry point has to be among them, not merely some export: `main`,
+        // `burxt.alloc` and `memory` are on every module this linker writes and say nothing about
+        // whether the document survived.
+        if string_starts_with(names[n], "bx.widget") { entry = true; }
+        n += 1;
+    }
+    let mutable listed: String = string_join(ours, ", ");
+    if len(listed) == 0 { listed = "nothing"; }
+    failures += check(entry,
+        "a consumer builds a component with the commands only on PATH ("
+            + to_string(size_of(wasm)) + " bytes, exporting " + listed + ")",
+        "a consumer cannot build: " + first_complaint(done.errors + done.output)
+            + " — every check in this repository runs from its root, where `./star-generate` resolves"
+            + " and a PATH lookup resolves to the same file, so only this one can see it");
+
+    // ---- and a failure leaves nothing that looks like output --------------------------------------
+    let bad: Capture = os_capture_status(base
+        + " STAR_GENERATE=/nonexistent/star-generate star-build Widget.sbmx broken bad");
+    if prove {
+        // **The plant is verified, because a control that could not install its defect looks exactly
+        // like a control the code passed.** `bad/` exists only because `star-build` ran `mkdir -p`
+        // before its generator failed. The day it exits before that, this assertion has nothing planted
+        // to find, PASSES under `--prove-it`, and the other two failures still carry the run to exit 0
+        // — and nobody looks again. A sibling session lost an afternoon to that shape from the other
+        // side: a `sed` whose pattern never matched, so nothing was planted, and the honest-looking
+        // reading of the green result was *"that assertion is not load-bearing"*. It was.
+        //
+        // **Measured rather than assumed:** pointed at a directory that does not exist, `file_write`
+        // is a hard runtime abort — `burxt runtime error: cannot open file for writing`, exit 70 — so
+        // today the plant cannot silently miss. The guard below is kept anyway, because that is
+        // `file_write`'s current behaviour and not a promise it makes, and the failure it catches is
+        // the one that is invisible.
+        let planted: Int = file_write(tmp + "/bad/broken.bx", "");
+        if !file_exists(tmp + "/bad/broken.bx") {
+            print_error("the control cannot plant a truncated artefact in " + tmp + "/bad —"
+                + " `star-build` no longer creates the output directory before its generator runs,"
+                + " so this control proves nothing and must be rewritten rather than believed.");
+            exit(2);
+        }
+    }
+    let left: [String] = contents_of(tmp + "/bad");
+    failures += check(len(left) == 0,
+        "a generator that cannot run leaves no truncated artefact behind",
+        "a failed build left " + string_join(left, ", ") + " — the shell's redirect creates the file"
+            + " before the command is found, and a zero-byte `.bx` cannot be told from real output");
+
+    // ---- and a document that cannot work is refused where the person is standing -------------------
+    //
+    // This is the defect the export assertion above exposed: `star-build` wrote a 1,615-byte module
+    // with no `bx.` exports and exited 0. `examples/app.js` catches it, but at MOUNT time in a
+    // browser console, to somebody who has already deployed.
+    let mutable flat_doc: String = stateless();
+    if prove { flat_doc = document(); }
+    let flat_wrote: Int = file_write(tmp + "/Flat.sbmx", flat_doc);
+    let flat: Capture = os_capture_status(base + " star-build Flat.sbmx flat flatout");
+    let said: String = flat.output + flat.errors;
+    failures += check(flat.code != 0 && contains(said, "does not carry its own state"),
+        "a document with no state is refused at build time, not at mount time",
+        "a stateless document built without complaint — that writes a module exporting nothing,"
+            + " which loads and can do nothing, and the only thing that says so is the browser: "
+            + clipped(said, 90));
+
+    return failures;
+}
+
+// ---- and the run ----------------------------------------------------------------------------------
+
+let prove: Bool = os_arg_count() > 1 && os_arg(1) == "--prove-it";
+
+// The repository root is the directory this is run from, which is where `check-all.sh` and every
+// documented invocation stand and where the commands are built. Taken from `os_cwd` rather than from
+// `os_arg(0)`: an argv[0] found through `PATH` is a bare name, and this file's entire subject is that
+// a name and a path are not the same lookup.
+match os_cwd() {
+    None => {
+        print_error("cannot tell which directory this is running from");
+        exit(2);
+    }
+    Some(root) => {
+        let mutable missing: [String] = [];
+        if !file_exists(root + "/star-generate") { let a: Int = push(missing, "star-generate"); }
+        if !file_exists(root + "/star-build") { let b: Int = push(missing, "star-build"); }
+        if len(missing) > 0 {
+            print_error("build " + string_join(missing, ", ") + " first — see CLAUDE.md");
+            exit(1);
+        }
+        match file_temp_directory("consuming") {
+            None => {
+                print_error("cannot make a temporary directory");
+                exit(2);
+            }
+            Some(tmp) => {
+                let failures: Int = run_all(root, tmp, prove);
+                // `rm -rf` on a path this program was handed by `file_temp_directory` and never by an
+                // argument — `file_remove_directory` is `rmdir`, which cannot take a tree, and the
+                // tree here is three build outputs deep.
+                let cleaned: Int = os_run("rm -rf " + file_quote(tmp));
+
+                print("");
+                if prove {
+                    // **ALL of them, not one of them.** The Python asked `if failures:` and exited 0,
+                    // which is satisfied by a control that breaks the first assertion and misses the
+                    // other two — and a control that cannot break an assertion is the one thing that
+                    // makes that assertion unfalsifiable while the suite reports a working control.
+                    // Three injections, three expected failures, counted.
+                    if failures == ASSERTIONS {
+                        print("the control failed as it must — a consumer who cannot build, a truncated"
+                            + " artefact left where output belongs, and a document that cannot work"
+                            + " built anyway are all three caught");
+                        exit(0);
+                    }
+                    if failures > 0 {
+                        print("the control broke only " + to_string(failures) + " of "
+                            + to_string(ASSERTIONS) + " assertions. The ones still passing under"
+                            + " `--prove-it` have never been seen to fail, so nothing here says they"
+                            + " can — find out why the injection did not reach them.");
+                        exit(1);
+                    }
+                    print("THE CONTROL DID NOT FAIL, so this check cannot see the defects it exists for");
+                    exit(1);
+                }
+                if failures > 0 {
+                    if failures == 1 {
+                        print("1 thing wrong with star as a dependency");
+                    } else {
+                        print(to_string(failures) + " things wrong with star as a dependency");
+                    }
+                    exit(1);
+                }
+                print("star builds a component for somebody who only has it on PATH");
+            }
+        }
+    }
+}

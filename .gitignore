@@ -28,3 +28,9 @@ star-languages
 star-refs
 star-showcase
 star-guarantees
+star-consuming
+star-pack
+
+# Python leaves these behind; nothing here should be tracking them.
+__pycache__/
+star-docs

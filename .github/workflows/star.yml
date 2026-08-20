@@ -218,8 +218,9 @@ jobs:
       - name: star used as a dependency, from outside
         run: |
           set -eux
-          python3 tests/consuming.py
-          python3 tests/consuming.py --prove-it
+          burxt build tests/consuming.bx -o star-consuming
+          ./star-consuming
+          ./star-consuming --prove-it
 
       # **The ledger, not a cap.** Every non-Burxt file declares why it is not, in its own first twenty
       # lines, and this fails on one that declares none. A prose audit goes stale the moment somebody

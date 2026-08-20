@@ -100,7 +100,7 @@ run "the editor configuration"       node editors/vscode/config.mjs
 run "the packaged extension, every install shape" bash -c '
   python3 tests/extension.py && python3 tests/extension.py --prove-it'
 run "star used as a dependency, from outside" bash -c '
-  python3 tests/consuming.py && python3 tests/consuming.py --prove-it'
+  ./star-consuming && ./star-consuming --prove-it'
 run "every line that is not Burxt says why" bash -c '
   ./star-languages && ./star-languages --prove-it'
 # **A check that REGENERATES the artefact it is verifying cannot see a stale one**, and this line said
