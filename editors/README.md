@@ -41,12 +41,18 @@ finds its version by walking up for `burxt.package`, a copy lands where no paren
 answered `0.0.0` while colouring and checking perfectly. `pack.py` stages that manifest beside the
 server so all three shapes find one.
 
-**A remote window reads a different directory**, and this is worth knowing before you debug a
-grammar that never appears: on WSL, SSH, a dev container or a Codespace, extensions live in
-`~/.vscode-server/extensions` on the remote machine. Copying into `~/.vscode/extensions` there
-succeeds, changes nothing, and reports nothing. `code --install-extension` resolves it correctly and
-names the machine it installed on, which is why the `.vsix` is the instruction that does not depend on
-knowing this.
+**A remote window reads a different directory**, and this is worth knowing before you debug a grammar
+that never appears: on WSL, SSH, a dev container or a Codespace, extensions live in
+`~/.vscode-server/extensions` on the remote machine.
+
+**It has two grades and the silent one is likelier.** With no `~/.vscode` at all the copy fails and
+names the reason. With `~/.vscode` present — which it is for anyone who has ever opened a local window
+— the copy succeeds, lands where no editor reads it, and reports nothing. The markup session measured
+both after this file claimed only the second; the loud grade never protects the people who need it,
+because having the directory is what makes you vulnerable.
+
+`code --install-extension` resolves the directory itself and names the machine it used, which is why
+the `.vsix` is the instruction that does not depend on knowing any of this.
 
 It depends on BMX's and Burxt's extensions, which install the same way from their own repositories.
 
