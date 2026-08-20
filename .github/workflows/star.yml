@@ -128,6 +128,20 @@ jobs:
       # This is what replaces it, and it does the real thing: `burxt fetch` clones BMX at the commit
       # `burxt.package` pins and writes `burxt.lock`. **No rewriting.** The manifest CI uses is the
       # manifest a user gets, which is the only version of this step that can prove anything.
+      - name: Fetch the BMX dependency at its pinned commit
+        run: |
+          set -eux
+          burxt fetch
+          cat burxt.lock
+
+      # **Built ONCE, here, because four later steps run it.** It used to be built inside the
+      # documentation step — which sat last, so the three wasm steps added above it failed with
+      # `./star-generate: No such file or directory`. A tool built as a side effect of the step that
+      # happened to need it first is a tool whose availability depends on step order.
+      # **Placed AFTER the fetch, because it needs one.** It sat before it and passed locally while
+      # failing on the runner: `examples/generate.bx` opens `use "bmx/burxt/bmx.bx"`, and `.burxt/`
+      # already existed on the machine it was written on. The same works-here-because-state-exists
+      # shape this step was added to catch, in the step itself.
       # **The floor is a capability claim, so it is built against rather than asserted.**
       # `docs/install.md` promised "1.3.0 or newer" for two minor versions and NO 1.3.0 tarball was ever
       # downloaded — the one number a reader acts on could have been false the whole time. The honest
@@ -152,16 +166,6 @@ jobs:
           /tmp/floor/gen /tmp/floor/d.sbmx c > /tmp/floor/c.bx
           BURXT_LIB=/tmp/floor/lib /tmp/floor/burxt check /tmp/floor/c.bx
 
-      - name: Fetch the BMX dependency at its pinned commit
-        run: |
-          set -eux
-          burxt fetch
-          cat burxt.lock
-
-      # **Built ONCE, here, because four later steps run it.** It used to be built inside the
-      # documentation step — which sat last, so the three wasm steps added above it failed with
-      # `./star-generate: No such file or directory`. A tool built as a side effect of the step that
-      # happened to need it first is a tool whose availability depends on step order.
       - name: Build the generator
         run: burxt build examples/generate.bx -o star-generate
 
