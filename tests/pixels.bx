@@ -202,6 +202,98 @@ while filter < 5 {
     filter += 1;
 }
 
+// ---- the half a round trip structurally cannot check -----------------------------------------------
+//
+// **A round trip cannot see a bug its two halves share, and the language session proved it on this exact
+// file's shape.** They broke `divide_floor(left + above, 2)` in their decoder and their encoder the same
+// way, and their round trip reported `Average round-trips: true`. I reproduced it here before writing
+// this: with `2` changed to `3` in `tools/png.bx` AND in `filtered()` above, the suite printed
+// **`ok    filter 3 round-trips 105 bytes exactly`** and exited 0. Break one half and it is caught
+// immediately; break both identically and the test is blind.
+//
+// Average is exactly where that is likely, because the encoder and the decoder are the same three lines
+// with the sign flipped — so the same mistake in both is not a coincidence, it is the natural typo.
+//
+// **So the expected bytes below come from NEITHER half.** They were derived once from RFC 2083 §6 by an
+// implementation that is not this one and does not ship here, and they are committed as constants: five
+// sets of filtered scanlines, one raster all five must produce. My `filtered()` is not called, so its
+// arithmetic cannot agree its way past a defect. `png_of` still assembles the chunks and `zlib_into`
+// still inflates, which is correct — those are not the thing under test and one of them is the
+// compiler's.
+//
+// The language session's addition to this shape, which I am taking: **assert the filter bytes are
+// uniformly the predictor that was asked for.** Their encoder wrote filter 0 unconditionally at first,
+// so an encoder that ignores its argument passes every pixel comparison — and 0 is the filter both our
+// corpora already covered.
+let expected: [Int] = [5, 16, 27, 38, 49, 60, 71, 82, 93, 42, 53, 64, 75, 86, 97, 108, 119, 130];
+// Flat, with a stride of 20, because **a growable array cannot hold another array yet** — the compiler
+// says so and says why: the element would need its own region reasoning. Five scanline sets of
+// 2 * (1 + 9) bytes, one after another.
+const FIXTURE: Int = 20;
+let known: [Int] = [
+    0, 5, 16, 27, 38, 49, 60, 71, 82, 93,   0, 42, 53, 64, 75, 86, 97, 108, 119, 130,
+    1, 5, 16, 27, 33, 33, 33, 33, 33, 33,   1, 42, 53, 64, 33, 33, 33, 33, 33, 33,
+    2, 5, 16, 27, 38, 49, 60, 71, 82, 93,   2, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    3, 5, 16, 27, 36, 41, 47, 52, 58, 63,   3, 40, 45, 51, 35, 35, 35, 35, 35, 35,
+    4, 5, 16, 27, 33, 33, 33, 33, 33, 33,   4, 37, 37, 37, 33, 33, 33, 33, 33, 33
+];
+
+let mutable k: Int = 0;
+while k < divide_floor(len(known), FIXTURE) {
+    let mutable scanlines: [Int] = [];
+    let mutable b: Int = 0;
+    while b < FIXTURE {
+        let x: Int = push(scanlines, known[k * FIXTURE + b]);
+        b += 1;
+    }
+    let mutable bytes: [Int] = [];
+    // 3x2 RGB: the fixture's own shape, and not the round trip's, so a stride mistake cannot cancel out
+    // against the one above.
+    let built: Int = png_of(3, 2, 3, 2, scanlines, bytes);
+    let mutable got: [Int] = [];
+    let image: Png = png_read(bytes, got);
+
+    let mutable differs: Int = 0 - 1;
+    if len(got) == len(expected) {
+        let mutable i: Int = 0;
+        while i < len(expected) {
+            if got[i] != expected[i] && differs < 0 {
+                differs = i;
+            }
+            i += 1;
+        }
+    }
+    if prove && k == 3 {
+        differs = 0;
+    }
+    let ok: Bool = image.code > 0 && len(got) == len(expected) && differs < 0;
+    let x: Int = check(tally, ok,
+        "filter " + to_string(k) + " decodes bytes this file did not compute",
+        "filter " + to_string(k) + ": zlib returned " + to_string(image.code) + ", got "
+            + to_string(len(got)) + " bytes where " + to_string(len(expected))
+            + " were expected, first difference at " + to_string(differs));
+    k += 1;
+}
+
+// **And that each fixture asks for the predictor it claims to.** One row per scanline, at byte 0 and
+// byte 10 for a 9-byte stride, and both must be `k`. Without this an encoder that wrote 0 everywhere
+// would pass all five comparisons above.
+let mutable mislabelled: Int = 0;
+let mutable f2: Int = 0;
+while f2 < divide_floor(len(known), FIXTURE) {
+    if known[f2 * FIXTURE] != f2 || known[f2 * FIXTURE + 10] != f2 {
+        mislabelled += 1;
+    }
+    f2 += 1;
+}
+if prove {
+    mislabelled += 1;
+}
+let x8: Int = check(tally, mislabelled == 0,
+    "every fixture's filter bytes are uniformly the predictor it names",
+    to_string(mislabelled) + " fixture(s) carry a filter byte that is not the predictor they claim, so"
+        + " the comparison above proves nothing about that predictor");
+
 // The header, read from the same bytes.
 let mutable one: [Int] = [];
 let one_made: Int = raster(width, height, channels, one);
@@ -234,6 +326,20 @@ let x7: Int = check(tally, truncated.code < 0 || len(nothing) == 0,
     "a truncated PNG returned " + to_string(len(nothing)) + " bytes with code "
         + to_string(truncated.code));
 
+// **Ten arbitrary bytes are not a short PNG, they are not a PNG.** The decoder used to read width and
+// height straight off bytes 16..24, so this was indistinguishable from a truncated file — and thirty
+// arbitrary bytes would have been a picture with garbage dimensions. Separate code, so a caller can
+// tell a wrong file from a damaged one.
+let rubbish: [Int] = [7, 200, 3, 91, 44, 18, 6, 250, 130, 77];
+let mutable nothing_at_all: [Int] = [];
+let refused: Png = png_read(rubbish, nothing_at_all);
+let x9: Int = check(tally, refused.code == 0 - 4 && len(nothing_at_all) == 0,
+    "ten arbitrary bytes are refused as not-a-PNG (code " + to_string(refused.code)
+        + "), separately from truncation",
+    "ten arbitrary bytes gave code " + to_string(refused.code) + " with "
+        + to_string(len(nothing_at_all)) + " bytes of pixels, so a wrong file and a damaged one report"
+        + " the same thing");
+
 print("");
 if prove {
     if tally.broken > 0 {
@@ -247,8 +353,8 @@ if tally.broken > 0 {
     print(to_string(tally.broken) + " of " + to_string(tally.ran) + " broken");
     exit(1);
 }
-if tally.ran != 7 {
-    print("only " + to_string(tally.ran) + " of 7 checks ran");
+if tally.ran != 14 {
+    print("only " + to_string(tally.ran) + " of 14 checks ran");
     exit(1);
 }
 print("all five predictors round-trip, and the decoder is the one two checks share");

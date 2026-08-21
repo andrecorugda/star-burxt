@@ -72,6 +72,18 @@ pure function png_paeth(a: Int, b: Int, c: Int) -> Int {
 
 // The unfiltered raster, row-major, with no filter bytes. `Png.code` is the zlib return or negative.
 function png_read(bytes: [Int], mutable pixels: [Int]) -> Png allocates {
+    // **The signature, first, because nothing else here is a check that this is a PNG.** This read
+    // width and height straight off bytes 16..24, so ten arbitrary bytes were "too short" and thirty
+    // arbitrary bytes were a picture with garbage dimensions. The language session's decoder answers
+    // `the eight-byte PNG signature does not match` for the first case, and comparing notes is what
+    // showed mine could not distinguish a wrong file from a short one.
+    if len(bytes) < 8 {
+        return Png { width: 0, height: 0, channels: 0, code: -4, stride: 0 };
+    }
+    if bytes[0] != 137 || bytes[1] != 80 || bytes[2] != 78 || bytes[3] != 71
+        || bytes[4] != 13 || bytes[5] != 10 || bytes[6] != 26 || bytes[7] != 10 {
+        return Png { width: 0, height: 0, channels: 0, code: -4, stride: 0 };
+    }
     if len(bytes) < 26 {
         return Png { width: 0, height: 0, channels: 0, code: -1, stride: 0 };
     }
