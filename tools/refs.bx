@@ -109,6 +109,119 @@ match file_walk(".") {
     }
 }
 
+// ---- and every path the documentation tells a reader to TYPE ---------------------------------------
+//
+// The same rule as above with a different noun: a git ref a page says to depend on must exist, and so
+// must a file a page says to run. The language session asked for this after moving their PNG codec out
+// of `scripts/editor-icons.bx` and leaving test messages that told a reader to edit a file which no
+// longer held the code.
+//
+// **Measured first, because the obvious version of it does not work.** Grepping every backticked path in
+// this repository gives 35 that do not resolve, and most of them are correct: other repositories' files
+// (`lib/inflate.bx`, `bmx/burxt/bmx.bx`), documentation placeholders (`examples/X.sbmx`), and **history**
+// — a sentence saying `tools/gallery.mjs` claimed a browser made it unportable is true and names a file
+// that is deliberately gone. Their rule is the one that separates those: *a dated past-tense measurement
+// cannot decay; a present-tense one is a spec with no runner.* A checker cannot read tense.
+//
+// So this checks the subset where the distinction collapses: **a path in RUNNABLE position.** A reader
+// types it, so it either works or it wastes their time — there is no past tense in a command. Prose is
+// left to the author, which is where the judgement belongs.
+//
+// It found three when it was written, all from the same day's ports, and one of them was
+// `python3 tests/extension.py --prove-it` in the section explaining how to run a negative control: an
+// instruction, in the document a new reader follows, for a file that had been Burxt for six hours.
+let mutable typed: Int = 0;
+let mutable broken: [String] = [];
+let mutable owned: [String] = [];
+// Every literal `{` in a string is `\{`, including inside an awk program — the compiler reads the
+// unescaped one as an interpolation and reports `expected an expression, found print`.
+let dirs: Capture = os_capture_status("git ls-files | cut -s -d/ -f1 | sort -u");
+let dir_rows: [String] = string_lines(dirs.output);
+let mutable d: Int = 0;
+while d < len(dir_rows) {
+    let name: String = string_trim(dir_rows[d]);
+    if len(name) > 0 {
+        let x: Int = push(owned, name);
+    }
+    d += 1;
+}
+
+// **Runnable means an interpreter or `./` in front of it, ON ANY LINE** — backticked spans and fenced
+// blocks alike. The first version read only backticked spans, and its own zero-guard caught that: after
+// the three stale references were fixed, every remaining runnable path was either inside a ```sh block
+// or a top-level binary with no directory, so it reported "nothing to check" rather than a false pass.
+// **That guard is the only reason I noticed the predicate was too narrow to be worth having.**
+//
+// The top-level directories come from the tree rather than a list, so a directory added tomorrow is
+// covered and another repository's `lib/` is not.
+let doc: String = file_read("CLAUDE.md");
+let rows: [String] = string_lines(doc);
+let mutable leads: [String] = [];
+let l1: Int = push(leads, "python3 ");
+let l2: Int = push(leads, "node ");
+let l3: Int = push(leads, "bash ");
+let l4: Int = push(leads, "sh ");
+let l5: Int = push(leads, "./");
+
+let mutable row: Int = 0;
+while row < len(rows) {
+    let line: String = rows[row];
+    let mutable k: Int = 0;
+    while k < len(leads) {
+        let mutable at: Int = 0;
+        while at < len(line) {
+            let hit: Int = string_find_from(line, leads[k], at);
+            if hit < 0 {
+                at = len(line);
+            } else {
+                let from: Int = hit + len(leads[k]);
+                let mutable stop: Int = from;
+                while stop < len(line) {
+                    let c: String = substring(line, stop, 1);
+                    if c == " " || c == "`" || c == "\t" {
+                        stop = stop;
+                        break;
+                    }
+                    stop += 1;
+                }
+                let path: String = substring(line, from, stop - from);
+                let slash: Int = string_find(path, "/");
+                if slash > 0 {
+                    let root: String = substring(path, 0, slash);
+                    let mutable ours: Bool = false;
+                    let mutable o: Int = 0;
+                    while o < len(owned) {
+                        if owned[o] == root {
+                            ours = true;
+                        }
+                        o += 1;
+                    }
+                    if ours {
+                        typed += 1;
+                        if !file_exists(path) {
+                            let x: Int = push(broken, "CLAUDE.md tells a reader to run `"
+                                + leads[k] + path + "` and that file does not exist — an instruction"
+                                + " has no past tense, so this one is simply wrong");
+                        }
+                    }
+                }
+                at = from + 1;
+            }
+        }
+        k += 1;
+    }
+    row += 1;
+}
+if typed == 0 {
+    let z: Int = push(wrong, "CLAUDE.md names no runnable path under a directory this repository owns,"
+        + " so that half of this gate checked nothing — the phrasing it reads has changed");
+}
+let mutable b: Int = 0;
+while b < len(broken) {
+    let x: Int = push(wrong, broken[b]);
+    b += 1;
+}
+
 // **A suite that found nothing is not a suite that passed.** If the pattern stops matching — a
 // dependency line respelled, a walk that lost its root — this reports zero problems out of zero
 // claims, which reads exactly like success.
@@ -125,4 +238,5 @@ if len(wrong) > 0 {
     }
     exit(1);
 }
-print(to_string(checked) + " dependency ref(s) named by the documentation, all of which exist");
+print(to_string(checked) + " dependency ref(s) and " + to_string(typed)
+    + " runnable path(s) named by the documentation, all of which exist");

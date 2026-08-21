@@ -67,7 +67,7 @@ Every check in this repository shells out to `burxt`, and a wrong one fails in a
 star's bug rather than the toolchain's.
 
 ```sh
-burxt --version                 # a component needs 1.3.0 or newer; this SUITE needs 1.5.0
+burxt --version                 # a component needs 1.3.0 or newer; this SUITE needs 1.7.0
 printf 'use "std/html.bx";\n' > /tmp/probe.bx && burxt check /tmp/probe.bx
 ```
 
@@ -89,7 +89,7 @@ set the variable. `tools/check-all.sh` distinguishes the two causes and says whi
 **Two numbers, two jobs, and `./star-versions` holds them together.** The **floor** is
 `docs/_config.yml`'s `star_requires` — what a reader is promised for compiling a component, currently
 1.3.0, and CI builds against that release on every push rather than asserting it. The **current** is
-`BURXT_VERSION`, the same in both workflows, currently 1.5.0. **Running this suite needs the current**,
+`BURXT_VERSION`, the same in both workflows, currently 1.7.0. **Running this suite needs the current**,
 because the packer imports `std/zip.bx`; compiling a component still only needs the floor. Those are two
 claims on two pages and `star-versions` fails if either drifts.
 
@@ -219,8 +219,8 @@ node editors/vscode/config.mjs             # folding markers and icon geometry
 STAR_CHECK=./star-check ./star-drive-lsp   # the language server's protocol
 ```
 
-Suites carrying a negative control run it as a second invocation — `python3 tests/extension.py
---prove-it` must **fail**, and exits 0 when it does. Run both halves; a control that stops failing is
+Suites carrying a negative control run it as a second invocation — `./star-extension --prove-it`
+must **fail**, and exits 0 when it does. Run both halves; a control that stops failing is
 the finding.
 
 ## Architecture
@@ -252,7 +252,7 @@ error.
 **The version lives in `burxt.package` and nowhere else.** `tools/surface.bx` checks it against the
 git tag, against `editors/vscode/package.json`, and refuses a version *literal* in the language
 server by shape. `editors/vscode/burxt.package` is a staged copy that `pack.bx` writes;
-`tests/extension.py` asserts it is byte-identical to the root one.
+`tests/extension.bx` asserts it is byte-identical to the root one.
 
 **The editor extension is in `editors/vscode/`**, with the language server *inside* it at
 `server/star-lsp.bx`, compiled to a `star-lsp` binary the extension finds on `PATH` exactly as it
@@ -280,7 +280,7 @@ all (`--prove-it`, `the CONTROL` in `tools/surface.bx` and `tools/values.mjs`).
 succeeded; three failures sat unread for a week that way. That is why `check-all.sh` exists and sets
 `pipefail`.
 
-**A claim about an install is checked through that install.** `tests/extension.py` builds each
+**A claim about an install is checked through that install.** `tests/extension.bx` builds each
 documented install in a tempdir and spawns the real server inside it, because "both are tested" was
 once true of where the server file is and false of what it reports.
 

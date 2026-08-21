@@ -156,6 +156,104 @@ if prove {
     exit(0);
 }
 
+// ---- and the prose that states them, which decays exactly like a comment ---------------------------
+//
+// **This was live when the check was written.** `CLAUDE.md` said *"this SUITE needs 1.5.0"* and
+// *"currently 1.5.0"* while the pin had moved to 1.6.0 and then 1.7.0 — stale through two upgrades,
+// hand-edited each time, and nothing looked. That is the same failure as a stale comment and it is worse
+// than one, because a recorded MEASUREMENT reads as evidence: the four other places this file already
+// holds together were all correct, and the sentence a reader starts from was not.
+//
+// The distinction that makes it checkable without a list is in the prose itself. A live claim says
+// **needs** or **currently**; a historical one says *carried*, *the published*, *tarball*. And within
+// `needs`, the floor announces itself as *"or newer"* — which is exactly what a floor means and exactly
+// how `docs/install.md` phrases it. So:
+//
+//     "a component needs 1.3.0 or newer"   -> the FLOOR
+//     "this SUITE needs 1.7.0"             -> the CURRENT
+//     "currently 1.7.0"                    -> the CURRENT
+//     "1.6.0 carried inflate.bx"           -> history, and not this file's business
+//
+// The alternative was marking the live claims with a sentinel, which is what `not-burxt:` does and what
+// BMX's changelog does by declaring itself historical. Reading the wording is better here because the
+// wording is already load-bearing: a sentence that says "needs" is making the claim.
+let readme: String = file_read("CLAUDE.md");
+
+// The `major.minor.patch` at `from`, or "" if there is not one.
+pure function version_at(text: String, from: Int) -> String allocates {
+    let mutable stop: Int = from;
+    let mutable dots: Int = 0;
+    while stop < len(text) {
+        let c: String = substring(text, stop, 1);
+        if c == "." {
+            dots += 1;
+            stop += 1;
+        } else {
+            if string_find("0123456789", c) >= 0 {
+                stop += 1;
+            } else {
+                stop = stop;
+                break;
+            }
+        }
+    }
+    if dots != 2 || stop == from {
+        return "";
+    }
+    return substring(text, from, stop - from);
+}
+
+// Every claim introduced by `marker`, checked against `want` — except that a `needs` claim followed by
+// "or newer" is a floor claim and is checked against the floor instead.
+function claims(text: String, marker: String, want: String, floor_value: String,
+        mutable problems: [String]) -> Int allocates {
+    let mutable found: Int = 0;
+    let mutable at: Int = 0;
+    while at < len(text) {
+        let hit: Int = string_find_from(text, marker, at);
+        if hit < 0 {
+            at = len(text);
+        } else {
+            let from: Int = hit + len(marker);
+            let stated: String = version_at(text, from);
+            if len(stated) > 0 {
+                found += 1;
+                let after: String = substring(text, from + len(stated),
+                    len(text) - from - len(stated));
+                let mutable expected: String = want;
+                let mutable which: String = "the current";
+                if string_starts_with(after, " or newer") {
+                    expected = floor_value;
+                    which = "the floor";
+                }
+                if stated != expected {
+                    let x: Int = push(problems, "CLAUDE.md says `" + marker + stated
+                        + "` and " + which + " is `" + expected
+                        + "` — a recorded measurement decays exactly like a comment, and this one reads"
+                        + " as evidence");
+                }
+            }
+            at = from + 1;
+        }
+    }
+    return found;
+}
+
+let mutable prose: [String] = [];
+let needs: Int = claims(readme, "needs ", star_pin, floor, prose);
+let now: Int = claims(readme, "currently ", star_pin, floor, prose);
+
+// **Zero is not a pass.** If the phrasing changes, this reports nothing wrong out of nothing looked at.
+if needs + now == 0 {
+    let z: Int = push(failures, "CLAUDE.md states no version with `needs` or `currently`, so this gate"
+        + " checked nothing — the phrasing it reads has changed");
+}
+let mutable pr: Int = 0;
+while pr < len(prose) {
+    let x: Int = push(failures, prose[pr]);
+    pr += 1;
+}
+
 print(to_string(len(failures)) + " problem(s) in the versions this repository names");
 if len(failures) > 0 {
     let mutable f: Int = 0;
