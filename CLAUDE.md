@@ -143,10 +143,11 @@ conclusion was right and the label was wrong, which is the more dangerous shape:
 reader to the wrong bytes with full confidence. There were three programs, not two.
 
 Where this machine stands now, because a warning about a condition that has lifted reads as a warning
-about one that has not: `~/.local/bin/burxt` is `1d9204787ed9e42631925db4e03d223a`, **byte-identical to
-the published 1.5.0 asset.** The published 1.5.0 `lib/` does carry `zip.bx` and `deflate.bx`, so the
-packer's dependency is genuinely released; it does not carry `inflate.bx`, which is why
-`tests/extension.py` is still `blocked`.
+about one that has not: `~/.local/bin/burxt` is `b4ceced2c3abf9999b9eaa024e5c09f4`, **byte-identical to
+the published 1.6.0 asset**, verified by downloading it and checking `sha256sum -c` against the release's
+own `SHA256SUMS`. 1.6.0 carries `inflate.bx`, `zip.bx`'s reader (`zip_entries`, `zip_local_at`,
+`zip_content`) and `adler32` — which is what emptied the `blocked` column. All 25 `.bx` files in this tree
+were rebuilt with that binary and that library before anything adopted it: 0 failures.
 
 The cheap narrow form, when the question is only whether one symbol is in the release, needs no build —
 `git grep -l "function <name>(" v1.5.0 -- lib` in `~/burxt`. **This one is sound, and not by luck:** all
@@ -184,6 +185,7 @@ burxt build tools/flags.bx       -o star-flags
 burxt build tests/extension.bx   -o star-extension
 burxt build tests/pixels.bx      -o star-pixels
 burxt build tools/icons.bx       -o star-icons
+burxt build tools/gallery.bx     -o star-gallery
 burxt build editors/lsp/drive-lsp.bx -o star-drive-lsp
 ```
 
@@ -287,6 +289,20 @@ nothing.
 **Nothing in this repository may depend on another language to check itself.** `./star-languages`
 prints the ledger — every non-Burxt file declares `not-burxt: <category> <reason>` in its own first
 twenty lines, and a file that declares none fails the build. `./star-languages --files` lists them.
-`gap` is the only column that should move, and it is being driven to zero: the guarantees, the
-documented examples, the consumer test, the refs check and the showcase are Burxt now. What is left in
-`blocked` waits on `std/zip.bx` gaining deflate and a reader.
+`gap` is zero and `blocked` is EMPTY — the column does not print any more. What is left is
+`platform`, which is architecture rather than debt, and `vendored`, which is somebody else's bytes.
+
+**`platform` must still shrink under challenge, and the question that shrinks it is BMX's:** *which job
+runs this, and is that job allowed to need Burxt?* It moved three entries in one day. `tools/flags.mjs`
+claimed to check the driver's options and actually execs a native binary with JSON on stdin — ported.
+`editors/vscode/config.mjs` claimed to be blocked on inflating a PNG, which was the smaller half of it —
+the icons moved to `tools/icons.bx` and the twelve regex checks stayed, because they test the EDITOR's own
+engine and a Burxt matcher agreeing with the markers would be a different engine reporting the same
+answer. And `tools/gallery.mjs` claimed a real browser made it unportable, when Chrome was already driven
+as a binary — 409 lines, ported, producing byte-identical captures.
+
+**The one that nearly stopped the gallery is worth knowing before you trust a type.** `HttpResponse.body`
+is a `String` and a Burxt String is UTF-8, so serving a `.wasm` looked ruled out. It is not: the
+validation lives at `file_read`, and `from_bytes` takes arbitrary bytes and round-trips them. Measured
+before the port: an 83,629-byte wasm served through `http_serve` and fetched back with a matching sha256.
+**Do not infer a missing capability from a type** any more than from a function list.

@@ -121,7 +121,7 @@ run "every line that is not Burxt says why" bash -c '
 # report it fine. The markup session hit the same shape in a packer that stamped the time into a zip and
 # said the sentence better than I would: a check that overwrites the evidence one line before looking for it.
 run "the showcase is current"        bash -c './star-showcase >/dev/null && git diff --exit-code -- docs/_includes/showcase.html'
-run "the gallery page is current"    bash -c 'node tools/gallery.mjs --include-only >/dev/null && git diff --exit-code -- docs/_includes/gallery.html'
+run "the gallery page is current"    bash -c './star-gallery --include-only >/dev/null && git diff --exit-code -- docs/_includes/gallery.html'
 
 run "every advertised ref exists"    ./star-refs
 run "every version named agrees"     ./star-versions

@@ -334,7 +334,8 @@ jobs:
       - name: The gallery page matches the examples it shows
         run: |
           set -eux
-          node tools/gallery.mjs --include-only
+          burxt build tools/gallery.bx -o star-gallery
+          ./star-gallery --include-only
           git diff --exit-code -- docs/_includes/gallery.html
 
       # **Every example on the site is generated.** A tutorial that teaches something the tool
