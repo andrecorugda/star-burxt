@@ -58,7 +58,7 @@ use "std/json.bx";
 // and the failure mode of a frame parser that breaks is not a wrong answer, it is NO answer — every
 // lookup returns the empty String and a whole scenario can go quiet. `refs.bx`'s rule: a suite that
 // found nothing is not a suite that passed.
-const ASSERTIONS: Int = 13;
+const ASSERTIONS: Int = 14;
 
 // The reply frames one session produces: `initialize`, one `publishDiagnostics` per document opened,
 // and `shutdown`. **`refs.bx`'s rule — a suite that found nothing is not a suite that passed** — so
@@ -140,7 +140,28 @@ pure function did_open(uri: String, text: String) -> String allocates {
 // Every reply frame in a stream of them, in order. A malformed stream answers what it managed to read
 // rather than a refusal — the frame COUNT is asserted, so a short read is reported as the count it is
 // and not as six scenarios that quietly said nothing.
-function frames_in(stream: String, mutable out: [Json]) -> Int allocates {
+//
+// ---- and the header is CHECKED against what follows it, not trusted -------------------------------
+//
+// This used to read `Content-Length`, slice that many bytes, and move on. **A server declaring the
+// wrong length would have been believed**, which is not hypothetical: the language session found
+// `lib/cgi.bx` declaring `len(body) + 1` on every response it had ever sent — deliberately and
+// correctly, because `print` appended a newline that really was on the wire. When `print_exact` removed
+// the newline, the `+ 1` became a lie, and the same wall in `star-lsp.bx` was closed in the same
+// release. **The framing here changed in that commit**, from a `putchar` loop to `print_exact`, and
+// nothing in this driver would have noticed a byte either way.
+//
+// Their fix is the technique worth copying, and it is not "update the expected bytes". A fixture that
+// pins the literal response catches a change and cannot say what is wrong with it; asserting the
+// RELATION — the declared count against the bytes that actually follow — survives the document changing
+// and fails with the diagnosis. Their two controls gave opposite errors, `says 13 and 12 bytes follow`
+// against `says 12 and 13 bytes follow`, where a byte-fixture would have said only that something moved.
+//
+// Here the relation is checkable without a second parse: after consuming exactly `length` bytes, what
+// remains must be empty or must begin the next header. One byte over and the next frame starts mid-word;
+// one byte under and a stray `\r` or `}` sits in front of it.
+function frames_in(stream: String, mutable out: [Json], mutable faults: [String]) -> Int allocates {
+    let mutable framing: String = "";
     let mutable at: Int = 0;
     let mutable reading: Bool = true;
     while reading {
@@ -168,9 +189,24 @@ function frames_in(stream: String, mutable out: [Json]) -> Int allocates {
                         Ok(message) => { let a: Int = push(out, message); }
                     }
                     at = at + split + 4 + length;
+
+                    // The relation, checked at every boundary. `framing_error` is read by the caller,
+                    // which is why this does not simply stop: a driver that goes quiet on a bad frame
+                    // reports the same thing as a server that sent none.
+                    let remaining: String = substring(stream, at, len(stream) - at);
+                    if len(remaining) > 0 && !string_starts_with(remaining, "Content-Length:") {
+                        let mutable shown: Int = 24;
+                        if len(remaining) < shown { shown = len(remaining); }
+                        framing = framing + "frame " + to_string(len(out)) + " declared "
+                            + to_string(length) + " bytes, and what follows is not the next header"
+                            + " but `" + substring(remaining, 0, shown) + "`; ";
+                    }
                 }
             }
         }
+    }
+    if len(framing) > 0 {
+        let f: Int = push(faults, framing);
     }
     return len(out);
 }
@@ -319,7 +355,8 @@ function answers_mid_stream(work: String, server: String, checker: String) -> Bo
         + " > " + file_quote(replies) + " 2>/dev/null\n");
     let ran: Capture = os_capture_status("timeout 10 sh " + file_quote(script));
     let mutable answered: [Json] = [];
-    let counted: Int = frames_in(file_read(replies), answered);
+    let mutable ignored_faults: [String] = [];
+    let counted: Int = frames_in(file_read(replies), answered, ignored_faults);
     return counted == 2;
 }
 
@@ -353,7 +390,17 @@ match file_temp_directory("drive-lsp") {
             + " < " + file_quote(requests));
 
         let mutable replies: [Json] = [];
-        let counted: Int = frames_in(ran.output, replies);
+        let mutable faults: [String] = [];
+        let counted: Int = frames_in(ran.output, replies, faults);
+
+        // **The declared length against the bytes that follow it**, before any verdict is read out of
+        // the frames — because a frame that parsed is not a frame that was framed correctly, and the
+        // whole point of the relation is that it fails with the diagnosis rather than with a diff.
+        let framed: Bool = verdict("every frame's Content-Length is the bytes that follow it",
+                            to_string(len(faults)), "0", made);
+        if len(faults) > 0 {
+            print("       " + string_join(faults, ""));
+        }
 
         // First, because every verdict below is read out of this list and a short one would make them
         // all say nothing rather than something wrong.
