@@ -51,12 +51,16 @@
 // exactly `Content-Length` times. A protocol that frames by byte count may not read a line for its
 // body: a JSON object with a `\n` inside a string literal would be cut in half.
 //
-// **`print` cannot write a frame, and that is not a library gap.** It appends a newline — `lib/cgi.bx`
-// records the same wall and calls it a compiler gap — so a frame written with `print` puts a stray
-// byte between messages. `putchar` through an `external` declaration reaches the same libc the runtime
-// already links, and writes the bytes asked for and no others. Verified with `xxd`: `AB\r\n\r\nCD` out,
-// eight bytes, no ninth. So the gap was in the standard library's surface, not in what a Burxt program
-// can do.
+// **`print` cannot write a frame** — it appends a newline, so a frame written with `print` puts a stray
+// byte between messages. This reached `putchar` through an `external` declaration to get around that,
+// and recorded the conclusion that "the gap was in the standard library's surface, not in what a Burxt
+// program can do". **Burxt 1.7.0 closed that surface: `print_exact` writes a String and nothing else**,
+// so the external declaration is gone and this is a builtin call. Verified the same way the putchar
+// version was, with `od`: `AB\r\n\r\nCD` out, eight bytes, no ninth.
+//
+// Worth keeping as a shape rather than a footnote: the gap was reported to the language session as a
+// named request with a concrete caller, and it came back as one function. That is the loop working —
+// `lib/cgi.bx` recorded the same wall and needed the same thing.
 //
 // **Logging had to find its own stream.** `print` goes to stdout, which here is the protocol — a
 // single log line written with `print` corrupts the frame stream and the client sees a parse error
@@ -72,7 +76,6 @@ use "std/json.bx";
 
 // The three bytes-in-and-out primitives the standard library does not expose. `CInt` exists only at
 // the C boundary; the values convert at the call.
-external function putchar(byte: CInt) -> CInt touches input;
 external function fdopen(fd: CInt, mode: String) -> CPointer touches input;
 external function fputc(byte: CInt, stream: CPointer) -> CInt touches input;
 
@@ -90,13 +93,8 @@ pure function contains(haystack: String, needle: String) -> Bool {
 // ---- bytes out ---------------------------------------------------------------------------------
 
 // Exactly these bytes on stdout, with nothing appended. See the header on why this is not `print`.
-function write_raw(text: String) -> Bool touches input {
-    let mutable i: Int = 0;
-    let size: Int = len(text);
-    while i < size {
-        let ignored: Int = putchar(byte_at(text, i));
-        i += 1;
-    }
+function write_raw(text: String) -> Bool {
+    print_exact(text);
     return true;
 }
 

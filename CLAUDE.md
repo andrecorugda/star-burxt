@@ -143,11 +143,19 @@ conclusion was right and the label was wrong, which is the more dangerous shape:
 reader to the wrong bytes with full confidence. There were three programs, not two.
 
 Where this machine stands now, because a warning about a condition that has lifted reads as a warning
-about one that has not: `~/.local/bin/burxt` is `b4ceced2c3abf9999b9eaa024e5c09f4`, **byte-identical to
-the published 1.6.0 asset**, verified by downloading it and checking `sha256sum -c` against the release's
-own `SHA256SUMS`. 1.6.0 carries `inflate.bx`, `zip.bx`'s reader (`zip_entries`, `zip_local_at`,
-`zip_content`) and `adler32` — which is what emptied the `blocked` column. All 25 `.bx` files in this tree
-were rebuilt with that binary and that library before anything adopted it: 0 failures.
+about one that has not: `~/.local/bin/burxt` is `6ef7eb5f654137fd10877bedd4b5e65d`, **byte-identical to
+the published 1.7.0 asset**, verified by downloading it and checking `sha256sum -c` against the release's
+own `SHA256SUMS`. 1.6.0 carried `inflate.bx`, `zip.bx`'s reader and `adler32` — which is what emptied the
+`blocked` column. All 30 `.bx` files in this tree were rebuilt with the 1.7.0 binary and library before
+anything adopted it: 0 failures, and no committed artefact moved.
+
+**1.7.0 fixed a correctness bug this repository was exposed to and had not noticed.** `json_render`
+escaped seven characters and passed the other twenty-five control bytes through raw, which RFC 8259 §7
+forbids. Measured here on 1.6.0 before upgrading: a string holding `0x01` produced output Python's `json`
+rejects outright, and every `to_text` in `examples/` plus the language server's diagnostics go through
+that function — so a compiler message carrying a control byte would have produced a JSON-RPC frame the
+editor could not parse. On 1.7.0 all 31 control bytes round-trip. **The exposure was never visible from
+inside**: nothing here feeds itself a control character, which is exactly why it sat.
 
 The cheap narrow form, when the question is only whether one symbol is in the release, needs no build —
 `git grep -l "function <name>(" v1.5.0 -- lib` in `~/burxt`. **This one is sound, and not by luck:** all
