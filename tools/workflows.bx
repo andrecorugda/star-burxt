@@ -351,6 +351,60 @@ while v < len(invoked) {
     v += 1;
 }
 
+// ---- and no check's exit status read through a filter ----------------------------------------------
+//
+// **A pipeline's exit status is the last command's**, which is why `check-all.sh` exists and why its
+// header carries the incident: `python3 test.py | tail -1` reported whether `tail` succeeded and three
+// failures sat unread for a week. Both committed files are clean of it — measured, not assumed — so this
+// is a guard rather than a fix.
+//
+// It is here because the rule was already written down and I did it anyway, an hour ago: ran
+// `./tools/check-all.sh` piped into a `grep`, chained a commit on that with `&&`, and pushed a red
+// suite. The language session did the same thing the same morning with `cargo test` piped into a `grep`
+// and a wrapper that reported success — and their `CLAUDE.md` records a `| tee` that hid a broken
+// self-hosting fixpoint under a green tick **for thirty versions**. Three generations of one bug across
+// two repositories, with the rule in writing the whole time.
+//
+// So the part that can be mechanical is made mechanical. **This cannot reach an interactive command** —
+// mine was typed, not committed, and no repository check will ever see it. What it does cover is every
+// future line in the two files that decide whether `main` is green, and it is worth having for a
+// specific reason: `check-all.sh` sets `pipefail` only under bash (`if [ -n "${BASH_VERSION-}" ]`), so
+// under `sh` a pipe there is exactly the original defect again, in the file written to prevent it.
+let mutable piped: [String] = [];
+let mutable pipe_files: [String] = [];
+let pf1: Int = push(pipe_files, "tools/check-all.sh");
+let pf2: Int = push(pipe_files, ".github/workflows/star.yml");
+let mutable pf: Int = 0;
+while pf < len(pipe_files) {
+    let rows2: [String] = string_lines(file_read(pipe_files[pf]));
+    let mutable n2: Int = 0;
+    while n2 < len(rows2) {
+        let line: String = rows2[n2];
+        if !is_comment(line) {
+            let bar: Int = string_find(line, "|");
+            let runs_check: Bool = string_find(line, "./star-") >= 0
+                || string_find(line, "python3 ") >= 0 || string_find(line, "node ") >= 0;
+            if bar > 0 && runs_check {
+                let after: String = substring(line, bar + 1, len(line) - bar - 1);
+                let trimmed: String = string_trim(after);
+                if string_starts_with(trimmed, "grep") || string_starts_with(trimmed, "tail")
+                    || string_starts_with(trimmed, "head") || string_starts_with(trimmed, "wc") {
+                    let x: Int = push(piped, pipe_files[pf] + ":" + to_string(n2 + 1)
+                        + " reads a check's exit status through a filter — a pipeline's status is the"
+                        + " LAST command's, so this reports whether the filter succeeded");
+                }
+            }
+        }
+        n2 += 1;
+    }
+    pf += 1;
+}
+let mutable pp: Int = 0;
+while pp < len(piped) {
+    let x: Int = push(failures, piped[pp]);
+    pp += 1;
+}
+
 // ---- the reverse direction, counted out loud -----------------------------------------------------
 
 // Everything the WORKFLOW invokes, by the same reading as the suite.

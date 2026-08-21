@@ -158,7 +158,39 @@ while d < len(dir_rows) {
 //
 // The top-level directories come from the tree rather than a list, so a directory added tomorrow is
 // covered and another repository's `lib/` is not.
-let doc: String = file_read("CLAUDE.md");
+// **Every page a reader follows, not just CLAUDE.md.** The language session ran this predicate against
+// their tree and found the class I could not have seen in one repository: a documented command for a
+// HYPOTHETICAL user's project — `burxt build src/main.bx` in a comment about walking up to find a
+// manifest. `src/` is a top-level directory there, so the ownership filter admits it, and structurally
+// `src/main.bx` in a user's tree and `src/main.bx` in theirs are the same string. **That class is not
+// decidable**: a checker cannot read whose project it is any more than it can read tense.
+//
+// Measured here before extending: `docs/` names exactly one runnable path this repository does not own
+// (`bmx/burxt/bmx.bx`, correctly skipped) and none it does. So the class is absent today — and only
+// because no top-level directory here collides with a plausible project layout, which is luck rather
+// than design. `examples/` and `tests/` are perfectly ordinary names in somebody else's tree.
+//
+// **When it does fire falsely, the fix is the prose, not an exclusion.** A command meant for a reader's
+// project should name a placeholder that is visibly one — `<your-component>.sbmx` — because a reader
+// following a real-looking path into a repository that does not have it is the same wasted trip this
+// gate exists to prevent. A list of permitted absences is the thing both of us have spent the day
+// arguing falls behind.
+let mutable pages: [String] = [];
+let pg1: Int = push(pages, "CLAUDE.md");
+let listing2: Capture = os_capture_status("git ls-files 'docs/*.md'");
+let doc_rows: [String] = string_lines(listing2.output);
+let mutable dr: Int = 0;
+while dr < len(doc_rows) {
+    let name: String = string_trim(doc_rows[dr]);
+    if len(name) > 0 {
+        let x: Int = push(pages, name);
+    }
+    dr += 1;
+}
+
+let mutable page_at: Int = 0;
+while page_at < len(pages) {
+let doc: String = file_read(pages[page_at]);
 let rows: [String] = string_lines(doc);
 let mutable leads: [String] = [];
 let l1: Int = push(leads, "python3 ");
@@ -203,7 +235,7 @@ while row < len(rows) {
                     if ours {
                         typed += 1;
                         if !file_exists(path) {
-                            let x: Int = push(broken, "CLAUDE.md tells a reader to run `"
+                            let x: Int = push(broken, pages[page_at] + " tells a reader to run `"
                                 + leads[k] + path + "` and that file does not exist — an instruction"
                                 + " has no past tense, so this one is simply wrong");
                         }
@@ -216,8 +248,10 @@ while row < len(rows) {
     }
     row += 1;
 }
+page_at += 1;
+}
 if typed == 0 {
-    let z: Int = push(wrong, "CLAUDE.md names no runnable path under a directory this repository owns,"
+    let z: Int = push(wrong, "no page names a runnable path under a directory this repository owns,"
         + " so that half of this gate checked nothing — the phrasing it reads has changed");
 }
 let mutable b: Int = 0;
