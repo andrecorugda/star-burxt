@@ -467,7 +467,21 @@ match file_temp_directory("drive-lsp") {
         //    severity 2; BMX's Burxt implementation has the parser and no lint, so a Burxt server can
         //    only get them by spawning `node` — which is the one dependency this whole port removes.
         //    The two assertions that stood here (a warning is reported; it is on the right line below a
-        //    `===bx` section) are blocked on `bmx_lint` existing in `bmx/burxt/bmx.bx`.
+        //    `===bx` section) needed a `bmx_lint` in `bmx/burxt/bmx.bx`. **That is not coming, and
+        //    "blocked on" was the wrong word for it.**
+        //
+        //    Verified 2026-08-21: `bmx_lint` appears nowhere in BMX's implementation, and the markup
+        //    session's stated position is that its absence is DELIBERATE — `BMX-W` codes are not
+        //    conformance, and two implementations obliged to agree on warnings would move that boundary
+        //    for every implementer. They have put it on `docs/building-on.md`, which is the page an
+        //    asker reads.
+        //
+        //    **The correction is the word, not the fact.** "Blocked on X existing" reads as waiting for
+        //    something on its way, so a reader checks back. "Declined, for this reason, written down
+        //    there" ends the question. A claim that reads as pending when the answer is settled is the
+        //    same decay as a stale measurement, one step out: the fact was right and the tense was
+        //    wrong. Found by sweeping this tree for `blocked on` after the language session showed that
+        //    exact phrase had misled me about a clock they had already shipped.
         //
         //    **A capability that quietly stopped appearing is the failure this replaces.** So the
         //    server must SAY the warnings are absent, and it says it on stderr, which
