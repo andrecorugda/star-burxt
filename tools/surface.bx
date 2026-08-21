@@ -29,6 +29,8 @@ use "std/os.bx";
 
 let README: String = "README.md";
 let SOURCES: [String] = ["star.bx", "resolve.bx"];
+// The release a consumer is told to depend on. `star-refs` already proves this tag exists.
+const RELEASE: String = "v0.2.0";
 let FIXTURES: String = "tests/consumer";
 
 pure function ends_with(text: String, suffix: String) -> Bool {
@@ -466,6 +468,107 @@ match os_cwd() {
     }
 }
 
+// ---- and what the surface has WITHDRAWN since the release ------------------------------------------
+//
+// **Both directions of the current surface leave one direction unchecked, and it is the dangerous one.**
+// This file asks whether every promised name is reachable and every reachable name is promised, which is
+// a statement about now. It cannot see a name that was `public` in the release a consumer installed and
+// is not `public` today — because the name is still THERE. Eight helpers here were demoted rather than
+// deleted, so nothing inside the package notices: `resolve.bx` calls them and compiles, and only a
+// dependent package gets the refusal.
+//
+// The language session named the asymmetry and it is why this needed its own check:
+//
+//   GROWING    the documentation promises a name the tarball lacks. Detectable from the release alone —
+//              and it is what turned star's `main` red for hours on two unreleased modules.
+//   SHRINKING  the tarball offers a name the documentation no longer promises, so a consumer's WORKING
+//              program breaks on upgrade with nothing anywhere warning them. **Not detectable from the
+//              release at all** — it needs the previous release.
+//
+// `README.md` does record the withdrawal, in the past tense, which is the form that cannot decay: *"eight
+// helpers here were `public` for no reason at all"*. But **eight is a written number with no runner**, and
+// that is the rule this family has applied to itself all day — my own suite reported 23 checks where 25
+// ran, and the language session had 62,749 for 71,895 and 1,390 for 1,436. Every one erred smaller, which
+// is the direction nobody double-checks.
+//
+// So the set comes from git and the prose is held to it. A ninth demotion, or a name quietly restored,
+// moves the number and the README has to say so.
+let released: Capture = os_capture_status(
+    "git show " + RELEASE + ":star.bx " + RELEASE + ":resolve.bx 2>/dev/null"
+    + " | grep -oE '^public function [a-z_]+' | sed 's/public function //' | sort -u");
+let was_public: [String] = string_lines(released.output);
+let mutable withdrawn: [String] = [];
+let mutable w2: Int = 0;
+while w2 < len(was_public) {
+    let name: String = string_trim(was_public[w2]);
+    if len(name) > 0 && !holds(reachable, name) {
+        let x: Int = push(withdrawn, name);
+    }
+    w2 += 1;
+}
+
+// **Zero withdrawn is a real answer and zero RELEASED is not.** If the tag stops resolving — renamed,
+// or a shallow clone — this compares against an empty set and reports nothing withdrawn, which reads
+// exactly like a surface that never shrank.
+if len(was_public) == 0 || len(string_trim(released.output)) == 0 {
+    let x: Int = push(failures, "no public name found at " + RELEASE + ", so the withdrawal check"
+        + " compared against nothing — the tag has stopped resolving");
+}
+
+// English, not policy: a table of number words cannot fall behind.
+pure function number_word(n: Int) -> String {
+    if n == 0 { return "no"; }
+    if n == 1 { return "one"; }
+    if n == 2 { return "two"; }
+    if n == 3 { return "three"; }
+    if n == 4 { return "four"; }
+    if n == 5 { return "five"; }
+    if n == 6 { return "six"; }
+    if n == 7 { return "seven"; }
+    if n == 8 { return "eight"; }
+    if n == 9 { return "nine"; }
+    if n == 10 { return "ten"; }
+    if n == 11 { return "eleven"; }
+    if n == 12 { return "twelve"; }
+    return to_string(n);
+}
+
+// **Whitespace collapsed before matching, because prose wraps.** The first version of this looked for
+// `eight helpers` in the README and failed on a README that says it — the phrase spans a line break
+// (`and eight` / `helpers here were public`). A check that reads prose has to read it the way a reader
+// does, not the way the file stores it. That is the third distinct way prose has defeated a check today,
+// after using-versus-mentioning and tense.
+pure function unwrapped(text: String) -> String allocates {
+    let mutable out: String = "";
+    let mutable last_space: Bool = false;
+    let mutable i: Int = 0;
+    while i < len(text) {
+        let c: String = substring(text, i, 1);
+        let space: Bool = c == " " || c == "\n" || c == "\t" || c == "\r";
+        if space {
+            if !last_space {
+                out = out + " ";
+            }
+            last_space = true;
+        } else {
+            out = out + c;
+            last_space = false;
+        }
+        i += 1;
+    }
+    return out;
+}
+
+if len(was_public) > 0 && len(withdrawn) > 0 {
+    let stated: String = number_word(len(withdrawn)) + " helpers";
+    if !mentions(unwrapped(readme), stated) {
+        let x: Int = push(failures, README + " must say `" + stated + "` were withdrawn from the"
+            + " surface since " + RELEASE + " — that is what git reports, and a written number with no"
+            + " runner is the defect this repository keeps finding in itself. Withdrawn: "
+            + string_join(withdrawn, ", "));
+    }
+}
+
 if len(failures) > 0 {
     print_error(to_string(len(failures)) + " problem(s):");
     let mutable i: Int = 0;
@@ -474,3 +577,5 @@ if len(failures) > 0 {
 }
 
 print(to_string(len(claimed)) + " published name(s), each reachable, and nothing reachable unpublished");
+print("  " + number_word(len(withdrawn)) + " withdrawn since " + RELEASE
+    + ", which " + README + " says in the past tense and this counts from git");
