@@ -44,26 +44,52 @@ pure function closes_raw(line: String) -> Bool {
 //
 // **Walked rather than counted**, because a page may legitimately open and close several raw blocks
 // and a count cannot tell an unbalanced file from a balanced one.
-pure function unprotected_at(line: String) -> Int {
+// **One scan, reporting both facts, and the first version of this got it wrong in a way I have a name
+// for.**
+//
+// The summary line used to print the number of pages READ. The markup session named the shape — *a number
+// in the output is not a floor unless it is the number the assertion is about* — and blinding
+// `unprotected_at` by one byte produced `18 pages, all wrapped` over a scan that could no longer see a
+// delimiter at all.
+//
+// So I added a floor: a second function counting delimiters, asserted non-zero. **Then I blinded the
+// finder alone and it still passed** — 326 delimiters "examined", exit 0 — because the floor was a
+// SEPARATE implementation of the same scan. Two implementations of the same rule check each other only
+// while they disagree about it, which is my own conclusion from a PNG round-trip this morning, rebuilt
+// from scratch six hours later in a different file.
+//
+// One function now. It walks once and answers both: how many delimiters it saw, and where the first
+// unprotected one is. Blinding it moves both numbers together, so the floor fires — which is the whole
+// point of a floor.
+class Scan { seen: Int, unprotected: Int }
+
+pure function scan_line(line: String) -> Scan {
+    let mutable seen: Int = 0;
+    let mutable first: Int = 0 - 1;
     let mutable i: Int = 0;
     while i + 1 < len(line) {
         if byte_at(line, i) == 123 {
             let next: Int = byte_at(line, i + 1);
             if next == 123 || next == 37 {
+                seen += 1;
                 // The raw tags themselves, and the Liquid this site means.
                 let rest: String = substring(line, i, len(line) - i);
                 let is_raw: Bool = string_starts_with(rest, "\{% raw %\}")
                     || string_starts_with(rest, "\{% endraw %\}")
                     || string_starts_with(rest, "\{%- raw -%\}")
                     || string_starts_with(rest, "\{%- endraw -%\}");
-                if !is_raw && !is_intended(line, i) {
-                    return i;
+                // **It keeps walking after the first find, where the old one returned.** The count is
+                // the floor for the whole scan, so stopping early would make the floor depend on how
+                // broken a page is — and a page with one bad delimiter on line 1 would report a smaller
+                // scan than a clean one.
+                if !is_raw && !is_intended(line, i) && first < 0 {
+                    first = i;
                 }
             }
         }
         i += 1;
     }
-    return 0 - 1;
+    return Scan { seen: seen, unprotected: first };
 }
 
 pure function line_at(text: String, from: Int) -> Int {
@@ -75,6 +101,7 @@ pure function line_at(text: String, from: Int) -> Int {
 let root: String = "docs";
 let mutable problems: [String] = [];
 let mutable pages: Int = 0;
+let mutable seen: Int = 0;
 let mutable cname_ok: Bool = false;
 
 match file_read_maybe(root + "/CNAME") {
@@ -137,9 +164,12 @@ match file_walk(root) {
                         // A layout IS Liquid — it is meant to be full of tags — so what is checked
                         // there is only that a `raw` it opens gets closed. A page's delimiters are
                         // checked as before.
+                        // One scan per line, and both numbers come out of it — which is the whole
+                        // point: blinding it moves the floor and the finding together.
+                        let scan: Scan = scan_line(line);
+                        seen += scan.seen;
                         if !in_raw && !string_contains(path, "/_layouts/") {
-                            let where: Int = unprotected_at(line);
-                            if where >= 0 {
+                            if scan.unprotected >= 0 {
                                 let p: Int = push(problems, path + ":" + to_string(number)
                                     + ": Liquid delimiter outside a raw block — Jekyll will try to"
                                     + " interpret it and the build will fail silently:\n    "
@@ -214,8 +244,17 @@ if len(problems) > 0 {
 // with the same success sentence — it walks `docs/`, and a walk that matches nothing reports a clean site. So it says so instead. The floor is 1 rather than a
 // remembered constant: the question is whether the gate still has inputs, not whether anyone updated a
 // literal.
+// **The floor is on what was EXAMINED, not on what was read.** A blinded scan reads every page and sees
+// nothing, which is the state this catches.
+if seen == 0 {
+    print_error("no Liquid delimiter found anywhere in " + to_string(pages) + " page(s). These pages are"
+        + " full of `\{\{` by their nature, so this is the scanner having stopped working rather than"
+        + " the site having become clean — and the page count above would have reported success.");
+    exit(1);
+}
 if pages == 0 {
     print("no page(s) found at all, so this gate checked nothing and would have passed either way");
     exit(1);
 }
-print(to_string(pages) + " pages, all wrapped, front matter present, CNAME correct");
+print(to_string(pages) + " pages and " + to_string(seen)
+    + " Liquid delimiter(s) examined, all wrapped, front matter present, CNAME correct");
