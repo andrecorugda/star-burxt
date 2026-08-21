@@ -38,6 +38,25 @@ dependency  bmx   https://github.com/andrecorugda/bmx         burxt-0.12.1
 
 Then `burxt fetch`. Full instructions: [star.burxt-lang.org/install](https://star.burxt-lang.org/install.html).
 
+**Your project's entry point is `app.bx`, and that is star's convention rather than Burxt's.**
+
+```sh
+burxt run app.bx
+```
+
+Burxt does not impose one and should not: its manifest reads three keys — `name`, `version`,
+`dependency` — and the reason is written in `manifest.rs`, that *a manifest that can compute is a
+manifest a reviewer has to execute in their head*. A language staying out of your project layout is
+correct. **Imposing a layout is a framework's job**, which is what this line is.
+
+So `app.bx` is where a star project starts, it builds and serves whatever that project needs, and the
+command is one line with no output binary to name. If Burxt ever grows a default entry point, the
+command shortens to `burxt run` and nothing in a project that followed this has to move — which is the
+whole point of agreeing on a name before anyone needs it to be shorter.
+
+`comet-code-playground` is the first project built this way: `burxt run app.bx` starts its control
+plane, provisions its language environments, serves the page, and prints one URL.
+
 ## What is in here
 
 | | |
