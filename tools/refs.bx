@@ -128,7 +128,11 @@ match file_walk(".") {
 // left to the author, which is where the judgement belongs.
 //
 // It found three when it was written, all from the same day's ports, and one of them was
-// `python3 tests/extension.py --prove-it` in the section explaining how to run a negative control: an
+// a `python3 tests/extension.py` invocation in the section explaining how to run a negative control —
+// **and naming that control's flag here turned this file red**, because `star-controls` reads a file's
+// own prose to decide whether it advertises one. Using versus mentioning, fourth time in a day, and the
+// check was right: this file did name the flag. The policy is the one `tests/extension.bx` records —
+// describe the token, never write it. An
 // instruction, in the document a new reader follows, for a file that had been Burxt for six hours.
 let mutable typed: Int = 0;
 let mutable broken: [String] = [];
