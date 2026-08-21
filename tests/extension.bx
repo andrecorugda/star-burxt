@@ -451,24 +451,13 @@ if !file_exists("star-pack") {
         exit(2);
     }
 }
-// **The restore goes through `cp`, not `file_write`.** `file_write` takes a String and a `.vsix` is
-// arbitrary bytes; copying the file aside is both simpler and immune to the question.
-let mutable keep_path: String = "";
-match file_temp_directory("star-vsix") {
-    None => {
-        print_error("cannot make a temporary directory");
-        exit(2);
-    }
-    // Not `.vsix`: this file is walked by the check below, so naming the temp copy after the
-    // extension would have it promise a file that exists for four milliseconds in a tempdir.
-    Some(kept) => { keep_path = kept + "/before.bytes"; }
-}
-let keep: Capture = os_capture_status(
-    "cp " + file_quote(archive_path) + " " + file_quote(keep_path));
-if keep.code != 0 {
-    print_error("cannot set the artefact aside before repacking");
-    exit(2);
-}
+// **This restored through `cp`, on a claim that turned out to be false.** The comment here said
+// `file_write` takes a String and a `.vsix` is arbitrary bytes, so copying the file aside was "immune to
+// the question". Measured afterwards: `file_write(path, from_bytes(bytes))` round-trips an 83,629-byte
+// wasm with a matching sha256. The UTF-8 validation is at `file_read`, which refuses non-text at the
+// door — nothing downstream re-checks. **Third time in one day of inferring a missing capability from a
+// signature**, after `HttpResponse.body` and the whole of `tools/gallery.mjs`. The bytes are already in
+// hand from the read above, so the restore needs no copy and no tempdir at all.
 let repacked: Capture = os_capture_status("./star-pack 2>&1");
 let mutable after: [Int] = [];
 match file_read_bytes(archive_path) {
@@ -476,8 +465,7 @@ match file_read_bytes(archive_path) {
     Some(bytes) => { after = bytes; }
 }
 // Restored before any verdict is read, so a failure here cannot leave the tree changed.
-let restored: Capture = os_capture_status(
-    "cp " + file_quote(keep_path) + " " + file_quote(archive_path));
+let restored: Int = file_write(archive_path, from_bytes(archive));
 let mutable identical: Bool = repacked.code == 0 && len(after) == len(archive);
 if identical {
     let mutable b: Int = 0;
