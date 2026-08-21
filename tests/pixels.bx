@@ -278,9 +278,23 @@ while k < divide_floor(len(known), FIXTURE) {
 // **And that each fixture asks for the predictor it claims to.** One row per scanline, at byte 0 and
 // byte 10 for a 9-byte stride, and both must be `k`. Without this an encoder that wrote 0 everywhere
 // would pass all five comparisons above.
+// **An assertion of ABSENCE has to carry evidence there was something to be absent from.** This said
+// `mislabelled == 0` and nothing else: an empty fixture list would have satisfied it, because zero
+// fixtures carry zero wrong filter bytes. The count of fixtures actually examined is asserted with it.
+//
+// The markup session hit the same shape from the other side and it is worth recording their instance,
+// because it is worse than mine: their driver's control pointed at a server that says nothing, and 20 of
+// 21 assertions failed. The survivor was *"the message does not repeat the code and offset"* — **a
+// negative assertion, satisfied by a diagnostic with no message at all.** A mute server passed it.
+//
+// Mine had a backstop theirs did not — `tally.ran != 14` would notice five missing comparisons — but a
+// distant count is weaker than an assertion carrying its own floor, and relying on it means the check is
+// correct by accident.
 let mutable mislabelled: Int = 0;
+let mutable examined: Int = 0;
 let mutable f2: Int = 0;
 while f2 < divide_floor(len(known), FIXTURE) {
+    examined += 1;
     if known[f2 * FIXTURE] != f2 || known[f2 * FIXTURE + 10] != f2 {
         mislabelled += 1;
     }
@@ -289,10 +303,12 @@ while f2 < divide_floor(len(known), FIXTURE) {
 if prove {
     mislabelled += 1;
 }
-let x8: Int = check(tally, mislabelled == 0,
-    "every fixture's filter bytes are uniformly the predictor it names",
-    to_string(mislabelled) + " fixture(s) carry a filter byte that is not the predictor they claim, so"
-        + " the comparison above proves nothing about that predictor");
+let x8: Int = check(tally, mislabelled == 0 && examined == 5,
+    "all " + to_string(examined) + " fixtures' filter bytes are uniformly the predictor they name",
+    to_string(mislabelled) + " of " + to_string(examined) + " fixture(s) carry a filter byte that is not"
+        + " the predictor they claim, so the comparison above proves nothing about that predictor"
+        + " — and " + to_string(examined) + " examined where 5 were expected means the list itself"
+        + " stopped being read");
 
 // The header, read from the same bytes.
 let mutable one: [Int] = [];
