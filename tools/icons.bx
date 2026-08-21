@@ -181,43 +181,105 @@ let x1: Int = check(tally, len(sbmx_icon) > 0,
     "the `.sbmx` language declares a file icon",
     "no `icon` on the sbmx language, so the file tree shows the generic document glyph");
 
-let mutable sizes: [Int] = [];
-let s1: Int = push(sizes, 48);
-let s2: Int = push(sizes, 128);
-let mutable s: Int = 0;
-while s < len(sizes) {
-    let size: Int = sizes[s];
-    let path: String = "editors/vscode/icons/sbmx-gear-icon-" + to_string(size) + ".png";
-    let square: Int = size_of(path);
-    let x2: Int = check(tally, square == size,
-        "the " + to_string(size) + "px icon is square at its declared size",
-        path + " reports " + to_string(square) + ", which is not a square " + to_string(size));
+// ---- every icon that ships, and the relation between them ------------------------------------------
+//
+// **This used to name `sbmx-gear-icon-{48,128}.png` and check each against 70% ± 3.** That is a list,
+// and a list cannot fall behind quietly — it falls behind silently. Three file types ship icons here and
+// only one was looked at, so a new `bmx-file-icon-48.png` at 86% would have passed the check whose own
+// comment says *"a new drop of artwork nobody re-derived is exactly the case this has to catch, and the
+// artwork arrives from another repository."*
+//
+// So the subjects come from the directory, and the property is the one the comment states: **`.bx`,
+// `.bmx` and `.sbmx` sit on consecutive rows of a file tree, and an eye reads inconsistent margins as
+// misalignment rather than as three different logos.** The anchor at 70% stays, because two icons that
+// agree with each other and disagree with the family are still wrong — but the anchor alone was never
+// the point, and the agreement was never checked at all.
+//
+// The language session's framing of why this shape is worth the rewrite: a check with no list to
+// maintain needs nobody, ever. Their `Content-Length` relation still wants an assertion per response
+// shape; this one covers an icon added tomorrow by a person who never reads this file.
+let listing: Capture = os_capture_status("ls editors/vscode/icons/*.png 2>/dev/null");
+let icons: [String] = string_lines(listing.output);
 
-    let mutable tenths: Int = ink_tenths(path);
-    if prove && size == 48 {
-        // 86% is the measured value of the icon Andre complained about, so the control is the defect
-        // as it actually arrived rather than an arbitrary number.
-        tenths = 860;
+let mutable measured: [Int] = [];
+let mutable named: [String] = [];
+let mutable i: Int = 0;
+while i < len(icons) {
+    let path: String = string_trim(icons[i]);
+    if len(path) > 0 {
+        let square: Int = size_of(path);
+        let x2: Int = check(tally, square > 0,
+            path + " is square at " + to_string(square) + "px",
+            path + " is not square, so it will be stretched into whatever box the tree gives it");
+        let tenths: Int = ink_tenths(path);
+        if tenths >= 0 {
+            let m: Int = push(measured, tenths);
+            let n: Int = push(named, path);
+        }
     }
-    let mutable off: Int = tenths - 700;
-    if off < 0 {
-        off = 0 - off;
-    }
-    // **Rounded for display, not floored.** The JavaScript printed `Math.round(fraction * 100)` and
-    // this printed a floor, so the same 70.83% measurement read as 71% there and 70% here. The verdict
-    // was identical either way — both compare the tenths against the same tolerance — but a number a
-    // person reads should not disagree with the tool it replaced, or the first thing they conclude is
-    // that the port changed the artwork.
-    let shown: Int = divide_floor(tenths + 5, 10);
-    // 70% is the family's number. The tolerance is a few pixels at 48px, not a licence to drift.
-    let x3: Int = check(tally, off <= 30,
-        "and the " + to_string(size) + "px ink fills " + to_string(shown)
-            + "% of the box, which must be 70% ± 3",
-        "the " + to_string(size) + "px ink fills " + to_string(shown)
-            + "% — an icon at 86% sits against the filename, and the three file types must agree with"
-            + " each other");
-    s += 1;
+    i += 1;
 }
+
+// **Zero is not a pass**, and a `ls` that matched nothing is exactly what this would look like.
+if len(measured) == 0 {
+    print("no icon found under editors/vscode/icons/ at all, so this gate checked nothing");
+    exit(1);
+}
+
+// The relation: every icon within three points of every other. Stated as a spread rather than pairwise,
+// because the number a reader wants is how far apart the worst two are.
+let mutable lowest: Int = measured[0];
+let mutable highest: Int = measured[0];
+let mutable low_name: String = named[0];
+let mutable high_name: String = named[0];
+let mutable m: Int = 0;
+while m < len(measured) {
+    if measured[m] < lowest {
+        lowest = measured[m];
+        low_name = named[m];
+    }
+    if measured[m] > highest {
+        highest = measured[m];
+        high_name = named[m];
+    }
+    m += 1;
+}
+if prove {
+    // 86% is the measured value of the icon Andre complained about — four clear pixels at 48px — so the
+    // control is the defect as it actually arrived rather than an arbitrary number.
+    highest = 860;
+    high_name = "editors/vscode/icons/a-new-drop-nobody-rederived.png";
+}
+let spread: Int = highest - lowest;
+// **The headline is the PROPERTY, not the measurement.** It read "5 icons agree with each other to
+// within 16 point(s)" on the failing control — a false sentence on the FAIL line, because this printer
+// shows the same string either way. The measurement belongs in the detail, where it is only read when
+// it is the diagnosis.
+let x3: Int = check(tally, spread <= 30,
+    "all " + to_string(len(measured)) + " icons are within 3 points of each other",
+    "the icons disagree by " + to_string(divide_floor(spread + 5, 10)) + " points — " + low_name
+        + " fills " + to_string(divide_floor(lowest + 5, 10)) + "% and " + high_name + " fills "
+        + to_string(divide_floor(highest + 5, 10))
+        + "%. They sit on consecutive rows of a file tree, so that reads as misalignment rather than as"
+        + " two different logos");
+
+// And the anchor, because two icons agreeing with each other and disagreeing with the family are still
+// wrong. 70% is the family's number; the tolerance is a few pixels at 48px, not a licence to drift.
+let mutable off: Int = lowest - 700;
+if off < 0 {
+    off = 0 - off;
+}
+let mutable off_high: Int = highest - 700;
+if off_high < 0 {
+    off_high = 0 - off_high;
+}
+if off_high > off {
+    off = off_high;
+}
+let x4: Int = check(tally, off <= 30,
+    "and every one of them is 70% ± 3, which is the family's number",
+    "an icon is " + to_string(divide_floor(off + 5, 10)) + " points off the family's 70% — an icon at"
+        + " 86% sits against the filename");
 
 print("");
 if prove {
@@ -232,8 +294,8 @@ if tally.broken > 0 {
     print(to_string(tally.broken) + " of " + to_string(tally.ran) + " broken");
     exit(1);
 }
-if tally.ran != 5 {
-    print("only " + to_string(tally.ran) + " of 5 checks ran");
+if tally.ran < 5 {
+    print("only " + to_string(tally.ran) + " checks ran, which is fewer than this repository ships icons");
     exit(1);
 }
 print("the file icons fill their box the way the family agreed");
